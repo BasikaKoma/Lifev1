@@ -2,12 +2,96 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta http-equiv="refresh" content="0; url=/account" />
-    <title>Redirecting…</title>
-    <link rel="canonical" href="/account" />
-    <script>window.location.replace('/account');</script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sign in — lifev1</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#000000" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <p><a href="/account">Continue to account</a></p>
+    <div class="page page--account">
+      <div class="page__glow" aria-hidden="true"></div>
+      <div class="page__grid" aria-hidden="true"></div>
+
+      <header class="header">
+        <div class="container header__inner">
+          <a class="logo" href="/" aria-label="lifev1 home">
+            <svg class="logo__mark" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+              <rect width="32" height="32" rx="8" fill="#0a0a0a" stroke="rgba(16,185,129,0.3)" stroke-width="1"/>
+              <text x="16" y="21" text-anchor="middle" font-family="Inter, sans-serif" font-size="11" font-weight="700" fill="#34d399">v1</text>
+            </svg>
+            <span class="logo__text">life<em>v1</em></span>
+          </a>
+          <nav class="nav" aria-label="Main">
+            <a href="/">Home</a>
+            <a href="/login" aria-current="page">Sign in</a>
+          </nav>
+        </div>
+      </header>
+
+      <main class="main">
+        <div class="container account-shell">
+          <aside class="account-brand">
+            <div class="account-brand__inner">
+              <p class="account-brand__eyebrow">Welcome</p>
+              <h1 class="account-brand__title">Sign in to lifev1</h1>
+              <p class="account-brand__text">
+                Access your account, download the desktop app, and keep your roadmap synced across devices.
+              </p>
+              <ul class="account-brand__list">
+                <li>Secure cloud sync</li>
+                <li>Windows desktop app</li>
+                <li>Auto-updates included</li>
+              </ul>
+            </div>
+          </aside>
+
+          <section class="account-panel">
+            <div class="account-guest glass">
+              <div class="account-tabs" role="tablist" aria-label="Authentication">
+                <button type="button" class="account-tabs__btn is-active" data-mode="signin" role="tab" aria-selected="true">Sign in</button>
+                <button type="button" class="account-tabs__btn" data-mode="signup" role="tab" aria-selected="false">Create account</button>
+              </div>
+
+              <div class="account-guest__header">
+                <h2 id="guest-title">Welcome back</h2>
+                <p id="guest-lead">Enter your credentials to continue.</p>
+              </div>
+
+              <form class="account-form" id="auth-form">
+                <label class="field">
+                  <span class="field__label">Email</span>
+                  <input class="field__input" type="email" name="email" autocomplete="email" placeholder="you@email.com" required />
+                </label>
+                <label class="field">
+                  <span class="field__label">Password</span>
+                  <input class="field__input" type="password" name="password" autocomplete="current-password" minlength="6" placeholder="••••••••" required />
+                </label>
+                <p class="account-message account-message--error" id="auth-error" hidden></p>
+                <p class="account-message account-message--info" id="auth-info" hidden></p>
+                <button class="btn btn--primary btn--block" type="submit" id="auth-submit">Sign in</button>
+              </form>
+            </div>
+          </section>
+        </div>
+      </main>
+
+      <footer class="footer">
+        <div class="container footer__inner">
+          <span>&copy; <span id="year"></span> lifev1.com</span>
+          <div class="footer__links">
+            <a href="/privacy">Privacy Policy</a>
+            <a href="/terms">Terms of Service</a>
+          </div>
+        </div>
+      </footer>
+    </div>
+
+    <script src="/js/config.js"></script>
+    <script type="module" src="/js/login.js"></script>
   </body>
 </html>
