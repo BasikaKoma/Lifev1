@@ -1,27 +1,19 @@
 import {
   getUser,
-  signIn,
-  signUp,
   signOut,
-  formatAuthError,
   fetchLatestInstaller,
   getUserInitial,
   formatMemberSince,
-  subscribeToAuth,
+  logSiteEvent,
+  isAdmin,
 } from '/js/site.js';
 
 document.getElementById('year').textContent = new Date().getFullYear();
 
 const loadingEl = document.getElementById('account-loading');
-const guestEl = document.getElementById('account-guest');
 const dashboardEl = document.getElementById('account-dashboard');
-const form = document.getElementById('auth-form');
-const guestTitle = document.getElementById('guest-title');
-const guestLead = document.getElementById('guest-lead');
-const submitBtn = document.getElementById('auth-submit');
-const errorEl = document.getElementById('auth-error');
-const infoEl = document.getElementById('auth-info');
-const tabButtons = document.querySelectorAll('[data-mode]');
+const errorEl = document.getElementById('account-error');
+const errorText = document.getElementById('account-error-text');
 const signOutBtn = document.getElementById('sign-out');
 const profileAvatar = document.getElementById('profile-avatar');
 const profileEmail = document.getElementById('profile-email');
@@ -31,41 +23,22 @@ const releaseSize = document.getElementById('release-size');
 const downloadBtn = document.getElementById('download-btn');
 const downloadError = document.getElementById('download-error');
 
-let mode = 'signin';
-
-function setMode(nextMode) {
-  mode = nextMode;
-  const isSignIn = mode === 'signin';
-
-  tabButtons.forEach((button) => {
-    const active = button.dataset.mode === mode;
-    button.classList.toggle('is-active', active);
-    button.setAttribute('aria-selected', active ? 'true' : 'false');
-  });
-
-  guestTitle.textContent = isSignIn ? 'Welcome back' : 'Create your account';
-  guestLead.textContent = isSignIn
-    ? 'Access your account and download the lifev1 desktop app.'
-    : 'Set up your account to unlock downloads and cloud sync.';
-  submitBtn.textContent = isSignIn ? 'Sign in' : 'Create account';
-  errorEl.hidden = true;
-  infoEl.hidden = true;
-}
-
-tabButtons.forEach((button) => {
-  button.addEventListener('click', () => setMode(button.dataset.mode));
-});
-
-function showGuest() {
-  loadingEl.hidden = true;
-  dashboardEl.hidden = true;
-  guestEl.hidden = false;
+function redirectToLogin() {
+  const next = encodeURIComponent('/account');
+  window.location.replace(`/login?next=${next}`);
 }
 
 function showDashboard() {
   loadingEl.hidden = true;
-  guestEl.hidden = true;
+  errorEl.hidden = true;
   dashboardEl.hidden = false;
+}
+
+function showError(message) {
+  loadingEl.hidden = true;
+  dashboardEl.hidden = true;
+  errorText.textContent = message;
+  errorEl.hidden = false;
 }
 
 async function loadRelease() {
@@ -93,66 +66,44 @@ async function renderDashboard(user) {
   profileAvatar.textContent = getUserInitial(user);
   profileEmail.textContent = user.email;
   profileSince.textContent = formatMemberSince(user);
+
+  const adminLink = document.getElementById('admin-link');
+  if (adminLink) adminLink.hidden = !isAdmin(user);
+
   showDashboard();
-  await loadRelease();
+  loadRelease();
 }
 
-form.addEventListener('submit', async (event) => {
-  event.preventDefault();
-  errorEl.hidden = true;
-  infoEl.hidden = true;
-  submitBtn.disabled = true;
-
-  const data = new FormData(form);
-  const email = data.get('email');
-  const password = data.get('password');
-
+signOutBtn.addEventListener('click', async () => {
   try {
-    if (mode === 'signup') {
-      const result = await signUp(email, password);
-      if (!result.session) {
-        infoEl.textContent = 'Check your email to confirm your account, then sign in.';
-        infoEl.hidden = false;
-        setMode('signin');
-        return;
-      }
-      await renderDashboard(result.user);
-      form.reset();
-      return;
-    }
-
-    const result = await signIn(email, password);
-    await renderDashboard(result.user);
-    form.reset();
-  } catch (error) {
-    errorEl.textContent = formatAuthError(error);
-    errorEl.hidden = false;
+    await signOut();
   } finally {
-    submitBtn.disabled = false;
+    redirectToLogin();
   }
 });
 
-signOutBtn.addEventListener('click', async () => {
-  await signOut();
-  showGuest();
+downloadBtn.addEventListener('click', async () => {
+  await logSiteEvent('download', {
+    version: releaseVersion.textContent,
+    file: downloadBtn.getAttribute('download') || null,
+  });
 });
 
 async function init() {
-  const user = await getUser();
-  if (user) {
+  try {
+    const user = await getUser();
+    if (!user) {
+      redirectToLogin();
+      return;
+    }
     await renderDashboard(user);
-  } else {
-    showGuest();
+  } catch (error) {
+    if (error?.message === 'Site configuration is missing.') {
+      showError('Site configuration is missing. Run npm run landing:config locally.');
+      return;
+    }
+    showError(error.message || 'Could not load your account.');
   }
 }
-
-subscribeToAuth(async (user) => {
-  if (user && dashboardEl.hidden) {
-    await renderDashboard(user);
-  }
-  if (!user && !guestEl.hidden) {
-    showGuest();
-  }
-});
 
 init();
