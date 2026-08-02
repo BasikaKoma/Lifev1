@@ -30,13 +30,17 @@ function redirectToLogin() {
 
 function showDashboard() {
   loadingEl.hidden = true;
+  loadingEl.classList.remove('is-active');
   errorEl.hidden = true;
   dashboardEl.hidden = false;
+  dashboardEl.classList.add('is-active');
 }
 
 function showError(message) {
   loadingEl.hidden = true;
+  loadingEl.classList.remove('is-active');
   dashboardEl.hidden = true;
+  dashboardEl.classList.remove('is-active');
   errorText.textContent = message;
   errorEl.hidden = false;
 }
@@ -90,8 +94,9 @@ downloadBtn.addEventListener('click', async () => {
 });
 
 async function init() {
+  loadingEl.classList.add('is-active');
   try {
-    const user = await getUser();
+    const user = await getUser({ refresh: true });
     if (!user) {
       redirectToLogin();
       return;
