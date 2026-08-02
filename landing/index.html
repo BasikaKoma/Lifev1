@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lifev1 — Your life, mapped.</title>
+    <meta
+      name="description"
+      content="lifev1 is a premium personal operating system for mapping your life, goals, and daily momentum."
+    />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#000000" />
+    <meta property="og:title" content="lifev1 — Your life, mapped." />
+    <meta property="og:description" content="A premium personal operating system for your roadmap, goals, and daily momentum." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://lifev1.com" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="page">
+      <div class="page__glow" aria-hidden="true"></div>
+      <div class="page__grid" aria-hidden="true"></div>
+
+      <header class="header">
+        <div class="container header__inner">
+          <a class="logo" href="/" aria-label="lifev1 home">
+            <svg class="logo__mark" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+              <rect width="32" height="32" rx="8" fill="#0a0a0a" stroke="rgba(16,185,129,0.3)" stroke-width="1"/>
+              <text x="16" y="21" text-anchor="middle" font-family="Inter, sans-serif" font-size="11" font-weight="700" fill="#34d399">v1</text>
+            </svg>
+            <span class="logo__text">life<em>v1</em></span>
+          </a>
+          <nav class="nav" aria-label="Main">
+            <a href="#features">Features</a>
+            <a href="#about">About</a>
+            <a href="mailto:hello@lifev1.com" class="nav__cta">Contact</a>
+          </nav>
+        </div>
+      </header>
+
+      <main class="main">
+        <section class="section section--hero">
+          <div class="container">
+            <h1 class="hero__title">Your life, <span>mapped.</span></h1>
+            <p class="hero__subtitle">
+              lifev1 is a personal operating system for planning your roadmap, tracking daily rhythm, and understanding yourself — all in one premium workspace.
+            </p>
+            <div class="hero__actions">
+              <a class="btn btn--primary" href="mailto:hello@lifev1.com">Get in touch</a>
+              <a class="btn btn--ghost" href="#features">Explore features</a>
+            </div>
+          </div>
+        </section>
+
+        <section class="section section--alt" id="features">
+          <div class="container">
+            <div class="section__header">
+              <p class="section__eyebrow">Features</p>
+              <h2 class="section__title">Built for clarity and momentum</h2>
+              <p class="section__lead">
+                Three core views that help you see where you are, where you're going, and how you're doing along the way.
+              </p>
+            </div>
+            <div class="cards">
+              <article class="card">
+                <h3 class="card__title">Roadmap</h3>
+                <p class="card__text">
+                  Visual planning for milestones, goals, and projects. Map your path and stay focused on what matters next.
+                </p>
+              </article>
+              <article class="card">
+                <h3 class="card__title">Lifeline</h3>
+                <p class="card__text">
+                  A daily rhythm view for your habits, checkpoints, and progress over time — so momentum never gets lost.
+                </p>
+              </article>
+              <article class="card">
+                <h3 class="card__title">Self</h3>
+                <p class="card__text">
+                  Personal metrics and insights in one place. Connect health data — including Oura — to see the full picture.
+                </p>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" id="about">
+          <div class="container split">
+            <div class="split__text">
+              <div class="section__header" style="text-align: left; margin: 0 0 1.5rem;">
+                <p class="section__eyebrow">About</p>
+                <h2 class="section__title">A workspace for your next move</h2>
+              </div>
+              <p>
+                lifev1 helps you organize your life with intention. Whether you're building a business, improving your health, or designing a better daily routine, everything lives in one calm, focused environment.
+              </p>
+              <p>
+                Your data stays yours. lifev1 only accesses third-party services — like Oura — when you explicitly connect them, and you can disconnect at any time.
+              </p>
+            </div>
+            <aside class="split__panel">
+              <h3>Integrations</h3>
+              <ul class="split__list">
+                <li>Oura Ring — sleep, readiness, and activity data</li>
+                <li>Secure account sign-in</li>
+                <li>Cloud sync across your devices</li>
+                <li>More integrations coming over time</li>
+              </ul>
+            </aside>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <div class="container footer__inner">
+          <span>&copy; <span id="year"></span> lifev1.com</span>
+          <div class="footer__links">
+            <a href="/privacy">Privacy Policy</a>
+            <a href="/terms">Terms of Service</a>
+            <a href="mailto:hello@lifev1.com">hello@lifev1.com</a>
+          </div>
+        </div>
+      </footer>
+    </div>
+
+    <script>
+      document.getElementById('year').textContent = new Date().getFullYear();
+    </script>
+  </body>
+</html>
