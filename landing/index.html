@@ -40,7 +40,9 @@
           <nav class="nav" aria-label="Main">
             <a href="#features">Features</a>
             <a href="#about">About</a>
-            <a href="mailto:hello@lifev1.com" class="nav__cta">Contact</a>
+            <a href="/login" data-auth-login>Login</a>
+            <a href="/download" data-auth-download class="nav__cta">Download</a>
+            <span class="nav__account" data-auth-account hidden></span>
           </nav>
         </div>
       </header>
@@ -53,8 +55,8 @@
               lifev1 is a personal operating system for planning your roadmap, tracking daily rhythm, and understanding yourself — all in one premium workspace.
             </p>
             <div class="hero__actions">
-              <a class="btn btn--primary" href="mailto:hello@lifev1.com">Get in touch</a>
-              <a class="btn btn--ghost" href="#features">Explore features</a>
+              <a class="btn btn--primary" href="/download">Download app</a>
+              <a class="btn btn--ghost" href="/login">Sign in</a>
             </div>
           </div>
         </section>
@@ -130,8 +132,11 @@
       </footer>
     </div>
 
-    <script>
+    <script src="/js/config.js"></script>
+    <script type="module">
+      import { updateAuthNav } from '/js/site.js';
       document.getElementById('year').textContent = new Date().getFullYear();
+      updateAuthNav();
     </script>
   </body>
 </html>
