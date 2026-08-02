@@ -23,22 +23,77 @@ export function getSupabase() {
   return supabaseClient;
 }
 
-export async function getSession() {
+function withTimeout(promise, timeoutMs, message) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+  });
+}
+
+export async function getSession({ timeoutMs = 10000 } = {}) {
   const supabase = getSupabase();
-  const { data, error } = await supabase.auth.getSession();
+  const { data, error } = await withTimeout(
+    supabase.auth.getSession(),
+    timeoutMs,
+    'Authentication timed out. Please refresh the page or sign in again.'
+  );
   if (error) throw error;
   return data.session;
 }
 
-export async function getUser({ refresh = false } = {}) {
+export async function waitForAuth({ timeoutMs = 10000 } = {}) {
   const supabase = getSupabase();
+
+  return withTimeout(
+    new Promise((resolve, reject) => {
+      let settled = false;
+
+      const finish = (session, error) => {
+        if (settled) return;
+        settled = true;
+        subscription.unsubscribe();
+        if (error) reject(error);
+        else resolve(session);
+      };
+
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+        if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          finish(session, null);
+        }
+      });
+
+      supabase.auth
+        .getSession()
+        .then(({ data, error }) => finish(error ? null : data.session, error ?? null))
+        .catch((error) => finish(null, error));
+    }),
+    timeoutMs,
+    'Authentication timed out. Please refresh the page or sign in again.'
+  );
+}
+
+export async function getUser({ refresh = false, timeoutMs = 10000 } = {}) {
+  const supabase = getSupabase();
+
   if (refresh) {
-    const { data, error } = await supabase.auth.getUser();
+    const { data, error } = await withTimeout(
+      supabase.auth.getUser(),
+      timeoutMs,
+      'Authentication timed out. Please refresh the page or sign in again.'
+    );
     if (error) throw error;
     return data.user ?? null;
   }
 
-  const session = await getSession();
+  const session = await waitForAuth({ timeoutMs });
   return session?.user ?? null;
 }
 
