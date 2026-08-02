@@ -30,7 +30,14 @@ export async function getSession() {
   return data.session;
 }
 
-export async function getUser() {
+export async function getUser({ refresh = false } = {}) {
+  const supabase = getSupabase();
+  if (refresh) {
+    const { data, error } = await supabase.auth.getUser();
+    if (error) throw error;
+    return data.user ?? null;
+  }
+
   const session = await getSession();
   return session?.user ?? null;
 }
@@ -112,26 +119,70 @@ export function formatMemberSince(user) {
   return date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 }
 
+export function isAdmin(user) {
+  return user?.app_metadata?.role === 'admin';
+}
+
+export async function logSiteEvent(eventType, metadata = {}) {
+  const supabase = getSupabase();
+  const { error } = await supabase.rpc('log_site_event', {
+    p_event_type: eventType,
+    p_metadata: metadata,
+  });
+  if (error) {
+    console.warn('Failed to log site event:', error.message);
+  }
+}
+
+export async function fetchAdminUserActivity() {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('admin_get_user_activity');
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function fetchAdminRecentEvents(limit = 50) {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('admin_get_recent_events', {
+    p_limit: limit,
+  });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export function formatDateTime(value) {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 export function updateAuthNav() {
   const loginLink = document.querySelector('[data-auth-login]');
   const accountLink = document.querySelector('[data-auth-account-link]');
+  const adminLink = document.querySelector('[data-auth-admin]');
   const downloadLink = document.querySelector('[data-auth-download]');
 
   getUser()
     .then((user) => {
       if (loginLink) loginLink.hidden = Boolean(user);
-      if (accountLink) {
-        accountLink.hidden = !user;
-        accountLink.textContent = 'Account';
-        accountLink.href = '/account';
-        accountLink.classList.add('nav__cta');
-      }
+      if (accountLink) accountLink.hidden = !user;
+      if (adminLink) adminLink.hidden = !isAdmin(user);
       if (downloadLink) {
-        downloadLink.href = user ? '/account#download' : '/account';
+        downloadLink.href = user ? '/account#download' : '/login?next=/account';
       }
     })
     .catch(() => {
-      /* ignore */
+      if (loginLink) loginLink.hidden = false;
+      if (accountLink) accountLink.hidden = true;
+      if (adminLink) adminLink.hidden = true;
+      if (downloadLink) downloadLink.href = '/login?next=/account';
     });
 }
 
