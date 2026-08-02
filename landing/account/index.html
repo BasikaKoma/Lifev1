@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Account — lifev1</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#000000" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="page page--account">
+      <div class="page__glow" aria-hidden="true"></div>
+      <div class="page__grid" aria-hidden="true"></div>
+
+      <header class="header">
+        <div class="container header__inner">
+          <a class="logo" href="/" aria-label="lifev1 home">
+            <svg class="logo__mark" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+              <rect width="32" height="32" rx="8" fill="#0a0a0a" stroke="rgba(16,185,129,0.3)" stroke-width="1"/>
+              <text x="16" y="21" text-anchor="middle" font-family="Inter, sans-serif" font-size="11" font-weight="700" fill="#34d399">v1</text>
+            </svg>
+            <span class="logo__text">life<em>v1</em></span>
+          </a>
+          <nav class="nav" aria-label="Main">
+            <a href="/">Home</a>
+            <a href="/account" aria-current="page">Account</a>
+          </nav>
+        </div>
+      </header>
+
+      <main class="main">
+        <div class="container account-shell">
+          <aside class="account-brand">
+            <div class="account-brand__inner">
+              <p class="account-brand__eyebrow">Customer account</p>
+              <h1 class="account-brand__title">Your lifev1 workspace starts here.</h1>
+              <p class="account-brand__text">
+                Sign in to download the desktop app, sync your projects, and keep your roadmap in one premium environment.
+              </p>
+              <ul class="account-brand__list">
+                <li>Secure cloud sync</li>
+                <li>Windows desktop app</li>
+                <li>Auto-updates included</li>
+              </ul>
+            </div>
+          </aside>
+
+          <section class="account-panel">
+            <div class="account-panel__loading" id="account-loading">
+              <div class="account-spinner" aria-hidden="true"></div>
+              <p>Loading your account…</p>
+            </div>
+
+            <div class="account-guest glass" id="account-guest" hidden>
+              <div class="account-tabs" role="tablist" aria-label="Authentication">
+                <button type="button" class="account-tabs__btn is-active" data-mode="signin" role="tab" aria-selected="true">Sign in</button>
+                <button type="button" class="account-tabs__btn" data-mode="signup" role="tab" aria-selected="false">Create account</button>
+              </div>
+
+              <div class="account-guest__header">
+                <h2 id="guest-title">Welcome back</h2>
+                <p id="guest-lead">Access your account and download the lifev1 desktop app.</p>
+              </div>
+
+              <form class="account-form" id="auth-form">
+                <label class="field">
+                  <span class="field__label">Email</span>
+                  <input class="field__input" type="email" name="email" autocomplete="email" placeholder="you@email.com" required />
+                </label>
+                <label class="field">
+                  <span class="field__label">Password</span>
+                  <input class="field__input" type="password" name="password" autocomplete="current-password" minlength="6" placeholder="••••••••" required />
+                </label>
+                <p class="account-message account-message--error" id="auth-error" hidden></p>
+                <p class="account-message account-message--info" id="auth-info" hidden></p>
+                <button class="btn btn--primary btn--block" type="submit" id="auth-submit">Sign in</button>
+              </form>
+            </div>
+
+            <div class="account-dashboard" id="account-dashboard" hidden>
+              <div class="account-profile glass">
+                <div class="account-profile__avatar" id="profile-avatar" aria-hidden="true">V</div>
+                <div class="account-profile__meta">
+                  <div class="account-profile__top">
+                    <h2 id="profile-email">you@email.com</h2>
+                    <span class="account-badge">Active</span>
+                  </div>
+                  <p class="account-profile__sub">Member since <span id="profile-since">—</span></p>
+                </div>
+                <button type="button" class="btn btn--ghost btn--sm" id="sign-out">Sign out</button>
+              </div>
+
+              <div class="account-cards">
+                <article class="account-card glass account-card--download" id="download-section">
+                  <div class="account-card__head">
+                    <div>
+                      <p class="account-card__eyebrow">Desktop app</p>
+                      <h3>Download lifev1</h3>
+                    </div>
+                    <span class="account-card__icon" aria-hidden="true">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 3v10m0 0l4-4m-4 4L8 9M5 21h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </span>
+                  </div>
+                  <p class="account-card__text">Install the latest Windows build for your account.</p>
+                  <div class="account-release" id="release-meta">
+                    <div class="account-release__row"><span>Version</span><strong id="release-version">—</strong></div>
+                    <div class="account-release__row"><span>Platform</span><strong>Windows 10+</strong></div>
+                    <div class="account-release__row"><span>Size</span><strong id="release-size">—</strong></div>
+                  </div>
+                  <a class="btn btn--primary btn--block" id="download-btn" href="#" download hidden>Download for Windows</a>
+                  <p class="account-message account-message--error" id="download-error" hidden></p>
+                </article>
+
+                <article class="account-card glass">
+                  <div class="account-card__head">
+                    <div>
+                      <p class="account-card__eyebrow">Cloud</p>
+                      <h3>Sync enabled</h3>
+                    </div>
+                  </div>
+                  <p class="account-card__text">Your projects and roadmap data sync securely across devices when you use the desktop app.</p>
+                </article>
+
+                <article class="account-card glass">
+                  <div class="account-card__head">
+                    <div>
+                      <p class="account-card__eyebrow">Support</p>
+                      <h3>Need help?</h3>
+                    </div>
+                  </div>
+                  <p class="account-card__text">Questions about install, login, or integrations?</p>
+                  <a class="account-inline-link" href="mailto:hello@lifev1.com">hello@lifev1.com</a>
+                </article>
+              </div>
+            </div>
+          </section>
+        </div>
+      </main>
+
+      <footer class="footer">
+        <div class="container footer__inner">
+          <span>&copy; <span id="year"></span> lifev1.com</span>
+          <div class="footer__links">
+            <a href="/privacy">Privacy Policy</a>
+            <a href="/terms">Terms of Service</a>
+          </div>
+        </div>
+      </footer>
+    </div>
+
+    <script src="/js/config.js"></script>
+    <script type="module" src="/js/account.js"></script>
+  </body>
+</html>
