@@ -51,7 +51,7 @@ export async function signUp(email, password) {
     email: email.trim(),
     password,
     options: {
-      emailRedirectTo: `${window.location.origin}/download`,
+      emailRedirectTo: `${window.location.origin}/account`,
     },
   });
   if (error) throw error;
@@ -62,16 +62,6 @@ export async function signOut() {
   const supabase = getSupabase();
   const { error } = await supabase.auth.signOut();
   if (error) throw error;
-}
-
-export async function requireAuth(redirectTo = '/login') {
-  const user = await getUser();
-  if (!user) {
-    const next = encodeURIComponent(window.location.pathname + window.location.search);
-    window.location.href = `${redirectTo}?next=${next}`;
-    return null;
-  }
-  return user;
 }
 
 export function formatAuthError(error) {
@@ -111,21 +101,44 @@ export async function fetchLatestInstaller() {
   };
 }
 
+export function getUserInitial(user) {
+  const source = user?.user_metadata?.display_name || user?.email || '?';
+  return source.trim().charAt(0).toUpperCase();
+}
+
+export function formatMemberSince(user) {
+  const date = user?.created_at ? new Date(user.created_at) : null;
+  if (!date || Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+}
+
 export function updateAuthNav() {
   const loginLink = document.querySelector('[data-auth-login]');
+  const accountLink = document.querySelector('[data-auth-account-link]');
   const downloadLink = document.querySelector('[data-auth-download]');
-  const accountSlot = document.querySelector('[data-auth-account]');
 
   getUser()
     .then((user) => {
-      if (user && loginLink) loginLink.hidden = true;
-      if (user && downloadLink) downloadLink.classList.add('nav__cta');
-      if (accountSlot) {
-        accountSlot.hidden = !user;
-        if (user) accountSlot.textContent = user.email;
+      if (loginLink) loginLink.hidden = Boolean(user);
+      if (accountLink) {
+        accountLink.hidden = !user;
+        accountLink.textContent = 'Account';
+        accountLink.href = '/account';
+        accountLink.classList.add('nav__cta');
+      }
+      if (downloadLink) {
+        downloadLink.href = user ? '/account#download' : '/account';
       }
     })
     .catch(() => {
       /* ignore */
     });
+}
+
+export function subscribeToAuth(callback) {
+  const supabase = getSupabase();
+  const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+    callback(session?.user ?? null);
+  });
+  return () => data.subscription.unsubscribe();
 }
