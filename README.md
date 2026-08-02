@@ -1,3 +1,4 @@
-# Next Move releases
+# Lifev1
 
-Desktop installer binaries are published here via GitHub Releases.
+- **Website:** static landing page in `landing/` (deployed via Cloudflare Pages)
+- **Releases:** desktop installer binaries via GitHub Releases
