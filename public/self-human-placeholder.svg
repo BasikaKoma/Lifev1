@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 700" fill="none">
+  <defs>
+    <linearGradient id="bodyFill" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.20)"/>
+      <stop offset="40%" stop-color="rgba(255,255,255,0.09)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0.03)"/>
+    </linearGradient>
+    <linearGradient id="bodyEdge" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.04)"/>
+      <stop offset="40%" stop-color="rgba(255,255,255,0.20)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0.06)"/>
+    </linearGradient>
+    <radialGradient id="chestLight" cx="42%" cy="36%" r="32%">
+      <stop offset="0%" stop-color="rgba(16,185,129,0.55)"/>
+      <stop offset="70%" stop-color="rgba(16,185,129,0.12)"/>
+      <stop offset="100%" stop-color="rgba(16,185,129,0)"/>
+    </radialGradient>
+    <radialGradient id="headLight" cx="58%" cy="8%" r="26%">
+      <stop offset="0%" stop-color="rgba(245,158,11,0.48)"/>
+      <stop offset="100%" stop-color="rgba(245,158,11,0)"/>
+    </radialGradient>
+    <radialGradient id="shoulderLight" cx="65%" cy="18%" r="20%">
+      <stop offset="0%" stop-color="rgba(245,158,11,0.25)"/>
+      <stop offset="100%" stop-color="rgba(245,158,11,0)"/>
+    </radialGradient>
+    <filter id="softGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="10"/>
+    </filter>
+  </defs>
+
+  <ellipse cx="175" cy="668" rx="100" ry="14" fill="rgba(16,185,129,0.08)" filter="url(#softGlow)"/>
+
+  <!-- Side-profile silhouette (facing right) -->
+  <path
+    d="M195 72
+       C210 68 228 72 240 84
+       C252 96 258 112 260 128
+       C262 144 258 158 250 168
+       C268 176 282 192 290 214
+       C298 238 296 264 286 286
+       C298 296 306 316 308 340
+       C310 364 304 386 292 404
+       C300 418 306 438 306 460
+       C306 490 290 514 268 528
+       C278 542 284 558 284 576
+       C284 606 260 628 228 632
+       H148
+       C116 628 92 606 92 576
+       C92 558 98 542 108 528
+       C86 514 70 490 70 460
+       C70 438 76 418 84 404
+       C72 386 66 364 68 340
+       C70 316 78 296 90 286
+       C80 264 78 238 86 214
+       C94 192 108 176 126 168
+       C118 158 114 144 116 128
+       C118 112 124 96 136 84
+       C148 72 166 68 181 72
+       C188 54 202 42 222 42
+       C242 42 256 54 263 72
+       Z"
+    fill="url(#bodyFill)"
+    stroke="url(#bodyEdge)"
+    stroke-width="1"
+  />
+
+  <!-- Facial profile -->
+  <path
+    d="M240 84 C252 80 264 84 272 94 C280 104 282 116 278 126 C274 118 266 112 256 108 C246 104 238 98 234 90 Z"
+    fill="rgba(255,255,255,0.05)"
+    stroke="rgba(255,255,255,0.07)"
+    stroke-width="0.6"
+  />
+
+  <!-- Glow overlays -->
+  <ellipse cx="170" cy="270" rx="68" ry="98" fill="url(#chestLight)"/>
+  <ellipse cx="248" cy="88" rx="52" ry="68" fill="url(#headLight)"/>
+  <ellipse cx="270" cy="155" rx="40" ry="35" fill="url(#shoulderLight)"/>
+
+  <!-- Neural network -->
+  <g opacity="0.75">
+    <path d="M210 105 L210 165 L195 205 L210 255 L200 310 L195 365 L190 420 L188 475 L186 530 L184 580" stroke="rgba(16,185,129,0.38)" stroke-width="0.7" fill="none"/>
+    <path d="M230 120 L255 155 L245 205 L260 255 L248 310 L240 365" stroke="rgba(16,185,129,0.22)" stroke-width="0.6" fill="none"/>
+    <path d="M195 175 L175 210 L185 260 L170 310" stroke="rgba(16,185,129,0.18)" stroke-width="0.6" fill="none"/>
+    <path d="M250 95 L275 120 L268 150 L285 175" stroke="rgba(245,158,11,0.32)" stroke-width="0.6" fill="none"/>
+    <path d="M235 110 L252 130 L245 158" stroke="rgba(245,158,11,0.22)" stroke-width="0.5" fill="none"/>
+    <line x1="175" y1="210" x2="210" y2="210" stroke="rgba(16,185,129,0.15)" stroke-width="0.5"/>
+    <line x1="180" y1="310" x2="215" y2="310" stroke="rgba(16,185,129,0.15)" stroke-width="0.5"/>
+  </g>
+
+  <!-- Nodes -->
+  <circle cx="210" cy="105" r="2.2" fill="#34d399"/>
+  <circle cx="210" cy="165" r="1.8" fill="#34d399"/>
+  <circle cx="195" cy="205" r="1.8" fill="#10b981"/>
+  <circle cx="210" cy="255" r="2.2" fill="#34d399"/>
+  <circle cx="200" cy="310" r="2" fill="#10b981"/>
+  <circle cx="195" cy="365" r="1.8" fill="#34d399"/>
+  <circle cx="190" cy="420" r="1.8" fill="#34d399"/>
+  <circle cx="250" cy="95" r="2.2" fill="#f59e0b"/>
+  <circle cx="275" cy="120" r="1.8" fill="#fbbf24"/>
+  <circle cx="268" cy="150" r="1.6" fill="#f59e0b"/>
+  <circle cx="252" cy="130" r="1.6" fill="#fbbf24"/>
+</svg>

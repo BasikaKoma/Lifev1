@@ -1,10 +1,14 @@
 import {
   getUser,
+  getSession,
   isAdmin,
   fetchAdminUserActivity,
   fetchAdminRecentEvents,
   formatDateTime,
   signOut,
+  signOutLocallyTaken,
+  isExclusiveSessionActive,
+  watchExclusiveSession,
 } from '/js/site.js';
 
 document.getElementById('year').textContent = new Date().getFullYear();
@@ -92,6 +96,18 @@ async function init() {
     if (!user) {
       window.location.replace('/login?next=/admin');
       return;
+    }
+    const session = await getSession();
+    if (session && !(await isExclusiveSessionActive(session))) {
+      await signOutLocallyTaken();
+      window.location.replace('/login?next=/admin&taken=1');
+      return;
+    }
+    if (session) {
+      watchExclusiveSession(session, async () => {
+        await signOutLocallyTaken();
+        window.location.replace('/login?next=/admin&taken=1');
+      });
     }
     if (!isAdmin(user)) {
       showDenied();

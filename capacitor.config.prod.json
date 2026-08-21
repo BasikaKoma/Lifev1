@@ -1,0 +1,16 @@
+{
+  "appId": "com.lifev1.app",
+  "appName": "lifev1",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": true
+    }
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}

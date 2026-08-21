@@ -1,0 +1,11 @@
+# Cloudflare Pages — lifev1 web app (app.lifev1.com)
+# Deploy: npm run web:deploy
+
+name = "lifev1-app"
+pages_build_output_dir = "dist"
+compatibility_date = "2024-01-01"
+
+[[redirects]]
+from = "/*"
+to = "/index.html"
+status = 200

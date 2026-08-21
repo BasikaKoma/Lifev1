@@ -1,0 +1,8 @@
+[functions.oura-oauth-callback]
+verify_jwt = false
+
+[functions.oura-sync-all]
+verify_jwt = false
+
+[functions.scale-ingest]
+verify_jwt = false

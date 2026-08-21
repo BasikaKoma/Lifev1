@@ -2,9 +2,6 @@ import { getUser, signIn, signUp, formatAuthError, logSiteEvent } from '/js/site
 
 document.getElementById('year').textContent = new Date().getFullYear();
 
-const params = new URLSearchParams(window.location.search);
-const nextUrl = params.get('next') || '/account';
-
 const form = document.getElementById('auth-form');
 const guestTitle = document.getElementById('guest-title');
 const guestLead = document.getElementById('guest-lead');
@@ -12,6 +9,13 @@ const submitBtn = document.getElementById('auth-submit');
 const errorEl = document.getElementById('auth-error');
 const infoEl = document.getElementById('auth-info');
 const tabButtons = document.querySelectorAll('[data-mode]');
+
+const params = new URLSearchParams(window.location.search);
+const nextUrl = params.get('next') || '/account';
+if (params.get('taken') === '1') {
+  errorEl.textContent = 'You were signed out because this account signed in from another device or app.';
+  errorEl.hidden = false;
+}
 
 let mode = 'signin';
 

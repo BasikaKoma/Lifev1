@@ -1,0 +1,9 @@
+node_modules
+dist
+release
+release-build
+release-android
+.DS_Store
+*.local
+.env
+supabase/.temp

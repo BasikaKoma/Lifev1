@@ -1,6 +1,10 @@
 import {
   getUser,
+  getSession,
   signOut,
+  signOutLocallyTaken,
+  isExclusiveSessionActive,
+  watchExclusiveSession,
   fetchLatestInstaller,
   getUserInitial,
   formatMemberSince,
@@ -23,9 +27,10 @@ const releaseSize = document.getElementById('release-size');
 const downloadBtn = document.getElementById('download-btn');
 const downloadError = document.getElementById('download-error');
 
-function redirectToLogin() {
+function redirectToLogin(taken = false) {
   const next = encodeURIComponent('/account');
-  window.location.replace(`/login?next=${next}`);
+  const takenQuery = taken ? '&taken=1' : '';
+  window.location.replace(`/login?next=${next}${takenQuery}`);
 }
 
 function showDashboard() {
@@ -100,6 +105,18 @@ async function init() {
     if (!user) {
       redirectToLogin();
       return;
+    }
+    const session = await getSession();
+    if (session && !(await isExclusiveSessionActive(session))) {
+      await signOutLocallyTaken();
+      redirectToLogin(true);
+      return;
+    }
+    if (session) {
+      watchExclusiveSession(session, async () => {
+        await signOutLocallyTaken();
+        redirectToLogin(true);
+      });
     }
     await renderDashboard(user);
   } catch (error) {
