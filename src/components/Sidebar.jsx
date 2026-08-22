@@ -19,17 +19,6 @@ const LIFELINE_ITEM = {
   ),
 };
 
-const OVERVIEW_ITEM = {
-  id: 'overview',
-  label: 'Overview',
-  icon: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="7" height="18" rx="1" />
-      <rect x="14" y="3" width="7" height="18" rx="1" />
-    </svg>
-  ),
-};
-
 const MENU_ITEMS = [
   {
     id: 'self',
@@ -44,6 +33,18 @@ const MENU_ITEMS = [
     ),
   },
   {
+    id: 'brand',
+    label: 'Personal Brand',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="8" r="3" />
+        <path d="M6 20v-1a6 6 0 0 1 12 0v1" />
+        <path d="M19 4l1.5 1.5L19 7" />
+        <path d="M19 4l-1.5 1.5" />
+      </svg>
+    ),
+  },
+  {
     id: 'roadmap',
     label: 'Roadmap',
     icon: (
@@ -54,7 +55,30 @@ const MENU_ITEMS = [
       </svg>
     ),
   },
+  {
+    id: 'review',
+    label: 'Review',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+        <path d="M9 15l2 2 4-4" />
+      </svg>
+    ),
+  },
 ];
+
+const DEVICES_ITEM = {
+  id: 'devices',
+  label: 'Devices',
+  icon: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+      <rect x="9" y="9" width="6" height="6" />
+      <path d="M9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3" />
+    </svg>
+  ),
+};
 
 const SETTINGS_ITEM = {
   id: 'settings',
@@ -134,7 +158,7 @@ export function Sidebar({
           <button
             key={item.id}
             type="button"
-            className={`sidebar__link ${!isLifeline && activeView === item.id ? 'sidebar__link--active' : ''}`}
+            className={`sidebar__link ${activeView === item.id && !(isLifeline && item.id === 'roadmap') ? 'sidebar__link--active' : ''}`}
             onClick={() => onNavigate(item.id)}
             title={item.label}
           >
@@ -161,12 +185,12 @@ export function Sidebar({
       <div className="sidebar__footer">
         <button
           type="button"
-          className={`sidebar__link ${activeView === OVERVIEW_ITEM.id ? 'sidebar__link--active' : ''}`}
-          onClick={() => onNavigate(OVERVIEW_ITEM.id)}
-          title={OVERVIEW_ITEM.label}
+          className={`sidebar__link ${activeView === DEVICES_ITEM.id ? 'sidebar__link--active' : ''}`}
+          onClick={() => onNavigate(DEVICES_ITEM.id)}
+          title={DEVICES_ITEM.label}
         >
-          <span className="sidebar__link-icon">{OVERVIEW_ITEM.icon}</span>
-          {!collapsed && <span className="sidebar__link-label">{OVERVIEW_ITEM.label}</span>}
+          <span className="sidebar__link-icon">{DEVICES_ITEM.icon}</span>
+          {!collapsed && <span className="sidebar__link-label">{DEVICES_ITEM.label}</span>}
         </button>
 
         <button

@@ -82,9 +82,10 @@ export const NO_DATA = 'No data';
  * @property {string} title
  * @property {string} projectTitle
  * @property {string|null} [stageTitle]
- * @property {'checkpoint'|'note'|'task'} [kind]
+ * @property {'milestone'|'checkpoint'|'note'|'task'|'obstacle'|'resource'|'idea'|'image'|'sticky'} [kind]
  * @property {string} [timestamp]
  * @property {string} [completedAt]
+ * @property {string} [timeLabel]
  * @property {boolean} [done]
  */
 

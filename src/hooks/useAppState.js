@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createDefaultStages, createStarterStages, createEmptyGoal, createEmptyStage, createEmptyIdea, createEmptySticky, createEmptyCanvasObstacle, createEmptyCanvasResource, createEmptyCanvasTask, reindexGoals, generateId } from '../data/templates';
 import { findGoalIdFromHint, findStageIdFromHint } from '../utils/assistantParser';
-import { computeAutoLayout, sameNodeRef, DEFAULT_CANVAS_STYLE } from '../utils/canvasNodes';
+import { buildProjectSeed, mutationActions, normalizeBrainActions, openProjectActions, applyBrainMutationsToState } from '../brain/actions';
+import { normalizeSearchText } from '../brain/snapshot/loadAppCatalog';
+import { computeAutoLayout, sameNodeRef, DEFAULT_CANVAS_STYLE, nextFreeCanvasTaskPosition, isCanvasItemOnBoard } from '../utils/canvasNodes';
 import { getStickyMilestonePair, stickyLinkedToStage } from '../utils/milestoneNotes';
 import {
   applyCheckpointLinkToState,
@@ -10,8 +12,10 @@ import {
   removeLinkedCheckpointId,
 } from '../utils/checkpointLinks';
 import { ORIGIN_Y, syncRoadmapPositions, positionMilestoneOnTimeline, resolveMilestoneDrag, resolveCanvasItemDrag, isOnRoadmap, getTimelineY, shiftRoadmapAttachedItems, reorderCheckpointsByTimelineY, getPlanEndY, getPlanStartY, snapLifelinePlanMilestoneToEndDate, syncLifelinePlanMilestoneFromTimelineY, alignLifelinePlanStages } from '../utils/stageLayout';
+import { ensureCanvasHeadroom, notifyCanvasWorldShift } from '../utils/canvasWorld';
 import { DEFAULT_MAP_THEME, mergeMapTheme, getRoadmapLayout } from '../utils/mapTheme';
 import { processStages, setStageComplete, toggleStageComplete as toggleStageCompleteState } from '../utils/logic';
+import { withCompletionTimestamp } from '../utils/archive';
 import { normalizeProjectBrief } from '../utils/projectBrief';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { SAVE_INTERVAL_MS } from '../constants/save';
@@ -31,6 +35,7 @@ import {
   patchLifelineProjectBundle,
   appendCaptureToRemoteProject,
   removeCaptureFromRemoteProject,
+  mutateRemoteProject,
 } from '../utils/supabaseDb';
 import {
   applyCaptureToState,
@@ -58,7 +63,8 @@ import {
   buildLifelinePlanContext,
   resolvePlanDayHeight,
 } from '../utils/planMode';
-import { patchDayEntry, normalizeLifelineDays, mergeLifelineDaysMaps, routineTemplatesEqual, patchMultipleDayEntries, getDayEntry } from '../utils/lifelineDays';
+import { patchDayEntry, normalizeLifelineDays, mergeLifelineDaysMaps, routineTemplatesEqual, patchMultipleDayEntries, getDayEntry, normalizeRoutineTemplates, appendDayJournalNote } from '../utils/lifelineDays';
+import { normalizeNorthStars, northStarsEqual } from '../utils/lifelineNorthStars';
 import { mapLifelineReconcileToState } from '../utils/lifelineMerge';
 import { normalizeSelfHubDays } from '../utils/selfHubDays';
 import { captureSelfHubLiveDay as mergeSelfHubCapture } from '../utils/selfHubSync';
@@ -69,10 +75,13 @@ import { ensureInkGroups } from '../utils/inkGroups';
 import { withTimeout } from '../utils/withTimeout';
 import {
   COLUMN_TO_STATE,
+  STATE_TO_COLUMN,
   capturePersistable,
   diffDirtyColumns,
   persistableValuesEqual,
 } from '../utils/projectSavePatch';
+import { writeLocalColumns } from '../utils/projectLocalStore';
+import { normalizeActiveView } from '../utils/appNavigation';
 
 const LOAD_PROJECT_TIMEOUT_MS = 25000;
 
@@ -202,8 +211,8 @@ function assembleProjectState(data, { keepUi = false, prev = null, resetSelectio
     focusMode: data.focusMode === true,
     cloudUpdatedAt: data.cloudUpdatedAt || null,
     activeView: keepUi && prev
-      ? prev.activeView
-      : (data.activeView === 'overview' ? 'roadmap' : data.activeView || 'roadmap'),
+      ? normalizeActiveView(prev.activeView)
+      : normalizeActiveView(data.activeView),
   };
 }
 
@@ -215,6 +224,8 @@ export function useAppState(userId) {
   const [projectActivity, setProjectActivity] = useState([]);
   const [selfHubDays, setSelfHubDays] = useState({});
   const [lifelineArchiveDays, setLifelineArchiveDays] = useState({});
+  const [lifelineRoutineTemplates, setLifelineRoutineTemplates] = useState([]);
+  const [lifelineNorthStars, setLifelineNorthStars] = useState([]);
   const lifelineDaysRef = useRef({});
   const selfHubDaysRef = useRef({});
   const [lifelineFocusToken, setLifelineFocusToken] = useState(0);
@@ -400,6 +411,7 @@ export function useAppState(userId) {
       if (changed.length) {
         for (const column of changed) dirtyColumnsRef.current.add(column);
         dirtyRef.current = true;
+        writeLocalColumns(next, changed, [...dirtyColumnsRef.current]);
       }
       stateRef.current = next;
       return next;
@@ -413,14 +425,43 @@ export function useAppState(userId) {
 
   const patchState = useCallback(
     (updater, undoOptions) => {
+      let headroomDy = 0;
       applyTrackedState((prev) => {
         if (!prev) return prev;
         recordBeforeChange(prev, undoOptions);
-        return typeof updater === 'function' ? updater(prev) : updater;
+        let next = typeof updater === 'function' ? updater(prev) : updater;
+        if (undoOptions?.canvasHeadroom && next && next !== prev && !next.isLifeline) {
+          const result = ensureCanvasHeadroom(next);
+          next = result.state;
+          headroomDy = result.dy;
+        }
+        return next;
       });
+      if (headroomDy) notifyCanvasWorldShift(headroomDy);
     },
     [applyTrackedState, recordBeforeChange]
   );
+
+  const unplacedCanvasTaskCount = (state?.canvasTasks || []).filter((task) => !isCanvasItemOnBoard(task)).length;
+  useEffect(() => {
+    if (!state?.projectId || state.isLifeline || unplacedCanvasTaskCount === 0) return;
+    patchState((prev) => {
+      const list = prev.canvasTasks || [];
+      if (!list.some((task) => !isCanvasItemOnBoard(task))) return prev;
+      const nextTasks = [];
+      for (const task of list) {
+        if (isCanvasItemOnBoard(task)) {
+          nextTasks.push(task);
+          continue;
+        }
+        nextTasks.push({
+          ...task,
+          ...nextFreeCanvasTaskPosition({ ...prev, canvasTasks: nextTasks }),
+        });
+      }
+      return { ...prev, canvasTasks: nextTasks };
+    });
+  }, [state?.projectId, state?.isLifeline, unplacedCanvasTaskCount, patchState]);
 
   const { closeStage } = useAppHistory(state, setState, loading);
 
@@ -441,7 +482,7 @@ export function useAppState(userId) {
     clearHistory();
     const next = { ...cached.state };
     if (extras.activeView) {
-      next.activeView = extras.activeView === 'overview' ? 'roadmap' : extras.activeView;
+      next.activeView = normalizeActiveView(extras.activeView);
     }
     if (Object.prototype.hasOwnProperty.call(extras, 'selectedStageId')) {
       next.selectedStageId = extras.selectedStageId || null;
@@ -582,6 +623,15 @@ export function useAppState(userId) {
     loadProjectById(lifelineProjectId)
       .then((data) => {
         if (cancelled) return;
+        const incomingTemplates = normalizeRoutineTemplates(data.mapTheme?.lifeline?.routineTemplates);
+        const incomingNorthStars = normalizeNorthStars(data.mapTheme?.lifeline?.northStars);
+        const skipTemplateHydrate =
+          (stateRef.current?.isLifeline && dirtyColumnsRef.current.has('map_theme'))
+          || sessionProjectsRef.current.get(lifelineProjectId)?.dirtyColumns?.has('map_theme');
+        if (!skipTemplateHydrate) {
+          setLifelineRoutineTemplates(incomingTemplates);
+          setLifelineNorthStars(incomingNorthStars);
+        }
         const hubDays = normalizeSelfHubDays(data.mapTheme?.lifeline?.selfHubDays);
         const days = normalizeLifelineDays(data.lifelineDays);
         const mergedDays = mergeLifelineDaysMaps(days, lifelineDaysRef.current);
@@ -668,12 +718,32 @@ export function useAppState(userId) {
     setSyncConflict(false);
     setSyncError(null);
     clearHistory();
+    const prev = stateRef.current;
     const next = assembleProjectState(
-      { ...data, isLifeline: data.isLifeline === true || stateRef.current?.isLifeline === true },
-      { keepUi, prev: stateRef.current }
+      { ...data, isLifeline: data.isLifeline === true || prev?.isLifeline === true },
+      { keepUi, prev }
     );
-    rememberSyncedState(next);
-    setState(next);
+    const dirtyColumns = [...dirtyColumnsRef.current];
+    if (keepUi && prev && dirtyColumns.length) {
+      const local = capturePersistable(prev);
+      for (const column of dirtyColumns) {
+        const field = COLUMN_TO_STATE[column];
+        if (field) next[field] = local[field];
+      }
+      const nextSynced = { ...(syncedPersistableRef.current || {}) };
+      const incoming = capturePersistable(next);
+      for (const [stateKey, column] of Object.entries(STATE_TO_COLUMN)) {
+        if (!dirtyColumns.includes(column)) {
+          nextSynced[stateKey] = incoming[stateKey];
+        }
+      }
+      syncedPersistableRef.current = nextSynced;
+      stateRef.current = next;
+      setState(next);
+    } else {
+      rememberSyncedState(next);
+      setState(next);
+    }
     hydrateLifelineHubFromState(next);
     queueMicrotask(() => {
       applyingRemoteRef.current = false;
@@ -1038,10 +1108,17 @@ export function useAppState(userId) {
           prev.mapTheme?.lifeline?.routineTemplates,
           mapTheme.lifeline?.routineTemplates
         );
+        const northStarsChanged = !northStarsEqual(
+          prev.mapTheme?.lifeline?.northStars,
+          mapTheme.lifeline?.northStars
+        );
         if (
           !routineTemplatesChanged
+          && !northStarsChanged
           && mapTheme.lifeline?.dayHeight === prev.mapTheme?.lifeline?.dayHeight
           && mapTheme.lifeline?.viewCenterDate === prev.mapTheme?.lifeline?.viewCenterDate
+          && mapTheme.lifeline?.viewStartDate === prev.mapTheme?.lifeline?.viewStartDate
+          && mapTheme.lifeline?.viewEndDate === prev.mapTheme?.lifeline?.viewEndDate
           && mapTheme.lifeline?.startDate === prev.mapTheme?.lifeline?.startDate
           && mapTheme.lifeline?.futureDays === prev.mapTheme?.lifeline?.futureDays
           && mapTheme.roadmap?.height === prev.mapTheme?.roadmap?.height
@@ -1059,6 +1136,54 @@ export function useAppState(userId) {
     }, { debounce: true });
   }, [patchState, lifelineAnchors]);
 
+  useEffect(() => {
+    if (!state?.isLifeline) return;
+    setLifelineRoutineTemplates(normalizeRoutineTemplates(state.mapTheme?.lifeline?.routineTemplates));
+    setLifelineNorthStars(normalizeNorthStars(state.mapTheme?.lifeline?.northStars));
+  }, [state?.isLifeline, state?.mapTheme?.lifeline?.routineTemplates, state?.mapTheme?.lifeline?.northStars]);
+
+  const patchLifelineThemeField = useCallback((field, value) => {
+    const current = stateRef.current;
+    if (current?.isLifeline) {
+      updateMapTheme({
+        lifeline: {
+          ...(current.mapTheme?.lifeline || {}),
+          [field]: value,
+        },
+      });
+      return;
+    }
+
+    if (!lifelineProjectId) return;
+    const cached = sessionProjectsRef.current.get(lifelineProjectId);
+    if (!cached?.state) return;
+    cached.state = {
+      ...cached.state,
+      mapTheme: {
+        ...cached.state.mapTheme,
+        lifeline: {
+          ...(cached.state.mapTheme?.lifeline || {}),
+          [field]: value,
+        },
+      },
+    };
+    cached.dirtyColumns.add('map_theme');
+    cached.dirty = true;
+    setHasUnsavedChanges(true);
+  }, [updateMapTheme, lifelineProjectId]);
+
+  const updateLifelineRoutineTemplates = useCallback((templates) => {
+    const normalized = normalizeRoutineTemplates(templates);
+    setLifelineRoutineTemplates(normalized);
+    patchLifelineThemeField('routineTemplates', normalized);
+  }, [patchLifelineThemeField]);
+
+  const updateLifelineNorthStars = useCallback((stars) => {
+    const normalized = normalizeNorthStars(stars);
+    setLifelineNorthStars(normalized);
+    patchLifelineThemeField('northStars', normalized);
+  }, [patchLifelineThemeField]);
+
   const applyProject = useCallback((data) => {
     const pendingHub = snapshotPendingHub();
     setSyncConflict(false);
@@ -1072,7 +1197,7 @@ export function useAppState(userId) {
     }
     const next = assembleProjectState(data, { resetSelection: data.selectedStageId == null });
     if (data.selectedStageId !== undefined) next.selectedStageId = data.selectedStageId || null;
-    if (data.activeView) next.activeView = data.activeView === 'overview' ? 'roadmap' : data.activeView;
+    if (data.activeView) next.activeView = normalizeActiveView(data.activeView);
     rememberSyncedState(next);
     setState(next);
     hydrateLifelineHubFromState(next);
@@ -1095,7 +1220,7 @@ export function useAppState(userId) {
         ...data,
         projectList: projectListRef.current,
         selectedStageId: null,
-        activeView: data.activeView === 'overview' ? 'roadmap' : data.activeView || 'roadmap',
+        activeView: normalizeActiveView(data.activeView || 'roadmap'),
       });
     } catch (err) {
       setSyncError(err.message || 'Failed to switch project');
@@ -1171,7 +1296,8 @@ export function useAppState(userId) {
   }, []);
 
   const setActiveView = useCallback((activeView) => {
-    setState((prev) => (prev ? { ...prev, activeView, selectedStageId: null } : prev));
+    setState((prev) => (prev ? { ...prev, activeView: normalizeActiveView(activeView), selectedStageId: null } : prev));
+    flushSaveNowRef.current().catch(() => {});
   }, []);
 
   const openStage = useCallback((stageId) => {
@@ -1187,7 +1313,13 @@ export function useAppState(userId) {
   }, [patchState]);
 
   const addNote = useCallback((note) => {
-    patchState((prev) => ({ ...prev, notes: [note, ...(prev.notes || [])] }));
+    const now = new Date().toISOString();
+    const next = {
+      ...note,
+      createdAt: note?.createdAt || now,
+      updatedAt: note?.updatedAt || now,
+    };
+    patchState((prev) => ({ ...prev, notes: [next, ...(prev.notes || [])] }));
   }, [patchState]);
 
   const updateNote = useCallback((noteId, updates) => {
@@ -1206,7 +1338,7 @@ export function useAppState(userId) {
 
   const updateStage = useCallback((stageId, updates, undoOptions) => {
     updateStages((stages) => {
-      let next = stages.map((s) => (s.id === stageId ? { ...s, ...updates } : s));
+      let next = stages.map((s) => (s.id === stageId ? { ...s, ...withCompletionTimestamp(s, updates) } : s));
       if (updates.status === 'Current') {
         next = next.map((s) =>
           s.id !== stageId && s.status === 'Current' ? { ...s, status: 'Locked' } : s
@@ -1308,7 +1440,7 @@ export function useAppState(userId) {
           );
         }),
       };
-    }, commit ? undefined : { debounce: true });
+    }, commit ? { canvasHeadroom: true } : { debounce: true, canvasHeadroom: true });
   }, [patchState, lifelineAnchors]);
 
   const moveStageTimelineY = useCallback((stageId, timelineY) => {
@@ -1333,7 +1465,7 @@ export function useAppState(userId) {
           return positionMilestoneOnTimeline(s, timelineY, layout, s.roadmapSide || 'right');
         }),
       };
-    }, { debounce: true });
+    }, { debounce: true, canvasHeadroom: true });
   }, [patchState, lifelineAnchors]);
 
   const moveItemTimelineY = useCallback((node, timelineY) => {
@@ -1379,7 +1511,7 @@ export function useAppState(userId) {
             checkpoints: shiftCheckpointPlanDates(s.checkpoints || [], dayDelta),
           };
         }),
-      }), { debounce: true });
+      }), { debounce: true, canvasHeadroom: true });
       return;
     }
     patchState((prev) => {
@@ -1511,7 +1643,7 @@ export function useAppState(userId) {
         };
       }
       return prev;
-    }, { debounce: true });
+    }, { debounce: true, canvasHeadroom: true });
   }, [patchState, moveStageTimelineY]);
 
   const attachStageToRoadmap = useCallback((stageId, timelineY) => {
@@ -1538,7 +1670,7 @@ export function useAppState(userId) {
           return next;
         }),
       };
-    });
+    }, { canvasHeadroom: true });
   }, [patchState, lifelineAnchors]);
 
   const detachStageFromRoadmap = useCallback((stageId) => {
@@ -1602,7 +1734,7 @@ export function useAppState(userId) {
         ...prev,
         stages: relayoutStages([...sorted, created], prev.mapTheme),
       };
-    });
+    }, { canvasHeadroom: true });
 
     return created;
   }, [patchState]);
@@ -1782,7 +1914,7 @@ export function useAppState(userId) {
           ? {
               ...s,
               ideas: (s.ideas || []).map((idea) =>
-                idea.id === ideaId ? { ...idea, ...updates } : idea
+                idea.id === ideaId ? { ...idea, ...withCompletionTimestamp(idea, updates) } : idea
               ),
             }
           : s
@@ -1839,7 +1971,7 @@ export function useAppState(userId) {
           };
         }),
       };
-    }, { debounce: true });
+    }, { debounce: true, canvasHeadroom: true });
   }, [patchState]);
 
   const moveBacklogIdeaPosition = useCallback((ideaId, canvasX, canvasY) => {
@@ -1860,7 +1992,7 @@ export function useAppState(userId) {
           };
         }),
       };
-    }, { debounce: true });
+    }, { debounce: true, canvasHeadroom: true });
   }, [patchState]);
 
   const moveCanvasSticky = useCallback((stickyId, canvasX, canvasY) => {
@@ -1883,7 +2015,7 @@ export function useAppState(userId) {
           };
         }),
       };
-    }, { debounce: true });
+    }, { debounce: true, canvasHeadroom: true });
   }, [patchState]);
 
   const applyRoadmapSpineMove = useCallback((spine) => {
@@ -1915,7 +2047,7 @@ export function useAppState(userId) {
           },
         }),
       };
-    }, { debounce: true });
+    }, { debounce: true, canvasHeadroom: true });
   }, [patchState]);
 
   const shiftRoadmapSpine = applyRoadmapSpineMove;
@@ -1934,6 +2066,8 @@ export function useAppState(userId) {
           nextTheme.lifeline?.futureDays === prev.mapTheme?.lifeline?.futureDays
           && nextTheme.lifeline?.startDate === prev.mapTheme?.lifeline?.startDate
           && nextTheme.lifeline?.viewCenterDate === prev.mapTheme?.lifeline?.viewCenterDate
+          && nextTheme.lifeline?.viewStartDate === prev.mapTheme?.lifeline?.viewStartDate
+          && nextTheme.lifeline?.viewEndDate === prev.mapTheme?.lifeline?.viewEndDate
           && nextTheme.roadmap?.top === prev.mapTheme?.roadmap?.top
           && nextTheme.roadmap?.height === prev.mapTheme?.roadmap?.height
         ) {
@@ -1956,7 +2090,7 @@ export function useAppState(userId) {
           },
         }),
       };
-    }, { debounce: true });
+    }, { debounce: true, canvasHeadroom: true });
   }, [patchState, lifelineAnchors]);
 
   const moveRoadmapSpinePreview = applyRoadmapSpineMove;
@@ -1970,7 +2104,7 @@ export function useAppState(userId) {
       timing: ideaData.timing || 'Too Early',
       ...ideaData,
     });
-    patchState((prev) => ({ ...prev, backlog: [...(prev.backlog || []), idea] }));
+    patchState((prev) => ({ ...prev, backlog: [...(prev.backlog || []), idea] }), { canvasHeadroom: true });
     return idea;
   }, [patchState]);
 
@@ -2092,14 +2226,14 @@ export function useAppState(userId) {
     patchState((prev) => ({
       ...prev,
       canvasStickies: [...(prev.canvasStickies || []), sticky],
-    }));
+    }), { canvasHeadroom: true });
     return sticky;
   }, [patchState]);
 
   const updateCanvasSticky = useCallback((stickyId, updates, undoOptions) => {
     patchState((prev) => {
       const canvasStickies = (prev.canvasStickies || []).map((s) =>
-        s.id === stickyId ? { ...s, ...updates } : s
+        s.id === stickyId ? { ...s, ...withCompletionTimestamp(s, updates) } : s
       );
       if (!Object.prototype.hasOwnProperty.call(updates, 'relatedStageId')) {
         return { ...prev, canvasStickies };
@@ -2122,7 +2256,7 @@ export function useAppState(userId) {
         : withoutStickyMilestone;
 
       return { ...prev, canvasStickies, canvasConnections };
-    }, undoOptions);
+    }, undoOptions ?? { debounce: true });
   }, [patchState]);
 
   const removeCanvasSticky = useCallback((stickyId) => {
@@ -2151,7 +2285,7 @@ export function useAppState(userId) {
     patchState((prev) => ({
       ...prev,
       canvasObstacles: [...(prev.canvasObstacles || []), obstacle],
-    }));
+    }), { canvasHeadroom: true });
     return obstacle;
   }, [patchState]);
 
@@ -2160,7 +2294,7 @@ export function useAppState(userId) {
       (prev) => ({
         ...prev,
         canvasObstacles: (prev.canvasObstacles || []).map((item) =>
-          item.id === obstacleId ? { ...item, ...updates } : item
+          item.id === obstacleId ? { ...item, ...withCompletionTimestamp(item, updates) } : item
         ),
       }),
       undoOptions
@@ -2185,7 +2319,7 @@ export function useAppState(userId) {
           };
         }),
       };
-    }, { debounce: true });
+    }, { debounce: true, canvasHeadroom: true });
   }, [patchState]);
 
   const removeCanvasObstacle = useCallback((obstacleId) => {
@@ -2220,7 +2354,7 @@ export function useAppState(userId) {
     patchState((prev) => ({
       ...prev,
       canvasResources: [...(prev.canvasResources || []), resource],
-    }));
+    }), { canvasHeadroom: true });
     return resource;
   }, [patchState]);
 
@@ -2229,7 +2363,7 @@ export function useAppState(userId) {
       (prev) => ({
         ...prev,
         canvasResources: (prev.canvasResources || []).map((item) =>
-          item.id === resourceId ? { ...item, ...updates } : item
+          item.id === resourceId ? { ...item, ...withCompletionTimestamp(item, updates) } : item
         ),
       }),
       undoOptions
@@ -2254,7 +2388,7 @@ export function useAppState(userId) {
           };
         }),
       };
-    }, { debounce: true });
+    }, { debounce: true, canvasHeadroom: true });
   }, [patchState]);
 
   const removeCanvasResource = useCallback((resourceId) => {
@@ -2280,17 +2414,25 @@ export function useAppState(userId) {
   }, [updateCanvasResource]);
 
   const addCanvasTask = useCallback((data = {}) => {
-    const task = createEmptyCanvasTask({
-      title: data.title?.trim() || 'New task',
-      description: data.description?.trim() || '',
-      category: data.category || '',
-      status: data.status || 'Todo',
-      ...data,
-    });
-    patchState((prev) => ({
-      ...prev,
-      canvasTasks: [...(prev.canvasTasks || []), task],
-    }));
+    let task = null;
+    patchState((prev) => {
+      const hasPos = typeof data.canvasX === 'number' && typeof data.canvasY === 'number';
+      const pos = hasPos
+        ? { canvasX: data.canvasX, canvasY: data.canvasY }
+        : nextFreeCanvasTaskPosition(prev);
+      task = createEmptyCanvasTask({
+        title: data.title?.trim() || 'New task',
+        description: data.description?.trim() || '',
+        category: data.category || '',
+        status: data.status || 'Todo',
+        ...data,
+        ...pos,
+      });
+      return {
+        ...prev,
+        canvasTasks: [...(prev.canvasTasks || []), task],
+      };
+    }, { canvasHeadroom: true });
     return task;
   }, [patchState]);
 
@@ -2299,7 +2441,7 @@ export function useAppState(userId) {
       (prev) => ({
         ...prev,
         canvasTasks: (prev.canvasTasks || []).map((item) =>
-          item.id === taskId ? { ...item, ...updates } : item
+          item.id === taskId ? { ...item, ...withCompletionTimestamp(item, updates) } : item
         ),
       }),
       undoOptions
@@ -2324,7 +2466,7 @@ export function useAppState(userId) {
           };
         }),
       };
-    }, { debounce: true });
+    }, { debounce: true, canvasHeadroom: true });
   }, [patchState]);
 
   const removeCanvasTask = useCallback((taskId) => {
@@ -2354,7 +2496,7 @@ export function useAppState(userId) {
     patchState((prev) => ({
       ...prev,
       canvasInk: [...(prev.canvasInk || []), stroke],
-    }), { debounce: true });
+    }), { debounce: true, canvasHeadroom: true });
   }, [patchState]);
 
   const removeCanvasInkStrokes = useCallback((ids) => {
@@ -2386,7 +2528,7 @@ export function useAppState(userId) {
           };
         }),
       }),
-      { debounce: true }
+      { debounce: true, canvasHeadroom: true }
     );
   }, [patchState]);
 
@@ -2968,6 +3110,117 @@ export function useAppState(userId) {
     return { message: `Έτοιμο! ${parts.join(', ')}.` };
   }, [patchState]);
 
+  const resolveBrainProjectId = useCallback((action, current) => {
+    const hint = action?.projectTitle;
+    const list = projectListRef.current || [];
+    if (!hint) {
+      if (current?.projectId && current.isLifeline !== true) return current.projectId;
+      return null;
+    }
+    const needle = normalizeSearchText(hint);
+    const exact = list.find((project) => normalizeSearchText(project.title) === needle);
+    if (exact) return exact.id;
+    const partial = list.find((project) => {
+      const title = normalizeSearchText(project.title);
+      return title && needle && (title.includes(needle) || needle.includes(title));
+    });
+    return partial?.id || null;
+  }, []);
+
+  const applyBrainActions = useCallback(async (rawActions) => {
+    const actions = normalizeBrainActions(rawActions);
+    if (!actions.length) return { created: false, message: null };
+
+    const current = stateRef.current;
+    const projectAction = actions.find((item) => item.type === 'create_project');
+    if (projectAction) {
+      const needle = normalizeSearchText(projectAction.title);
+      const existing = (projectListRef.current || []).find((project) => {
+        const title = normalizeSearchText(project.title);
+        return title && needle && (title === needle || title.includes(needle) || needle.includes(title));
+      });
+      if (existing) {
+        await openProjectRoadmap(existing.id);
+        return {
+          created: false,
+          projectId: existing.id,
+          projectTitle: existing.title,
+          message: `Το project «${existing.title}» υπάρχει ήδη. Το άνοιξα αντί να φτιάξω δεύτερο.`,
+        };
+      }
+
+      const seed = buildProjectSeed(actions);
+      await flushSaveNow();
+      const data = await createProject(projectAction.title, { seed, makeActive: false });
+      if (Array.isArray(data.projectList)) setProjectList(data.projectList);
+      loadAllProjectsActivity().then((activity) => setProjectActivity(activity)).catch(() => {});
+      const checkpointCount = seed?.stages?.reduce((sum, stage) => sum + (stage.checkpoints?.length || 0), 0) || 0;
+      if (data.projectId) await openProjectRoadmap(data.projectId);
+      return {
+        created: true,
+        projectId: data.projectId || null,
+        projectTitle: projectAction.title,
+        message: `Το έφτιαξα στο app: «${projectAction.title}»${checkpointCount ? `, ${checkpointCount} checkpoints` : ''} και το άνοιξα.`,
+      };
+    }
+
+    const parts = [];
+    const grouped = new Map();
+    for (const action of mutationActions(actions)) {
+      const projectId = resolveBrainProjectId(action, current);
+      if (!projectId) {
+        parts.push(`δεν βρήκα project για «${action.projectTitle || action.title}»`);
+        continue;
+      }
+      const bucket = grouped.get(projectId) || [];
+      bucket.push(action);
+      grouped.set(projectId, bucket);
+    }
+
+    for (const [projectId, group] of grouped.entries()) {
+      if (current?.projectId === projectId) {
+        let applied = null;
+        patchState((prev) => {
+          applied = applyBrainMutationsToState(prev, group);
+          return applied.state;
+        });
+        if (applied?.parts?.length) parts.push(...applied.parts);
+        continue;
+      }
+
+      const remote = await mutateRemoteProject(projectId, (state) => applyBrainMutationsToState(state, group));
+      const label = remote?.projectTitle ? ` στο «${remote.projectTitle}»` : '';
+      if (remote?.parts?.length) {
+        parts.push(...remote.parts.map((part) => `${part}${label}`));
+      } else if (remote?.projectTitle) {
+        parts.push(`ενημέρωσα το «${remote.projectTitle}»`);
+      }
+    }
+
+    let openedId = null;
+    for (const action of openProjectActions(actions)) {
+      const projectId = resolveBrainProjectId(action, current) || grouped.keys().next().value || null;
+      if (!projectId) continue;
+      await openProjectRoadmap(projectId);
+      openedId = projectId;
+    }
+
+    if (!parts.length && !openedId) {
+      return {
+        created: false,
+        message: current?.isLifeline
+          ? 'Για να αλλάξω υπάρχον project πες μου το όνομά του, ή πες μου να φτιάξω νέο.'
+          : 'Δεν κατάλαβα τι να αλλάξω στο app.',
+      };
+    }
+
+    return {
+      created: parts.length > 0 || Boolean(openedId),
+      projectId: openedId,
+      message: parts.length ? `Έτοιμο: ${parts.join(', ')}.` : 'Άνοιξα το project.',
+    };
+  }, [flushSaveNow, openProjectRoadmap, patchState, resolveBrainProjectId]);
+
   const applySmartCapture = useCallback(async (capture) => {
     const current = stateRef.current;
     const currentId = current?.projectId;
@@ -2981,6 +3234,32 @@ export function useAppState(userId) {
       itemId: capture.itemId || generateId(),
     };
 
+    const isLifelineTarget =
+      Boolean(lifelineProjectId && targetId === lifelineProjectId) ||
+      (current.isLifeline === true && targetId === currentId);
+
+    if ((classified.type || 'note') === 'note' && isLifelineTarget) {
+      const today = toDateString(new Date());
+      const lifelineSource = mergeLifelineDaysMaps(
+        lifelineDaysRef.current,
+        current.isLifeline ? current.lifelineDays : {}
+      );
+      const previousNotes = getDayEntry(lifelineSource, today).notes || '';
+      const nextNotes = appendDayJournalNote(previousNotes, classified.body || classified.title);
+      updateLifelineDay(today, { notes: nextNotes });
+      flushSaveNow().catch(() => {});
+      return {
+        remote: false,
+        itemId: `journal:${today}`,
+        type: 'journal-note',
+        date: today,
+        previousNotes,
+        projectId: targetId,
+        projectTitle: current.isLifeline ? current.projectTitle : 'Lifeline',
+        message: 'Αποθηκεύτηκε: Σημείωση → Σημειώσεις ημέρας',
+      };
+    }
+
     if (targetId === currentId) {
       let applied = null;
       patchState((prev) => {
@@ -2990,6 +3269,7 @@ export function useAppState(userId) {
       if (!applied) {
         throw new Error('Δεν αποθηκεύτηκε η σημείωση.');
       }
+      flushSaveNow().catch(() => {});
       return {
         remote: false,
         itemId: applied.itemId,
@@ -3002,6 +3282,7 @@ export function useAppState(userId) {
     }
 
     const remote = await appendCaptureToRemoteProject(targetId, classified);
+    refreshProjectActivity().catch(() => {});
     return {
       remote: true,
       itemId: remote.itemId,
@@ -3015,17 +3296,22 @@ export function useAppState(userId) {
         projectTitle: remote.projectTitle || classified.projectTitle,
       }),
     };
-  }, [patchState]);
+  }, [flushSaveNow, lifelineProjectId, patchState, refreshProjectActivity, updateLifelineDay]);
 
   const undoSmartCapture = useCallback(async (ref) => {
     if (!ref?.itemId) return;
+    if (ref.type === 'journal-note' && ref.date) {
+      updateLifelineDay(ref.date, { notes: ref.previousNotes || '' });
+      return;
+    }
     const currentId = stateRef.current?.projectId;
     if (!ref.remote || ref.projectId === currentId) {
       patchState((prev) => removeCaptureFromState(prev, ref).state);
       return;
     }
     await removeCaptureFromRemoteProject(ref.projectId, ref);
-  }, [patchState]);
+    refreshProjectActivity().catch(() => {});
+  }, [patchState, refreshProjectActivity, updateLifelineDay]);
 
   const base = {
     loading,
@@ -3116,6 +3402,10 @@ export function useAppState(userId) {
     updateNodeCanvasStyle,
     applyCanvasAutoLayout,
     updateMapTheme,
+    lifelineRoutineTemplates,
+    updateLifelineRoutineTemplates,
+    lifelineNorthStars,
+    updateLifelineNorthStars,
     addBlocker,
     updateBlocker,
     addCanvasObstacle,
@@ -3143,6 +3433,7 @@ export function useAppState(userId) {
     deleteNote,
     updateStages,
     applyAssistantIntents,
+    applyBrainActions,
     applySmartCapture,
     undoSmartCapture,
   };
@@ -3172,6 +3463,10 @@ export function useAppState(userId) {
       isLifeline: false,
       lifelineAnchorDate: null,
       lifelineDays: {},
+      lifelineRoutineTemplates,
+      updateLifelineRoutineTemplates,
+      lifelineNorthStars,
+      updateLifelineNorthStars,
     };
   }
 
@@ -3185,5 +3480,9 @@ export function useAppState(userId) {
     lifelineAnchors,
     projectActivity,
     selfHubDays,
+    lifelineRoutineTemplates,
+    updateLifelineRoutineTemplates,
+    lifelineNorthStars,
+    updateLifelineNorthStars,
   };
 };

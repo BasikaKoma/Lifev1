@@ -1,5 +1,5 @@
 import { SelfIcon } from '../SelfIcons';
-import { kindLabel } from '../../../utils/lifelineDays';
+import { formatNoteClock, kindLabel } from '../../../utils/lifelineDays';
 
 const MAX_ITEMS = 4;
 
@@ -23,6 +23,12 @@ const SECTIONS = [
     emptyLabel: 'Κανένα task με σημερινή ημερομηνία',
   },
 ];
+
+function itemTimeLabel(item) {
+  if (item.timeLabel) return item.timeLabel;
+  const raw = item.timestamp || item.completedAt;
+  return raw ? formatNoteClock(raw) : '';
+}
 
 function ProjectDayPanel({ title, icon, count, emptyLabel, items, showKind = false, onOpenDayDetails }) {
   const visible = items.slice(0, MAX_ITEMS);
@@ -61,7 +67,9 @@ function ProjectDayPanel({ title, icon, count, emptyLabel, items, showKind = fal
           <p className="self-project-day__empty">{emptyLabel}</p>
         ) : (
           <ul className="self-project-day__list">
-            {visible.map((item) => (
+            {visible.map((item) => {
+              const timeLabel = itemTimeLabel(item);
+              return (
               <li key={item.id} className="self-project-day__item">
                 <span
                   className={`self-project-day__dot self-project-day__dot--${item.kind || 'checkpoint'}${
@@ -79,12 +87,13 @@ function ProjectDayPanel({ title, icon, count, emptyLabel, items, showKind = fal
                     {item.title}
                   </span>
                   <span className="self-project-day__item-meta">
-                    {[item.projectTitle, item.stageTitle].filter(Boolean).join(' · ')}
+                    {[timeLabel, item.projectTitle, item.stageTitle].filter(Boolean).join(' · ')}
                     {showKind && item.kind ? ` · ${kindLabel(item.kind)}` : ''}
                   </span>
                 </div>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </div>

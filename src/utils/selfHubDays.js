@@ -1,4 +1,5 @@
 import { toDateString } from './lifeline';
+import { normalizeTimelineSnapshot } from './selfHubTimelineEvents';
 
 /** @typedef {Object} SelfHubDayProjectSnapshot
  * @property {import('./lifelineDays').CompletedItem[]} completed
@@ -28,6 +29,7 @@ import { toDateString } from './lifeline';
  * @property {SelfHubDayHubSnapshot|null} hub
  * @property {SelfHubDayProjectSnapshot|null} projects
  * @property {SelfHubDayJournal} journal
+ * @property {import('./selfHubTimelineEvents').SelfTimelineEvent[]|Object|null} [timeline]
  */
 
 export function createEmptySelfHubJournal() {
@@ -41,6 +43,7 @@ export function createEmptySelfHubDayEntry() {
     hub: null,
     projects: null,
     journal: createEmptySelfHubJournal(),
+    timeline: null,
   };
 }
 
@@ -96,6 +99,7 @@ export function normalizeSelfHubDayEntry(raw) {
     hub: normalizeHubSnapshot(raw.hub),
     projects: normalizeProjectSnapshot(raw.projects),
     journal: normalizeJournal(raw.journal),
+    timeline: normalizeTimelineSnapshot(raw.timeline),
   };
 }
 
@@ -134,6 +138,9 @@ export function patchSelfHubDayEntry(selfHubDays, dateStr, patch) {
       hub: patch?.hub
         ? normalizeHubSnapshot({ ...current.hub, ...patch.hub })
         : current.hub,
+      timeline: patch?.timeline !== undefined
+        ? normalizeTimelineSnapshot(patch.timeline)
+        : current.timeline,
       updatedAt: patch?.updatedAt || new Date().toISOString(),
     }),
   };

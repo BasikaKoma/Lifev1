@@ -13,6 +13,14 @@ import { detectPlatform } from './platform/capabilities';
 purgeLegacyLocalProjectStorage();
 captureInviteFromUrl();
 
+window.addEventListener(
+  'keydown',
+  (event) => {
+    if (event.key === 'F7') event.preventDefault();
+  },
+  true
+);
+
 if (Capacitor.isNativePlatform()) {
   document.documentElement.classList.add('native-app');
   import('@capacitor/splash-screen').then(({ SplashScreen }) => {

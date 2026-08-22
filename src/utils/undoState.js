@@ -20,7 +20,8 @@ export function snapshotUndoState(state) {
   if (!state) return null;
   const snap = {};
   for (const key of UNDO_FIELDS) {
-    snap[key] = structuredClone(state[key]);
+    // Immutable patches replace whole fields, so references are enough.
+    snap[key] = state[key];
   }
   return snap;
 }

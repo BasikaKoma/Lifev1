@@ -754,6 +754,10 @@
   text-align: left;
 }
 
+.self-day-progress__track-btn--static {
+  cursor: default;
+}
+
 .self-day-progress__track-btn:focus-visible {
   outline: 2px solid rgba(52, 211, 153, 0.55);
   outline-offset: 4px;
@@ -763,7 +767,159 @@
 .self-day-progress__track-wrap {
   flex: 1;
   min-width: 0;
+  position: relative;
+  padding-top: 5.15rem;
 }
+
+/* Event cards along the timeline */
+.self-day-progress__events {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 5rem;
+  pointer-events: none;
+}
+
+.self-day-progress__event {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform: translateX(-50%);
+  pointer-events: auto;
+  z-index: 1;
+}
+
+.self-day-progress__event--lane0 {
+  padding-top: 3.45rem;
+}
+
+.self-day-progress__event--lane1 {
+  padding-top: 1.72rem;
+}
+
+.self-day-progress__event--lane2 {
+  padding-top: 0.05rem;
+}
+
+.self-day-progress__event-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  max-width: 10.5rem;
+  padding: 0.18rem 0.44rem;
+  border-radius: 999px;
+  background: rgba(12, 18, 16, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  color: rgba(248, 250, 252, 0.9);
+  font-size: clamp(0.5rem, 1.5vw, 0.6rem);
+  line-height: 1;
+  white-space: nowrap;
+  backdrop-filter: blur(8px);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.self-day-progress__event--density-icon .self-day-progress__event-chip {
+  padding: 0.18rem;
+  max-width: none;
+}
+
+.self-day-progress__event:hover {
+  z-index: 6;
+}
+
+.self-day-progress__event:hover .self-day-progress__event-chip {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.self-day-progress__event-icon {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.self-day-progress__event-icon svg {
+  width: 0.72rem;
+  height: 0.72rem;
+}
+
+.self-day-progress__event-time {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  color: rgba(248, 250, 252, 0.55);
+}
+
+.self-day-progress__event-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 6rem;
+}
+
+.self-day-progress__event-stem {
+  width: 1px;
+  flex: 1;
+  min-height: 0.4rem;
+  margin-top: 0.1rem;
+  background: linear-gradient(180deg, currentColor, transparent);
+  opacity: 0.5;
+}
+
+.self-day-progress__event-dot {
+  position: absolute;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  transform: translateY(-50%);
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Tones shared by chip icon/stem and track dot */
+.self-day-progress__event--emerald,
+.self-day-progress__event-dot--emerald { color: #34d399; }
+.self-day-progress__event--amber,
+.self-day-progress__event-dot--amber { color: #fbbf24; }
+.self-day-progress__event--rose,
+.self-day-progress__event-dot--rose { color: #fb7185; }
+.self-day-progress__event--sky,
+.self-day-progress__event-dot--sky { color: #38bdf8; }
+.self-day-progress__event--violet,
+.self-day-progress__event-dot--violet { color: #a78bfa; }
+.self-day-progress__event--indigo,
+.self-day-progress__event-dot--indigo { color: #818cf8; }
+.self-day-progress__event--gold,
+.self-day-progress__event-dot--gold { color: #facc15; }
+.self-day-progress__event--orange,
+.self-day-progress__event-dot--orange { color: #fb923c; }
+
+.self-day-progress__event .self-day-progress__event-icon {
+  color: currentColor;
+}
+
+.self-day-progress__event-chip {
+  color: rgba(248, 250, 252, 0.9);
+}
+
+.self-day-progress__event-chip .self-day-progress__event-icon {
+  color: inherit;
+}
+
+.self-day-progress__event--emerald .self-day-progress__event-icon { color: #34d399; }
+.self-day-progress__event--amber .self-day-progress__event-icon { color: #fbbf24; }
+.self-day-progress__event--rose .self-day-progress__event-icon { color: #fb7185; }
+.self-day-progress__event--sky .self-day-progress__event-icon { color: #38bdf8; }
+.self-day-progress__event--violet .self-day-progress__event-icon { color: #a78bfa; }
+.self-day-progress__event--indigo .self-day-progress__event-icon { color: #818cf8; }
+.self-day-progress__event--gold .self-day-progress__event-icon { color: #facc15; }
+.self-day-progress__event--orange .self-day-progress__event-icon { color: #fb923c; }
 
 .self-day-progress__track {
   position: relative;
@@ -797,6 +953,7 @@
   box-shadow: 0 0 14px var(--hub-accent-glow);
   pointer-events: none;
   z-index: 1;
+  transition: width 0.85s linear;
 }
 
 .self-day-progress__segment {
@@ -809,7 +966,24 @@
   z-index: 0;
 }
 
-.self-day-progress__segment--sleep { background: #6366f1; }
+.self-day-progress__segment--sleep {
+  top: -3px;
+  bottom: -3px;
+  background: #6366f1;
+  opacity: 0.62;
+}
+.self-day-progress__segment--workout {
+  top: -2px;
+  bottom: -2px;
+  background: #fb923c;
+  opacity: 0.7;
+}
+.self-day-progress__segment--session {
+  top: -2px;
+  bottom: -2px;
+  background: #a78bfa;
+  opacity: 0.55;
+}
 .self-day-progress__segment--focus { background: var(--hub-accent-bright); }
 .self-day-progress__segment--emerald { background: var(--hub-accent); }
 
@@ -827,12 +1001,13 @@
     0 0 16px var(--hub-accent-glow);
   pointer-events: none;
   z-index: 2;
+  transition: left 0.85s linear;
 }
 
 .self-day-progress__markers {
   display: flex;
   justify-content: space-between;
-  margin-top: 0.5rem;
+  margin-top: 0.85rem;
   font-size: clamp(0.5rem, 1.5vw, 0.5625rem);
   color: rgba(248, 250, 252, 0.32);
   font-variant-numeric: tabular-nums;
@@ -1328,6 +1503,36 @@
   background: var(--hub-accent-bright);
   box-shadow: 0 0 8px var(--hub-accent-glow);
   flex-shrink: 0;
+}
+
+.self-project-day__dot--milestone {
+  background: #facc15;
+  box-shadow: 0 0 8px rgba(250, 204, 21, 0.4);
+}
+
+.self-project-day__dot--obstacle {
+  background: #fb7185;
+  box-shadow: 0 0 8px rgba(251, 113, 133, 0.4);
+}
+
+.self-project-day__dot--resource {
+  background: #a78bfa;
+  box-shadow: 0 0 8px rgba(167, 139, 250, 0.4);
+}
+
+.self-project-day__dot--idea {
+  background: #c4b5fd;
+  box-shadow: 0 0 8px rgba(196, 181, 253, 0.35);
+}
+
+.self-project-day__dot--image {
+  background: #38bdf8;
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
+}
+
+.self-project-day__dot--sticky {
+  background: #fbbf24;
+  box-shadow: 0 0 8px rgba(251, 191, 36, 0.35);
 }
 
 .self-project-day__dot--note {

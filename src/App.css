@@ -48,15 +48,6 @@ html:has(.app--roadmap) body {
   overflow: hidden;
 }
 
-.app--overview .main {
-  max-width: none;
-  padding: 24px 24px 24px;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
-}
-
 .app--roadmap .main {
   max-width: none;
   padding: 16px 20px 16px;
@@ -156,6 +147,29 @@ html:has(.app--roadmap) body {
   width: 100%;
   margin: 0;
   padding: 24px 32px 48px;
+}
+
+.app--devices .main,
+.app--brand .main {
+  max-width: none;
+  width: 100%;
+  margin: 0;
+  padding: 24px 32px 48px;
+}
+
+.app--brand .main {
+  padding: 0;
+  max-width: none;
+  width: 100%;
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.app--brand .app__content {
+  min-width: 0;
 }
 
 .app--canvas-fullscreen {
@@ -342,6 +356,11 @@ html:has(.app--roadmap) body {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.sidebar__link-label {
+  min-width: 0;
+  white-space: nowrap;
 }
 
 .sidebar__link {
@@ -1359,19 +1378,13 @@ html:has(.app--roadmap) body {
   word-break: break-all;
 }
 
-.global-roadmap__item {
-  position: relative;
-}
-
-.global-roadmap__open-btn {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 2;
-}
-
 .workspace-view {
   max-width: 960px;
+}
+
+.workspace-view__back {
+  margin: 0 0 8px;
+  padding-left: 0;
 }
 
 .workspace-header {
@@ -2800,12 +2813,14 @@ html:has(.app--roadmap) body {
   position: relative;
   min-width: 960px;
   min-height: 720px;
+  overflow: visible;
 }
 
 .roadmap-canvas-surface {
   position: relative;
   min-width: 960px;
   min-height: 720px;
+  overflow: visible;
 }
 
 .roadmap-canvas-board--premium {
@@ -4822,24 +4837,76 @@ html:has(.app--roadmap) body {
 }
 
 .milestone-canvas-card--done {
-  border-color:#6ee7b7d9!important;
-  background:linear-gradient(180deg,color-mix(in srgb,var(--node-bg, #0f172a) 72%,#064e3b 28%),color-mix(in srgb,var(--node-bg, #0f172a) 88%,#022c22 12%));
-  box-shadow:0 0 0 1px #a7f3d038,0 0 18px #10b98147,0 8px 22px #00000047
+  --node-fill:#064e3b;
+  --node-text:#ecfdf5;
+  --node-border:#fff;
+  --node-accent:#fff;
+  --node-accent-border:#fff;
+  border-color:#fff
 }
 
-.milestone-canvas-card--done .milestone-canvas-card__type {
-  color:#6ee7b7
+.milestone-canvas-card.milestone-canvas-card--done {
+  background:linear-gradient(180deg,#064e3bf5,#042f27fa)!important;
+  box-shadow:0 0 0 1px #a7f3d033,0 0 18px #10b98173,0 0 36px #05966938
 }
 
-.milestone-canvas-card--done .milestone-canvas-card__title {
-  color:#d1fae5f2
+.milestone-canvas-card--compact {
+  --node-padding:8px 12px;
+  width:196px;
+  padding:8px 12px;
+  border-radius:10px
 }
 
-.milestone-canvas-card--done .roadmap-badge--outline.roadmap-badge--completed {
-  background:#10b98138;
-  border-color:#a7f3d0bf;
-  color:#d1fae5;
-  box-shadow:0 0 10px #10b98140
+.milestone-canvas-card--compact.milestone-canvas-card--major {
+  width:196px;
+  padding:8px 12px
+}
+
+.milestone-canvas-card__compact {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-width:0
+}
+
+.milestone-canvas-card--compact .milestone-canvas-card__compact .milestone-canvas-card__title,
+.milestone-canvas-card--compact.canvas-node--font-sm .milestone-canvas-card__title,
+.milestone-canvas-card--compact.canvas-node--font-md .milestone-canvas-card__title,
+.milestone-canvas-card--compact.canvas-node--font-lg .milestone-canvas-card__title,
+.milestone-canvas-card--compact .canvas-node__title.milestone-canvas-card__title {
+  font-size:.82rem;
+  font-weight:650;
+  line-height:1.3;
+  display:-webkit-box;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
+  overflow:hidden
+}
+
+.milestone-canvas-card--compact .milestone-canvas-card__order,
+.milestone-canvas-card--compact.milestone-canvas-card--major .milestone-canvas-card__order {
+  font-size:.7rem;
+  padding-top:0
+}
+
+.milestone-canvas-card--compact .canvas-node__delete {
+  width:18px;
+  height:18px;
+  font-size:.8rem
+}
+
+.milestone-canvas-card--compact .milestone-canvas-card__title-input {
+  flex:1;
+  min-width:0;
+  font-size:.82rem
+}
+
+.milestone-canvas-card--compact .milestone-canvas-card__done-mark {
+  flex-shrink:0;
+  width:12px;
+  height:12px;
+  margin-right:0;
+  box-shadow:none
 }
 
 .milestone-canvas-card__done-mark {
@@ -8349,62 +8416,6 @@ html:has(.app--roadmap) body {
   box-shadow:none
 }
 
-.global-roadmap {
-  flex:1;
-  display:flex;
-  flex-direction:column;
-  min-height:0;
-  padding-top:8px
-}
-
-.global-roadmap__header {
-  display:flex;
-  align-items:flex-start;
-  justify-content:space-between;
-  gap:16px;
-  margin-bottom:16px;
-  flex-shrink:0
-}
-
-.global-roadmap__count {
-  flex-shrink:0;
-  font-size:.75rem;
-  font-weight:600;
-  color:var(--color-text-muted);
-  background:var(--color-surface);
-  border:1px solid var(--color-border);
-  padding:6px 12px;
-  border-radius:999px
-}
-
-.global-roadmap__canvas {
-  flex:1;
-  min-height:calc(100vh - 220px)
-}
-
-.global-roadmap__board {
-  display:flex;
-  flex-direction:row;
-  align-items:flex-start;
-  gap:80px;
-  padding:16px 24px 160px
-}
-
-.global-roadmap__item {
-  flex-shrink:0;
-  position:relative
-}
-
-.global-roadmap__item:not(:last-child):after {
-  content:"";
-  position:absolute;
-  top:0;
-  right:-40px;
-  width:1px;
-  height:100%;
-  background:linear-gradient(180deg,transparent,rgba(37,99,235,.25) 20%,rgba(37,99,235,.25) 80%,transparent)
-}
-
 .roadmap--embedded {
   margin-top:0;
   width:920px;
@@ -8522,18 +8533,8 @@ html:has(.app--roadmap) body {
 
 .zoom-canvas__content {
   transform-origin:0 0;
-  will-change:transform
-}
-
-.global-roadmap__loading,.global-roadmap__error {
-  padding:48px 24px;
-  text-align:center;
-  color:var(--color-text-muted);
-  font-size:.9375rem
-}
-
-.global-roadmap__error {
-  color:#f87171
+  will-change:transform;
+  overflow:visible
 }
 
 .roadmap-row__right {
@@ -10781,6 +10782,157 @@ to {
 
 .lifeline-unanchored-panel__open:hover {
   color:#93c5fd
+}
+
+.lifeline-north-stars {
+  display:flex;
+  align-items:center;
+  gap:10px;
+  min-width:0;
+  pointer-events:auto
+}
+
+.lifeline-north-stars__label {
+  margin:0;
+  flex-shrink:0;
+  font-size:.68rem;
+  font-weight:700;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  color:#ffffff8c
+}
+
+.lifeline-north-stars__row {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-width:0;
+  flex-wrap:wrap
+}
+
+.lifeline-north-stars__chip,
+.lifeline-north-stars__empty,
+.lifeline-north-stars__add,
+.lifeline-north-stars__remove {
+  border:1px solid rgba(255,255,255,.12);
+  background:rgba(255,255,255,.04);
+  color:#f5f5f5;
+  cursor:pointer
+}
+
+.lifeline-north-stars__chip,
+.lifeline-north-stars__empty {
+  max-width:220px;
+  padding:6px 11px;
+  border-radius:999px;
+  font-size:.8125rem;
+  font-weight:600;
+  line-height:1.2;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  text-align:left
+}
+
+.lifeline-north-stars__empty {
+  max-width:none;
+  color:#ffffffa6;
+  font-weight:500
+}
+
+.lifeline-north-stars__chip:hover,
+.lifeline-north-stars__empty:hover,
+.lifeline-north-stars__add:hover {
+  border-color:rgba(147,197,253,.45);
+  color:#dbeafe;
+  background:rgba(59,130,246,.12)
+}
+
+.lifeline-north-stars__add,
+.lifeline-north-stars__remove {
+  width:28px;
+  height:28px;
+  padding:0;
+  border-radius:999px;
+  font-size:1.05rem;
+  line-height:1;
+  flex-shrink:0
+}
+
+.lifeline-north-stars__edit {
+  display:flex;
+  align-items:center;
+  gap:4px
+}
+
+.lifeline-north-stars__input {
+  width:min(180px,42vw);
+  padding:6px 10px;
+  border:1px solid rgba(147,197,253,.45);
+  border-radius:999px;
+  background:#0a0a0a;
+  color:#f5f5f5;
+  font-size:.8125rem;
+  font-weight:600;
+  outline:none
+}
+
+.lifeline-north-stars__remove {
+  width:24px;
+  height:24px;
+  color:#fca5a5;
+  border-color:rgba(252,165,165,.28)
+}
+
+.lifeline-north-stars--overlay {
+  position:absolute;
+  top:12px;
+  left:50%;
+  transform:translateX(-50%);
+  z-index:28;
+  max-width:min(640px,calc(100% - 160px));
+  padding:8px 12px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,.12);
+  background:#0a0a0aeb;
+  -webkit-backdrop-filter:blur(10px);
+  backdrop-filter:blur(10px)
+}
+
+.roadmap-canvas-view--day-view .lifeline-north-stars--overlay {
+  display:none
+}
+
+@media (max-width:720px) {
+  .lifeline-north-stars--overlay {
+    left:72px;
+    right:12px;
+    transform:none;
+    max-width:none;
+    border-radius:16px;
+    padding:8px 10px
+  }
+}
+
+.lifeline-north-stars--hub {
+  width:100%;
+  padding:10px 12px;
+  border-radius:16px;
+  border:1px solid var(--hub-border, rgba(52,211,153,.14));
+  background:var(--hub-card, rgba(14,20,18,.72));
+  backdrop-filter:blur(10px)
+}
+
+.lifeline-north-stars--hub .lifeline-north-stars__label {
+  color:var(--hub-accent-bright, #34d399)
+}
+
+.lifeline-north-stars--hub .lifeline-north-stars__chip:hover,
+.lifeline-north-stars--hub .lifeline-north-stars__empty:hover,
+.lifeline-north-stars--hub .lifeline-north-stars__add:hover {
+  border-color:rgba(52,211,153,.4);
+  color:#d1fae5;
+  background:rgba(16,185,129,.12)
 }
 
 :root {

@@ -3,6 +3,8 @@ import { formatBrainContextLabel } from '../../brain/context';
 import { formatActiveBrainLabel, loadBrainConfig, saveBrainConfig, BRAIN_LEVELS } from '../../brain/config';
 import { loadBrainPolicy, saveBrainPolicy } from '../../brain/policy';
 import { runBrainJob } from '../../brain/runBrainJob';
+import { shouldConfirmBrainActions } from '../../brain/actions';
+import { resolveSource } from '../../brain/sources';
 import {
   compactConversationHistory,
   createAssistantMessage,
@@ -35,6 +37,42 @@ import {
   hasElectronBrain,
 } from '../../platform/brain';
 
+const IMAGE_MIME = /^image\/(png|jpe?g|webp|gif)$/i;
+const MAX_ATTACHMENTS = 6;
+
+function createAttachmentId() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return `att-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function readFileAsAttachment(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve({
+      id: createAttachmentId(),
+      kind: 'image',
+      name: file.name || 'image',
+      mime: file.type || 'image/png',
+      dataUrl: String(reader.result || ''),
+    });
+    reader.onerror = () => reject(reader.error || new Error('Δεν διάβασα το αρχείο.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function filesToAttachments(fileList) {
+  const files = Array.from(fileList || []).filter((file) => IMAGE_MIME.test(file.type || ''));
+  const results = [];
+  for (const file of files) {
+    try {
+      results.push(await readFileAsAttachment(file));
+    } catch {
+      /* skip unreadable file */
+    }
+  }
+  return results;
+}
+
 function formatChatTime(value) {
   if (!value) return '';
   try {
@@ -49,10 +87,127 @@ function formatChatTime(value) {
   }
 }
 
-function AssistantBubble({ message }) {
+async function copyToClipboard(text) {
+  const value = String(text || '').trim();
+  if (!value) return false;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+      return true;
+    }
+  } catch {
+    /* fallback below */
+  }
+  try {
+    const area = document.createElement('textarea');
+    area.value = value;
+    area.setAttribute('readonly', '');
+    area.style.position = 'fixed';
+    area.style.left = '-9999px';
+    document.body.appendChild(area);
+    area.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(area);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+function CopyButton({ text }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      className={`brain-copy${copied ? ' brain-copy--done' : ''}`}
+      title={copied ? 'Αντιγράφηκε' : 'Αντιγραφή'}
+      aria-label={copied ? 'Αντιγράφηκε' : 'Αντιγραφή'}
+      onClick={async (event) => {
+        event.stopPropagation();
+        const ok = await copyToClipboard(text);
+        if (!ok) return;
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1400);
+      }}
+    >
+      {copied ? (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+          <path d="M5 13l4 4L19 7" />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+          <rect x="9" y="9" width="11" height="11" rx="2" />
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+        </svg>
+      )}
+    </button>
+  );
+}
+
+function assistantCopyText(message) {
+  if (message?.error) return message.error;
+  const insights = message?.insights || [];
+  const body = insights
+    .map((insight) => [insight.title, insight.body].filter(Boolean).join('\n'))
+    .filter(Boolean)
+    .join('\n\n');
+  const created = message?.meta?.created?.message;
+  return [body, created].filter(Boolean).join('\n\n');
+}
+
+function SourceChip({ sourceId, index, onOpenSource }) {
+  const source = resolveSource(sourceId, index);
+  const clickable = source.kind === 'project'
+    || source.kind === 'checkpoint'
+    || source.kind === 'note'
+    || source.kind === 'lifeline-day'
+    || source.kind === 'self'
+    || source.kind === 'brand';
+  if (!onOpenSource || !clickable) {
+    return <span className="brain-insight__source">{source.label}</span>;
+  }
+  return (
+    <button
+      type="button"
+      className="brain-insight__source brain-insight__source--btn"
+      onClick={() => onOpenSource(source)}
+      title={`Άνοιγμα: ${source.label}`}
+    >
+      {source.label}
+    </button>
+  );
+}
+
+function AssistantBubble({ message, onConfirm, onOpenSource, confirming }) {
+  const created = message.meta?.created;
+  const pendingActions = message.meta?.pendingActions;
+  const sourceIndex = message.meta?.sourceIndex || [];
+  const createdNote = created?.error ? (
+    <p className="brain-msg__error">{created.error}</p>
+  ) : created?.message ? (
+    <p className={`brain-msg__created${created.created === false ? ' brain-msg__created--warn' : ''}`}>
+      {created.message}
+    </p>
+  ) : null;
+  const confirmNote = pendingActions?.length ? (
+    <div className="brain-msg__confirm">
+      <p>Να το φτιάξω στο app;</p>
+      <button
+        type="button"
+        className="btn btn--primary"
+        disabled={confirming}
+        onClick={() => onConfirm?.(message)}
+      >
+        {confirming ? 'Φτιάχνω…' : 'Ναι, φτιάξτο'}
+      </button>
+    </div>
+  ) : null;
+  const copy = <CopyButton text={assistantCopyText(message)} />;
+
   if (message.error) {
     return (
       <div className="brain-msg brain-msg--assistant">
+        {copy}
         <p className="brain-msg__error">{message.error}</p>
       </div>
     );
@@ -62,7 +217,10 @@ function AssistantBubble({ message }) {
   if (!insights.length) {
     return (
       <div className="brain-msg brain-msg--assistant">
+        {copy}
         <p>Δεν πήρα απάντηση.</p>
+        {createdNote}
+        {confirmNote}
       </div>
     );
   }
@@ -70,14 +228,25 @@ function AssistantBubble({ message }) {
   if (insights.length === 1 && (insights[0].kind === 'summary' || !insights[0].title || insights[0].title === 'Brain')) {
     return (
       <div className="brain-msg brain-msg--assistant">
+        {copy}
         {insights[0].title && insights[0].title !== 'Brain' ? <h3>{insights[0].title}</h3> : null}
         {insights[0].body ? <p>{insights[0].body}</p> : null}
+        {insights[0].sources?.length ? (
+          <div className="brain-insight__sources">
+            {insights[0].sources.map((source) => (
+              <SourceChip key={source} sourceId={source} index={sourceIndex} onOpenSource={onOpenSource} />
+            ))}
+          </div>
+        ) : null}
+        {createdNote}
+        {confirmNote}
       </div>
     );
   }
 
   return (
     <div className="brain-msg brain-msg--assistant brain-msg--cards">
+      {copy}
       {insights.map((insight) => (
         <article key={insight.id} className={`brain-insight brain-insight--${insight.kind || 'insight'}`}>
           <p className="brain-insight__kind">{insight.kind}</p>
@@ -86,12 +255,14 @@ function AssistantBubble({ message }) {
           {insight.sources?.length ? (
             <div className="brain-insight__sources">
               {insight.sources.map((source) => (
-                <span key={source} className="brain-insight__source">{source}</span>
+                <SourceChip key={source} sourceId={source} index={sourceIndex} onOpenSource={onOpenSource} />
               ))}
             </div>
           ) : null}
         </article>
       ))}
+      {createdNote}
+      {confirmNote}
     </div>
   );
 }
@@ -108,6 +279,7 @@ function BrainSettings({
   updateConfig,
   updatePolicy,
 }) {
+  const [lawsDraft, setLawsDraft] = useState(() => (profile.laws || []).join('\n'));
   return (
     <div className="brain-settings">
       <div>
@@ -228,6 +400,17 @@ function BrainSettings({
         <textarea id="brain-style" value={profile.style} onChange={(event) => updateProfile({ style: event.target.value })} />
         <label htmlFor="brain-brand">Personal brand</label>
         <textarea id="brain-brand" value={profile.brand} onChange={(event) => updateProfile({ brand: event.target.value })} />
+        <label htmlFor="brain-laws">Νόμοι αποφάσεων (ένας ανά γραμμή, μέχρι 10)</label>
+        <textarea
+          id="brain-laws"
+          value={lawsDraft}
+          onChange={(event) => setLawsDraft(event.target.value)}
+          onBlur={() => updateProfile({
+            laws: lawsDraft.split('\n').map((line) => line.trim()).filter(Boolean).slice(0, 10),
+          })}
+          placeholder={'π.χ.\nΈνας οικονομικός κινητήρας\nΛιγότερα projects, πιο κοφτερά\nΚύκλοι 90 ημερών'}
+        />
+        <p className="brain-settings__hint">Αυτοί οι νόμοι μπαίνουν πάντα στη μνήμη. Οι στρατηγικές απαντήσεις πρέπει να τους σέβονται.</p>
         <button type="button" className="btn btn--outline" onClick={() => downloadMemoryBackup()}>
           Εξαγωγή μνήμης
         </button>
@@ -235,20 +418,58 @@ function BrainSettings({
 
       <div>
         <h3>Πρόσβαση</h3>
-        {Object.entries(policy.appScopes).map(([key, value]) => (
-          <label key={key} className="brain-settings__toggle">
-            <span>{key}</span>
-            <input
-              type="checkbox"
-              checked={value}
-              onChange={(event) => updatePolicy({
-                appScopes: { ...policy.appScopes, [key]: event.target.checked },
-              })}
-            />
-          </label>
-        ))}
         <label className="brain-settings__toggle">
-          <span>Το AI βλέπει Self, Lifeline και όλα τα projects</span>
+          <span>Self</span>
+          <input
+            type="checkbox"
+            checked={policy.appScopes.self}
+            onChange={(event) => updatePolicy({
+              appScopes: { ...policy.appScopes, self: event.target.checked },
+            })}
+          />
+        </label>
+        <label className="brain-settings__toggle">
+          <span>Lifeline / μέρες</span>
+          <input
+            type="checkbox"
+            checked={policy.appScopes.lifeline}
+            onChange={(event) => updatePolicy({
+              appScopes: { ...policy.appScopes, lifeline: event.target.checked },
+            })}
+          />
+        </label>
+        <label className="brain-settings__toggle">
+          <span>Personal Brand</span>
+          <input
+            type="checkbox"
+            checked={policy.appScopes.brand !== false}
+            onChange={(event) => updatePolicy({
+              appScopes: { ...policy.appScopes, brand: event.target.checked },
+            })}
+          />
+        </label>
+        <label className="brain-settings__toggle">
+          <span>Projects / checkpoints</span>
+          <input
+            type="checkbox"
+            checked={policy.appScopes.projects}
+            onChange={(event) => updatePolicy({
+              appScopes: { ...policy.appScopes, projects: event.target.checked },
+            })}
+          />
+        </label>
+        <label className="brain-settings__toggle">
+          <span>Σημειώσεις</span>
+          <input
+            type="checkbox"
+            checked={policy.appScopes.notes}
+            onChange={(event) => updatePolicy({
+              appScopes: { ...policy.appScopes, notes: event.target.checked },
+            })}
+          />
+        </label>
+        <label className="brain-settings__toggle">
+          <span>Το AI βλέπει Self, Lifeline, Personal Brand και όλα τα projects</span>
           <input
             type="checkbox"
             checked={policy.cloudMaySeeAppData}
@@ -313,11 +534,15 @@ export function BrainPanel({
   context,
   snapshotInput,
   contextExtras,
+  onApplyBrainActions,
+  onOpenSource,
   onClose,
   onExpand,
   onCollapse,
 }) {
   const [draft, setDraft] = useState('');
+  const [attachments, setAttachments] = useState([]);
+  const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
   const [conversations, setConversations] = useState(loadConversations);
   const [profile, setProfile] = useState(loadLocalProfile);
@@ -332,7 +557,18 @@ export function BrainPanel({
   const [cloudKey, setCloudKey] = useState('');
   const [cloudConfigured, setCloudConfigured] = useState(false);
   const threadRef = useRef(null);
+  const fileInputRef = useRef(null);
   const expanded = mode === 'expanded';
+
+  const addFiles = async (fileList) => {
+    const next = await filesToAttachments(fileList);
+    if (!next.length) return;
+    setAttachments((prev) => [...prev, ...next].slice(0, MAX_ATTACHMENTS));
+  };
+
+  const removeAttachment = (id) => {
+    setAttachments((prev) => prev.filter((item) => item.id !== id));
+  };
 
   const openConversations = useMemo(
     () => listOpenConversations(conversations),
@@ -403,21 +639,25 @@ export function BrainPanel({
 
   const run = async (kind) => {
     const text = String(draft || '').trim();
-    if (kind === 'ask' && !text) return;
+    const pendingAttachments = attachments;
+    if (kind === 'ask' && !text && !pendingAttachments.length) return;
 
     const userText = kind === 'analyze'
       ? text || 'Ανάλυσε ό,τι βλέπεις στην εφαρμογή και πες μου την επόμενη κίνηση.'
-      : text;
-    const userMessage = createUserMessage(userText, kind);
+      : kind === 'briefing'
+        ? text || 'Κάνε weekly briefing: τι κινήθηκε, τι έχει κολλήσει, ποια είναι η επόμενη κίνηση.'
+        : text;
+    const userMessage = createUserMessage(userText, kind, pendingAttachments);
     const pending = {
       ...active,
-      title: active.messages.length ? active.title : titleFromText(userText),
+      title: active.messages.length ? active.title : titleFromText(userText || 'Εικόνα'),
       messages: [...active.messages, userMessage],
     };
     const nextList = upsertConversation(conversations, pending);
     setConversations(nextList);
     persistConversations(nextList, pending.id);
     setDraft('');
+    setAttachments([]);
     setBusy(true);
 
     try {
@@ -428,8 +668,25 @@ export function BrainPanel({
         conversationId: pending.id,
         liveContext: context,
         snapshotInput,
+        userAttachments: pendingAttachments,
       });
-      const assistant = createAssistantMessage({ insights: result.insights });
+      let created = null;
+      const needsConfirm = shouldConfirmBrainActions(result.actions, userText);
+      if (result.actions?.length && onApplyBrainActions && !needsConfirm) {
+        try {
+          created = await onApplyBrainActions(result.actions);
+        } catch (err) {
+          created = { created: false, error: err.message || 'Δεν μπόρεσα να το φτιάξω στο app.' };
+        }
+      }
+      const assistant = createAssistantMessage({
+        insights: result.insights,
+        meta: {
+          created,
+          pendingActions: needsConfirm ? result.actions : null,
+          sourceIndex: result.sourceIndex || [],
+        },
+      });
       setConversations((current) => {
         const latest = current.find((item) => item.id === pending.id) || pending;
         const saved = upsertConversation(current, {
@@ -448,6 +705,44 @@ export function BrainPanel({
           messages: [...latest.messages, assistant],
         });
         persistConversations(saved, pending.id);
+        return saved;
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmPending = async (message) => {
+    const actions = message?.meta?.pendingActions;
+    if (!actions?.length || !onApplyBrainActions) return;
+    setBusy(true);
+    try {
+      const created = await onApplyBrainActions(actions);
+      setConversations((current) => {
+        const latest = current.find((item) => item.id === active.id) || active;
+        const saved = upsertConversation(current, {
+          ...latest,
+          messages: (latest.messages || []).map((item) => (
+            item.id === message.id
+              ? { ...item, meta: { ...item.meta, pendingActions: null, created } }
+              : item
+          )),
+        });
+        persistConversations(saved, active.id);
+        return saved;
+      });
+    } catch (err) {
+      setConversations((current) => {
+        const latest = current.find((item) => item.id === active.id) || active;
+        const saved = upsertConversation(current, {
+          ...latest,
+          messages: (latest.messages || []).map((item) => (
+            item.id === message.id
+              ? { ...item, meta: { ...item.meta, created: { created: false, error: err.message || 'Δεν μπόρεσα να το φτιάξω στο app.' } } }
+              : item
+          )),
+        });
+        persistConversations(saved, active.id);
         return saved;
       });
     } finally {
@@ -616,10 +911,29 @@ export function BrainPanel({
                 {active.messages.map((message) => (
                   message.role === 'user' ? (
                     <div key={message.id} className="brain-msg brain-msg--user">
-                      <p>{message.text}</p>
+                      <CopyButton text={message.text || ''} />
+                      {(message.attachments || []).length ? (
+                        <div className="brain-msg__images">
+                          {message.attachments.map((image) => (
+                            <img
+                              key={image.id}
+                              src={image.dataUrl}
+                              alt={image.name}
+                              className="brain-msg__image"
+                            />
+                          ))}
+                        </div>
+                      ) : null}
+                      {message.text ? <p>{message.text}</p> : null}
                     </div>
                   ) : (
-                    <AssistantBubble key={message.id} message={message} />
+                    <AssistantBubble
+                      key={message.id}
+                      message={message}
+                      onConfirm={confirmPending}
+                      onOpenSource={onOpenSource}
+                      confirming={busy}
+                    />
                   )
                 ))}
                 {busy ? (
@@ -630,12 +944,43 @@ export function BrainPanel({
               </div>
 
               <form
-                className="brain-chat__composer"
+                className={`brain-chat__composer${dragging ? ' brain-chat__composer--drag' : ''}`}
                 onSubmit={(event) => {
                   event.preventDefault();
                   run('ask');
                 }}
+                onDragOver={(event) => {
+                  if (event.dataTransfer?.types?.includes('Files')) {
+                    event.preventDefault();
+                    setDragging(true);
+                  }
+                }}
+                onDragLeave={(event) => {
+                  if (event.currentTarget === event.target) setDragging(false);
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setDragging(false);
+                  if (event.dataTransfer?.files?.length) addFiles(event.dataTransfer.files);
+                }}
               >
+                {attachments.length ? (
+                  <div className="brain-chat__attachments">
+                    {attachments.map((image) => (
+                      <div key={image.id} className="brain-attachment">
+                        <img src={image.dataUrl} alt={image.name} />
+                        <button
+                          type="button"
+                          className="brain-attachment__remove"
+                          onClick={() => removeAttachment(image.id)}
+                          title="Αφαίρεση"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
                 {config.providerId === 'openai' ? (
                   <div className="brain-chat__levels" role="radiogroup" aria-label="Επίπεδο Brain">
                     {BRAIN_LEVELS.map((item) => (
@@ -655,9 +1000,16 @@ export function BrainPanel({
                 <textarea
                   value={draft}
                   onChange={(event) => setDraft(event.target.value)}
-                  placeholder="Γράψε μήνυμα…"
+                  placeholder="Γράψε μήνυμα ή σύρε μια εικόνα…"
                   rows={2}
                   disabled={busy}
+                  onPaste={(event) => {
+                    const files = Array.from(event.clipboardData?.files || []);
+                    if (files.some((file) => IMAGE_MIME.test(file.type || ''))) {
+                      event.preventDefault();
+                      addFiles(event.clipboardData.files);
+                    }
+                  }}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' && !event.shiftKey) {
                       event.preventDefault();
@@ -665,12 +1017,35 @@ export function BrainPanel({
                     }
                   }}
                 />
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  hidden
+                  onChange={(event) => {
+                    addFiles(event.target.files);
+                    event.target.value = '';
+                  }}
+                />
                 <div className="brain-panel__row">
-                  <button type="submit" className="btn btn--primary" disabled={busy || !draft.trim()}>
+                  <button
+                    type="button"
+                    className="btn btn--outline"
+                    disabled={busy || attachments.length >= MAX_ATTACHMENTS}
+                    onClick={() => fileInputRef.current?.click()}
+                    title="Επισύναψη εικόνας"
+                  >
+                    Εικόνα
+                  </button>
+                  <button type="submit" className="btn btn--primary" disabled={busy || (!draft.trim() && !attachments.length)}>
                     {busy ? 'Σκέφτεται…' : 'Αποστολή'}
                   </button>
                   <button type="button" className="btn btn--outline" disabled={busy} onClick={() => run('analyze')}>
                     Analyze
+                  </button>
+                  <button type="button" className="btn btn--outline" disabled={busy} onClick={() => run('briefing')}>
+                    Briefing
                   </button>
                 </div>
               </form>

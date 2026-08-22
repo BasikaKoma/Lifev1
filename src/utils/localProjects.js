@@ -4,6 +4,7 @@ import { DEFAULT_MAP_THEME } from './mapTheme';
 import { createLifelineProject, findLifelineProject, isLifelineProject } from './lifeline';
 import { normalizeLifelineDays } from './lifelineDays';
 import { normalizeProjectBrief } from './projectBrief';
+import { normalizeActiveView } from './appNavigation';
 
 const STORAGE_KEY = 'business-evolution-map';
 const STORAGE_KEY_V2 = 'business-evolution-map-v2';
@@ -43,7 +44,7 @@ function migrateV1ToV2(v1) {
     notes: v1.notes || [],
     selectedStageId: v1.selectedStageId || null,
     focusMode: v1.focusMode || false,
-    activeView: v1.activeView === 'overview' ? 'roadmap' : (v1.activeView || 'roadmap'),
+    activeView: normalizeActiveView(v1.activeView || 'roadmap'),
   };
   return { activeProjectId: project.id, projects: [project] };
 }
@@ -106,7 +107,7 @@ function normalizeLocalProject(p) {
     whiteboardStrokes: p.whiteboardStrokes || [],
     mapTheme: p.mapTheme || { ...DEFAULT_MAP_THEME },
     projectBrief: normalizeProjectBrief(p.projectBrief || p.brief),
-    activeView: p.activeView === 'overview' ? 'roadmap' : (p.activeView || 'roadmap'),
+    activeView: normalizeActiveView(p.activeView || 'roadmap'),
     isLifeline: isLifelineProject(p),
     lifelineAnchorDate: p.lifelineAnchorDate || p.lifeline_anchor_date || null,
     lifelineDays: normalizeLifelineDays(p.lifelineDays || p.lifeline_days),

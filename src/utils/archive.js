@@ -9,6 +9,31 @@ export function isItemDone(item) {
   return Boolean(item?.done || item?.archived);
 }
 
+const COMPLETE_STATUSES = new Set(['Done', 'Mitigated', 'Resolved', 'Secured', 'Executed']);
+
+export function isCompleteStatus(status) {
+  return COMPLETE_STATUSES.has(String(status || ''));
+}
+
+/** Stamp completedAt with a clock time when an item becomes done. */
+export function withCompletionTimestamp(current, updates, now = new Date().toISOString()) {
+  if (!updates || typeof updates !== 'object') return updates;
+  const next = { ...updates };
+  const currentDone = Boolean(current?.done || current?.archived) || isCompleteStatus(current?.status);
+  const nextDone = Object.prototype.hasOwnProperty.call(next, 'done')
+    ? Boolean(next.done)
+    : Object.prototype.hasOwnProperty.call(next, 'status')
+      ? isCompleteStatus(next.status)
+      : currentDone;
+
+  if (nextDone && !currentDone) {
+    if (!next.completedAt) next.completedAt = current?.completedAt || now;
+  } else if (!nextDone && currentDone && !Object.prototype.hasOwnProperty.call(next, 'completedAt')) {
+    next.completedAt = null;
+  }
+  return next;
+}
+
 /** Mark as completed — stays visible on roadmap / workspace. */
 export function buildCompletePatch(now = new Date().toISOString()) {
   return {

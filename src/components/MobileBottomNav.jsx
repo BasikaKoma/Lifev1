@@ -12,6 +12,17 @@ const ITEMS = [
     ),
   },
   {
+    id: 'brand',
+    label: 'Brand',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+        <circle cx="12" cy="8" r="3" />
+        <path d="M6 20v-1a6 6 0 0 1 12 0v1" />
+        <path d="M19 4l1.5 1.5L19 7" />
+      </svg>
+    ),
+  },
+  {
     id: 'lifeline',
     label: 'Lifeline',
     icon: (
@@ -32,6 +43,28 @@ const ITEMS = [
         <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
         <line x1="8" y1="2" x2="8" y2="18" />
         <line x1="16" y1="6" x2="16" y2="22" />
+      </svg>
+    ),
+  },
+  {
+    id: 'review',
+    label: 'Review',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+        <path d="M9 15l2 2 4-4" />
+      </svg>
+    ),
+  },
+  {
+    id: 'devices',
+    label: 'Devices',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+        <rect x="4" y="4" width="16" height="16" rx="2" />
+        <rect x="9" y="9" width="6" height="6" />
+        <path d="M9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3" />
       </svg>
     ),
   },
@@ -58,7 +91,7 @@ export function MobileBottomNav({
 
   const isItemActive = (item) => {
     if (item.id === 'lifeline') return isLifeline && activeView === 'roadmap';
-    if (item.id === 'roadmap') return !isLifeline && (activeView === 'roadmap' || activeView === 'overview');
+    if (item.id === 'roadmap') return !isLifeline && activeView === 'roadmap';
     return item.id === activeView;
   };
 

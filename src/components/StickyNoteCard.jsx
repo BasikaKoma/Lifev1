@@ -31,8 +31,13 @@ export function StickyNoteCard({
   const themeVars = resolveNodeThemeStyle(sticky, mapTheme, nodeLevel, 'sticky');
   const [editing, setEditing] = useState(Boolean(autoEdit));
   const [peeked, setPeeked] = useState(false);
+  const [draftText, setDraftText] = useState(sticky.text || '');
   const inputRef = useRef(null);
   const cardRef = useRef(null);
+  const stickyRef = useRef(sticky);
+  const onUpdateRef = useRef(onUpdate);
+  stickyRef.current = sticky;
+  onUpdateRef.current = onUpdate;
   const hasImage = Boolean(sticky.imageSrc);
   const sizeLocked = sticky.sizeLocked === true;
   const isConnectSource =
@@ -96,6 +101,33 @@ export function StickyNoteCard({
   }, [autoEdit]);
 
   useEffect(() => {
+    if (!editing) {
+      setDraftText(sticky.text || '');
+    }
+  }, [editing, sticky.text]);
+
+  const commitDraft = useCallback(() => {
+    const current = stickyRef.current;
+    const nextText = inputRef.current ? inputRef.current.value : draftText;
+    const patch = {};
+    if (nextText !== (current.text || '')) patch.text = nextText;
+    if (!current.sizeLocked && cardRef.current) {
+      const nextH = Math.ceil(cardRef.current.getBoundingClientRect().height);
+      if (nextH > 0 && nextH !== current.height) {
+        patch.height = nextH;
+        patch.sizeLocked = false;
+      }
+    }
+    if (Object.keys(patch).length) onUpdateRef.current?.(current.id, patch);
+  }, [draftText]);
+
+  const stopEditing = useCallback(() => {
+    commitDraft();
+    setEditing(false);
+    onAutoEditConsumed?.();
+  }, [commitDraft, onAutoEditConsumed]);
+
+  useEffect(() => {
     if (!editing) return;
     const el = inputRef.current;
     if (!el) return;
@@ -113,10 +145,10 @@ export function StickyNoteCard({
     if (!el) return;
     el.style.height = 'auto';
     el.style.height = `${el.scrollHeight}px`;
-  }, [editing, sizeLocked, sticky.text]);
+  }, [editing, sizeLocked, draftText]);
 
   useEffect(() => {
-    if (chip || sizeLocked || !onUpdate) return;
+    if (chip || sizeLocked || !onUpdate || editing) return;
     const el = cardRef.current;
     if (!el) return;
 
@@ -133,11 +165,6 @@ export function StickyNoteCard({
     return () => ro.disconnect();
   }, [chip, sizeLocked, sticky.id, sticky.text, sticky.width, sticky.imageSrc, editing, onUpdate, sticky.height]);
 
-  const stopEditing = () => {
-    setEditing(false);
-    onAutoEditConsumed?.();
-  };
-
   const startEditing = () => {
     if (readOnly) return;
     setEditing(true);
@@ -146,7 +173,7 @@ export function StickyNoteCard({
   };
 
   const placeholder = hasImage ? 'Add a caption…' : 'Double-click to edit…';
-  const showText = editing || Boolean(sticky.text) || !hasImage;
+  const showText = editing || Boolean(draftText) || Boolean(sticky.text) || !hasImage;
   const chipDate = formatArchiveDate(settledAt);
   const chipTitle = peeked
     ? 'Κλικ αλλού για σύμπτυξη'
@@ -192,9 +219,9 @@ export function StickyNoteCard({
             <textarea
               ref={inputRef}
               className="sticky-note-card__input"
-              value={sticky.text}
+              value={draftText}
               placeholder={hasImage ? 'Caption…' : 'New note…'}
-              onChange={(e) => onUpdate?.(sticky.id, { text: e.target.value })}
+              onChange={(e) => setDraftText(e.target.value)}
               onBlur={stopEditing}
               onPointerDown={(e) => e.stopPropagation()}
               onKeyDown={(e) => {
@@ -207,7 +234,7 @@ export function StickyNoteCard({
           ) : (
             showText && (
               <div className="sticky-note-card__text">
-                {sticky.text || placeholder}
+                {draftText || sticky.text || placeholder}
               </div>
             )
           )}

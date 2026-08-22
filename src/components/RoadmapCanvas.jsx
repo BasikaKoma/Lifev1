@@ -24,6 +24,7 @@ import {
   clientToBoardPoint,
   boardPointForInsert,
 } from '../utils/inkStrokes';
+import { onCanvasWorldPanShift, onCanvasWorldShift } from '../utils/canvasWorld';
 import { getStrokesRectBounds } from '../utils/inkSelection';
 import { strokesToPngDataUrl } from '../utils/inkToImage';
 import { recognizeHandwriting } from '../utils/inkRecognize';
@@ -76,6 +77,7 @@ import { RoadmapOriginCard } from './RoadmapOriginCard';
 import { LifelineDayTicks } from './LifelineDayTicks';
 import { LifelineDayModal } from './LifelineDayModal';
 import { LifelineProjectAnchors, LifelineUnanchoredPanel } from './LifelineProjectAnchors';
+import { LifelineNorthStars } from './LifelineNorthStars';
 import {
   getLifelineConfig,
   generateDayTicks,
@@ -86,6 +88,7 @@ import {
   getLifelineTodayScrollPoint,
   getLifelineZoomLevelMeta,
   resolveLifelineZoomLevel,
+  canEnterLifelineDayView,
   getDayTickCanvasY,
   collectLifelineBoundDates,
   applyLifelineDayHeightZoom,
@@ -112,6 +115,11 @@ import {
 } from '../utils/noteSettle';
 
 const ROADMAP_OPEN_SCALE = 0.55;
+const canvasViewCache = new Map();
+
+function canvasViewCacheKey(projectId, isLifeline) {
+  return `${isLifeline ? 'lifeline' : 'roadmap'}:${projectId || ''}`;
+}
 
 function getRoadmapOpenFocusPoint(checkpoints, stages, layout) {
   const current = getCurrentStage(stages);
@@ -189,6 +197,14 @@ function RoadmapTimelineDot({ node, lineTop, onMoveTimelineY, onReorderCheckpoin
   const dragging = useRef(false);
   const origin = useRef(null);
   const [dragOffsetY, setDragOffsetY] = useState(0);
+
+  useEffect(
+    () =>
+      onCanvasWorldShift((dy) => {
+        if (origin.current) origin.current.top += dy;
+      }),
+    []
+  );
 
   const handlePointerDown = (e) => {
     if (e.button !== 0) return;
@@ -294,6 +310,14 @@ function RoadmapCenterLine({
 }) {
   const { scale } = useZoomTransform();
   const drag = useRef(null);
+
+  useEffect(
+    () =>
+      onCanvasWorldShift((dy) => {
+        if (drag.current && typeof drag.current.top === 'number') drag.current.top += dy;
+      }),
+    []
+  );
 
   if (!lineMetrics) return null;
 
@@ -1036,6 +1060,7 @@ export function RoadmapCanvas({
   isFullscreen = false,
   onFullscreenChange,
   isLifeline = false,
+  projectId = null,
   lifelineAnchors = [],
   onUpdateLifelineAnchor,
   onAssignLifelineToday,
@@ -1052,6 +1077,8 @@ export function RoadmapCanvas({
   onOpenWorkspace,
   onBrainContextChange,
   brainOrb = null,
+  lifelineNorthStars = [],
+  onUpdateLifelineNorthStars,
 }) {
   const [connectFrom, setConnectFrom] = useState(null);
   const [connectPreviewPos, setConnectPreviewPos] = useState(null);
@@ -1064,24 +1091,57 @@ export function RoadmapCanvas({
   const [selectedNodeRef, setSelectedNodeRef] = useState(null);
 
   useEffect(() => {
-    if (!isLifeline || !onBrainContextChange) return;
-    const projectOnDay = (lifelineAnchors || []).find((project) => (
-      project.lifelineAnchorDate === dayView.date
-    ));
+    if (!onBrainContextChange) return;
+    if (isLifeline) {
+      const projectOnDay = (lifelineAnchors || []).find((project) => (
+        project.lifelineAnchorDate === dayView.date
+      ));
+      onBrainContextChange({
+        selectedDate: dayView.date || null,
+        selectedProjectId: projectOnDay?.id || projectId || null,
+        selectedCheckpointId: selectedNodeRef?.type === 'checkpoint' ? selectedNodeRef.id : null,
+        selectedStageId: selectedNodeRef?.type === 'milestone' ? selectedNodeRef.id : null,
+        openedFrom: 'lifeline',
+      });
+      return;
+    }
     onBrainContextChange({
-      selectedDate: dayView.date || null,
-      selectedProjectId: projectOnDay?.id || null,
+      selectedDate: null,
+      selectedProjectId: projectId || null,
       selectedCheckpointId: selectedNodeRef?.type === 'checkpoint' ? selectedNodeRef.id : null,
       selectedStageId: selectedNodeRef?.type === 'milestone' ? selectedNodeRef.id : null,
-      openedFrom: 'lifeline',
+      openedFrom: 'project',
     });
-  }, [isLifeline, onBrainContextChange, dayView.date, selectedNodeRef, lifelineAnchors]);
+  }, [isLifeline, onBrainContextChange, dayView.date, selectedNodeRef, lifelineAnchors, projectId]);
 
   const [autoEditStickyId, setAutoEditStickyId] = useState(null);
   const transformRef = useRef({ scale: ROADMAP_OPEN_SCALE, pan: { x: 48, y: 24 }, viewportRef: null });
+  const cachedCanvasView = canvasViewCache.get(canvasViewCacheKey(projectId, isLifeline)) || null;
   const zoomCanvasRef = useRef(null);
   const canvasTransformRef = useRef(null);
   const containerRef = useRef(null);
+
+  useEffect(
+    () =>
+      onCanvasWorldPanShift((dy) => {
+        const zoom = zoomCanvasRef.current;
+        if (!zoom || !dy) return;
+        const t = zoom.getTransform?.() || transformRef.current;
+        const pan = t?.pan;
+        if (!pan || typeof pan.y !== 'number') return;
+        const scale = t.scale || 1;
+        const nextPan = { x: pan.x, y: pan.y - dy * scale };
+        zoom.setTransform?.({ scale, pan: nextPan });
+        transformRef.current = { ...transformRef.current, scale, pan: nextPan };
+        if (projectId) {
+          canvasViewCache.set(canvasViewCacheKey(projectId, isLifeline), {
+            scale,
+            pan: { ...nextPan },
+          });
+        }
+      }),
+    [isLifeline, projectId]
+  );
   const [zoomPercent, setZoomPercent] = useState(Math.round(ROADMAP_OPEN_SCALE * 100));
   const [lifelineCssScale, setLifelineCssScale] = useState(0.9);
   const lifelineSyncedThemeRef = useRef(null);
@@ -1256,6 +1316,8 @@ export function RoadmapCanvas({
       synced.roadmap?.top,
       synced.lifeline?.dayHeight,
       synced.lifeline?.viewCenterDate,
+      synced.lifeline?.viewStartDate,
+      synced.lifeline?.viewEndDate,
       synced.lifeline?.startDate,
     ].join('|');
     if (lifelineSyncedThemeRef.current?.key === cacheKey) {
@@ -1276,6 +1338,8 @@ export function RoadmapCanvas({
       synced.roadmap?.height === layout.height
       && synced.lifeline?.dayHeight === (base.lifeline?.dayHeight ?? config.dayHeight)
       && synced.lifeline?.viewCenterDate === (base.lifeline?.viewCenterDate ?? null)
+      && synced.lifeline?.viewStartDate === (base.lifeline?.viewStartDate ?? null)
+      && synced.lifeline?.viewEndDate === (base.lifeline?.viewEndDate ?? null)
       && synced.roadmap?.top === layout.top
     ) {
       return;
@@ -2432,6 +2496,12 @@ export function RoadmapCanvas({
 
   const handleTransformChange = useCallback((transform) => {
     transformRef.current = transform;
+    if (projectId && transform?.pan) {
+      canvasViewCache.set(canvasViewCacheKey(projectId, isLifeline), {
+        scale: transform.scale,
+        pan: { ...transform.pan },
+      });
+    }
     const scale = transform?.scale || 1;
     if (isLifeline) {
       setLifelineCssScale((prev) => (prev === scale ? prev : scale));
@@ -2442,7 +2512,7 @@ export function RoadmapCanvas({
     }
     const nextPercent = Math.round(scale * 100);
     setZoomPercent((prev) => (prev === nextPercent ? prev : nextPercent));
-  }, [isLifeline, lifelineDayHeight]);
+  }, [isLifeline, lifelineDayHeight, projectId]);
 
   useEffect(() => {
     if (!isLifeline) return;
@@ -2550,7 +2620,8 @@ export function RoadmapCanvas({
       if (zoomIn && scale >= 0.995) {
         const stepped = applyLifelineDensityZoom(true, e.clientX, e.clientY, ctx.setPan);
         if (stepped) return true;
-        if (dayHeight >= LIFELINE_ZOOM.dayViewEnterAt) {
+        const spacing = lifelinePlanContext?.daySpacing ?? dayHeight;
+        if (canEnterLifelineDayView(spacing)) {
           return enterDayViewFromZoom(e.clientX, e.clientY);
         }
         return true;
@@ -2565,6 +2636,7 @@ export function RoadmapCanvas({
       isLifeline,
       activeTheme,
       dayView.isActive,
+      lifelinePlanContext,
       applyLifelineDensityZoom,
       enterDayViewFromZoom,
       handleCloseLifelineDay,
@@ -2583,11 +2655,13 @@ export function RoadmapCanvas({
       return;
     }
     if (applyLifelineDensityZoom(true)) return;
-    const dayHeight = activeTheme?.lifeline?.dayHeight ?? DEFAULT_LIFELINE_CONFIG.dayHeight;
-    if (dayHeight >= LIFELINE_ZOOM.dayViewEnterAt) {
+    const spacing = lifelinePlanContext?.daySpacing
+      ?? activeTheme?.lifeline?.dayHeight
+      ?? DEFAULT_LIFELINE_CONFIG.dayHeight;
+    if (canEnterLifelineDayView(spacing)) {
       enterDayViewFromZoom();
     }
-  }, [isLifeline, dayView.isActive, applyLifelineDensityZoom, activeTheme, enterDayViewFromZoom]);
+  }, [isLifeline, dayView.isActive, activeTheme, lifelinePlanContext, applyLifelineDensityZoom, enterDayViewFromZoom]);
 
   const handleZoomOut = useCallback(() => {
     if (!isLifeline) {
@@ -2785,7 +2859,14 @@ export function RoadmapCanvas({
         onDrop={handleCanvasDrop}
       >
           {brainOrb}
-          {onOpenWorkspace && (
+          {isLifeline ? (
+            <LifelineNorthStars
+              stars={lifelineNorthStars}
+              onChange={onUpdateLifelineNorthStars}
+              variant="overlay"
+            />
+          ) : null}
+          {onOpenWorkspace && !isLifeline && (
             <button
               type="button"
               className="workspace-nav-btn workspace-nav-btn--canvas"
@@ -2803,10 +2884,10 @@ export function RoadmapCanvas({
           )}
           <ZoomCanvas
             ref={zoomCanvasRef}
-            key={isLifeline ? 'lifeline-v4' : 'roadmap'}
+            key={isLifeline ? 'lifeline-v6' : 'roadmap'}
             className="roadmap-canvas zoom-canvas--no-toolbar"
-            defaultScale={isLifeline ? 0.9 : ROADMAP_OPEN_SCALE}
-            defaultPan={isLifeline ? lifelineDefaultPan : roadmapDefaultPan}
+            defaultScale={cachedCanvasView?.scale ?? (isLifeline ? 0.9 : ROADMAP_OPEN_SCALE)}
+            defaultPan={cachedCanvasView?.pan ?? (isLifeline ? lifelineDefaultPan : roadmapDefaultPan)}
             minScale={isLifeline ? LIFELINE_ZOOM.minScale : 0.25}
             maxScale={isLifeline ? LIFELINE_ZOOM.maxScale : 2}
             interceptWheel={isLifeline ? handleLifelineWheel : undefined}
@@ -2817,7 +2898,11 @@ export function RoadmapCanvas({
             onInkPointerDown={(e) => inkDownRef.current?.(e)}
             onSelectPointerDown={(e) => selectDownRef.current?.(e)}
             onInkDragPointerDown={(e) => inkDragDownRef.current?.(e)}
-            scrollToCanvasPoint={isLifeline ? lifelineScrollTarget : roadmapScrollTarget}
+            scrollToCanvasPoint={
+              cachedCanvasView
+                ? null
+                : (isLifeline ? lifelineScrollTarget : roadmapScrollTarget)
+            }
             panExcludeSelector=".milestone-canvas-card, .idea-canvas-card, .sticky-note-card, .obstacle-canvas-card, .resource-canvas-card, .task-canvas-card, .checkpoint-roadmap-item, .canvas-floating-toolbar, .canvas-top-bar, .drawing-toolbar, .roadmap-center-line, .roadmap-row, .roadmap__header, .roadmap-card, .roadmap-node, .roadmap-canvas__fab-dock, .workspace-nav-btn, .brain-orb, .add-milestone-form, .canvas-connection__hit"
           >
             <CanvasTransformBridge bridgeRef={canvasTransformRef} />
@@ -3063,6 +3148,7 @@ export function RoadmapCanvas({
         selfHubDays={selfHubDays}
         routineTemplates={(mapTheme || activeTheme)?.lifeline?.routineTemplates ?? []}
         projectActivity={projectActivity}
+        stages={stages}
         onUpdateDay={onUpdateLifelineDay}
         onUpdateRoutineTemplates={(templates) => {
           handleMapThemeChange({

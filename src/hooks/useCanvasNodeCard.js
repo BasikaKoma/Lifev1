@@ -1,5 +1,6 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useZoomTransform } from '../components/ZoomCanvas';
+import { onCanvasWorldShift } from '../utils/canvasWorld';
 
 export function useCanvasNodeCard({
   readOnly,
@@ -18,6 +19,14 @@ export function useCanvasNodeCard({
   const pendingDrag = useRef(false);
   const pointerIdRef = useRef(null);
   const DRAG_THRESHOLD_PX = 5;
+
+  useEffect(
+    () =>
+      onCanvasWorldShift((dy) => {
+        if (dragOrigin.current) dragOrigin.current.posY += dy;
+      }),
+    []
+  );
 
   const handlePointerDown = (e) => {
     if (readOnly) return;

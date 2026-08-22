@@ -17,6 +17,22 @@ export function isNewer(a, b) {
   return String(a || '') > String(b || '');
 }
 
+function normalizeLaws(raw) {
+  const source = Array.isArray(raw) ? raw : [];
+  const seen = new Set();
+  const laws = [];
+  for (const item of source) {
+    const text = String(item || '').replace(/\s+/g, ' ').trim();
+    if (!text) continue;
+    const key = text.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    laws.push(text.slice(0, 180));
+    if (laws.length >= 10) break;
+  }
+  return laws;
+}
+
 export function createEmptyProfile() {
   return {
     identity: '',
@@ -24,6 +40,7 @@ export function createEmptyProfile() {
     goals: '',
     style: '',
     brand: '',
+    laws: [],
     preferences: {},
     updatedAt: nowIso(),
   };
@@ -31,13 +48,19 @@ export function createEmptyProfile() {
 
 export function normalizeProfile(raw) {
   const source = raw && typeof raw === 'object' ? raw : {};
+  const preferences = source.preferences && typeof source.preferences === 'object'
+    ? { ...source.preferences }
+    : {};
+  const laws = normalizeLaws(source.laws || preferences.__laws);
+  delete preferences.__laws;
   return {
     identity: String(source.identity || ''),
     values: String(source.values || source.values_text || ''),
     goals: String(source.goals || ''),
     style: String(source.style || ''),
     brand: String(source.brand || ''),
-    preferences: source.preferences && typeof source.preferences === 'object' ? source.preferences : {},
+    laws,
+    preferences,
     updatedAt: source.updatedAt || source.updated_at || nowIso(),
   };
 }

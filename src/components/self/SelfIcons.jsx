@@ -38,6 +38,12 @@ export function SelfIcon({ name }) {
         <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
       </svg>
     ),
+    thermometer: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14 14.76V5a2 2 0 1 0-4 0v9.76a4 4 0 1 0 4 0z" />
+        <path d="M12 9v6" />
+      </svg>
+    ),
     aura: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="2.5" />
@@ -104,11 +110,72 @@ export function SelfIcon({ name }) {
         <path d="M8.5 12.2l2.2 2.2 4.8-4.8" />
       </svg>
     ),
+    flag: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M5 21V4" />
+        <path d="M5 4h11l-2.2 3.5L16 11H5" />
+      </svg>
+    ),
     note: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
         <path d="M14 3v5h5" />
         <path d="M9 13h6M9 17h4" />
+      </svg>
+    ),
+    meal: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M6 3v7a2 2 0 0 0 4 0V3" />
+        <path d="M8 3v18" />
+        <path d="M16 3c-1.5 0-2.5 2-2.5 5s1 4 2.5 4" />
+        <path d="M16 3v18" />
+      </svg>
+    ),
+    idea: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M9 18h6" />
+        <path d="M10 21h4" />
+        <path d="M12 2a6 6 0 0 0-4 10.5c.7.7 1 1.3 1 2.5h6c0-1.2.3-1.8 1-2.5A6 6 0 0 0 12 2z" />
+      </svg>
+    ),
+    routine: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 12a9 9 0 1 1-3-6.7" />
+        <path d="M21 4v4h-4" />
+      </svg>
+    ),
+    workout: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M6.5 9.5v5M17.5 9.5v5" />
+        <path d="M4 10.5v3M20 10.5v3" />
+        <path d="M8 12h8" />
+        <path d="M6.5 9.5h-1a1 1 0 0 0-1 1v3a1 1 0 0 0 1 1h1" />
+        <path d="M17.5 9.5h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1" />
+      </svg>
+    ),
+    tag: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20.6 13.1 13 20.7a2 2 0 0 1-2.8 0L3.3 13.8a2 2 0 0 1 0-2.8L11 3.3h7.6v7.6z" />
+        <circle cx="16" cy="8" r="1.2" />
+      </svg>
+    ),
+    obstacle: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 3 21 20H3L12 3z" />
+        <path d="M12 10v4M12 17h.01" />
+      </svg>
+    ),
+    resource: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 3 4 7v10l8 4 8-4V7l-8-4z" />
+        <path d="M4 7l8 4 8-4M12 11v10" />
+      </svg>
+    ),
+    image: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="5" width="18" height="14" rx="2" />
+        <circle cx="8.5" cy="10" r="1.4" />
+        <path d="M21 16l-5.5-5.5L7 19" />
       </svg>
     ),
   };

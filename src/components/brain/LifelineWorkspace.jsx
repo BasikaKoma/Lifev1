@@ -8,6 +8,8 @@ export function LifelineWorkspace({
   children,
   brainMode,
   onBrainModeChange,
+  onApplyBrainActions,
+  onOpenSource,
   snapshotInput,
   contextExtras,
 }) {
@@ -47,6 +49,8 @@ export function LifelineWorkspace({
         <BrainShell
           mode={mode}
           onModeChange={onBrainModeChange}
+          onApplyBrainActions={onApplyBrainActions}
+          onOpenSource={onOpenSource}
           context={brainContext}
           snapshotInput={snapshotInput}
           contextExtras={extras}

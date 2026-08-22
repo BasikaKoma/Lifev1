@@ -42,7 +42,7 @@ export function offsetPosition(bounds, relation) {
     return { x: bounds.x + bounds.w + GAP_X, y: bounds.y };
   }
   if (relation === 'parent') {
-    return { x: bounds.x, y: Math.max(ORIGIN_Y, bounds.y - CARD_H - GAP_Y) };
+    return { x: bounds.x, y: bounds.y - CARD_H - GAP_Y };
   }
   if (relation === 'paste') {
     return { x: bounds.x + 24, y: bounds.y + 24 };

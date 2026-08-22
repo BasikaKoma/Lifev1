@@ -2,6 +2,7 @@ import { sourceId } from '../context';
 import {
   getCurrentStage,
   getNextBestMove,
+  getOverallProgress,
   getStageProgress,
   getTopBlocker,
   isCheckpointDone,
@@ -46,19 +47,35 @@ export function summarizeProjectForBrain(project, { includeNotes = true } = {}) 
   });
 
   const openCheckpoints = [];
+  const doneCheckpoints = [];
+  let openCount = 0;
+  let doneCount = 0;
   for (const stage of stages) {
     for (const checkpoint of stage.checkpoints || []) {
-      if (isCheckpointDone(checkpoint)) continue;
-      openCheckpoints.push({
-        id: checkpoint.id,
-        title: compactText(checkpoint.title, 80),
-        stageTitle: compactText(stage.title, 60),
-        sourceId: sourceId('checkpoint', checkpoint.id),
-      });
-      if (openCheckpoints.length >= 6) break;
+      if (isCheckpointDone(checkpoint)) {
+        doneCount += 1;
+        if (doneCheckpoints.length < 4) {
+          doneCheckpoints.push({
+            title: compactText(checkpoint.title, 80),
+            completedAt: checkpoint.completedAt || checkpoint.archivedAt || null,
+          });
+        }
+        continue;
+      }
+      openCount += 1;
+      if (openCheckpoints.length < 8) {
+        openCheckpoints.push({
+          id: checkpoint.id,
+          title: compactText(checkpoint.title, 80),
+          stageId: stage.id,
+          stageTitle: compactText(stage.title, 60),
+          sourceId: sourceId('checkpoint', checkpoint.id),
+        });
+      }
     }
-    if (openCheckpoints.length >= 6) break;
   }
+
+  const liveNotes = (project.notes || []).filter((note) => note && !note.archived);
 
   return {
     id,
@@ -66,6 +83,8 @@ export function summarizeProjectForBrain(project, { includeNotes = true } = {}) 
     isLifeline: project.isLifeline === true,
     updatedAt: project.updatedAt || project.cloudUpdatedAt || project.updated_at || null,
     sourceId: sourceId('project', id),
+    progress: getOverallProgress(stages),
+    checkpointCounts: { open: openCount, done: doneCount },
     currentStage: currentStage
       ? {
         id: currentStage.id,
@@ -83,11 +102,17 @@ export function summarizeProjectForBrain(project, { includeNotes = true } = {}) 
       : null,
     currentGoals: goals.slice(0, 4).map((goal) => compactText(goal.title, 80)),
     openCheckpoints,
+    recentlyDone: doneCheckpoints,
     topBlocker: blocker
       ? { title: compactText(blocker.title, 80), severity: blocker.severity || null }
       : null,
     notes: includeNotes
-      ? (project.notes || []).slice(0, 5).map((note) => compactText(note.title || note.body, 80))
+      ? liveNotes.slice(0, 6).map((note) => ({
+        id: note.id || null,
+        title: compactText(note.title, 80),
+        body: compactText(note.body, 140),
+        sourceId: note.id ? sourceId('note', note.id) : null,
+      }))
       : [],
     brief: briefText(project),
   };
@@ -110,6 +135,53 @@ export function catalogFromProjectList(projectList = []) {
       notes: project.notes || [],
     }))
     .filter(Boolean);
+}
+
+function catalogDepth(project) {
+  if (!project) return 0;
+  return (project.openCheckpoints?.length || 0)
+    + (project.notes?.length || 0)
+    + (project.currentGoals?.length || 0)
+    + (project.brief ? 2 : 0)
+    + (project.currentStage ? 1 : 0);
+}
+
+export function mergeProjectCatalogs(...lists) {
+  const map = new Map();
+  for (const list of lists) {
+    for (const project of list || []) {
+      if (!project?.id) continue;
+      const existing = map.get(project.id);
+      if (!existing || catalogDepth(project) >= catalogDepth(existing)) {
+        map.set(project.id, existing ? { ...existing, ...project } : project);
+      }
+    }
+  }
+  return [...map.values()];
+}
+
+export function catalogFromSnapshotInput(snapshotInput = {}) {
+  const rows = (snapshotInput.projectActivity || [])
+    .map((project) => summarizeProjectForBrain(project))
+    .filter(Boolean);
+
+  if (snapshotInput.currentProject) {
+    const live = summarizeProjectForBrain({
+      id: snapshotInput.currentProject.id,
+      title: snapshotInput.currentProject.title,
+      isLifeline: snapshotInput.currentProject.isLifeline === true,
+      updatedAt: snapshotInput.currentProject.updatedAt,
+      stages: snapshotInput.stages || snapshotInput.currentProject.stages || [],
+      goals: snapshotInput.goals || snapshotInput.currentProject.goals || [],
+      notes: snapshotInput.notes || snapshotInput.currentProject.notes || [],
+    });
+    if (live) {
+      return mergeProjectCatalogs(rows, [live]);
+    }
+  }
+
+  if (rows.length) return rows;
+  return catalogFromProjectList(snapshotInput.projectList || []);
 }
 
 export function findProjectsByHint(catalog, hint) {

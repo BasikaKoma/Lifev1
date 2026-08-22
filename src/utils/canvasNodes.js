@@ -9,6 +9,7 @@ import {
   GAP_Y,
   CENTER_X,
   SIDE_GAP,
+  BASE_Y,
   DEFAULT_ROADMAP_LAYOUT,
   syncRoadmapPositions,
   getMilestoneHeight,
@@ -151,6 +152,21 @@ export function getNodeBounds(ref, entity) {
 
 export function isCanvasItemOnBoard(item) {
   return typeof item?.canvasX === 'number' && typeof item?.canvasY === 'number';
+}
+
+/** Park a new canvas card next to the first milestone so it stays visible. */
+export function nextFreeCanvasTaskPosition(state) {
+  const tasks = state?.canvasTasks || [];
+  const stages = [...(state?.stages || [])].sort((a, b) => (a.order || 0) - (b.order || 0));
+  const first = stages.find((stage) => typeof stage.canvasX === 'number') || stages[0];
+  const originX = typeof first?.canvasX === 'number' ? first.canvasX : CENTER_X;
+  const originY = typeof first?.canvasY === 'number' ? first.canvasY : BASE_Y - 200;
+  const placed = tasks.filter(isCanvasItemOnBoard);
+  const index = placed.length;
+  return {
+    canvasX: originX + 340 + Math.floor(index / 6) * 260,
+    canvasY: originY + (index % 6) * 136,
+  };
 }
 
 export function collectCanvasObstacles(obstacles = []) {

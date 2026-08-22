@@ -26,6 +26,7 @@ import {
 import { mergeLifelineDaysMaps, normalizeLifelineDays } from './lifelineDays';
 import { normalizeSelfHubDays } from './selfHubDays';
 import { normalizeProjectBrief } from './projectBrief';
+import { normalizeActiveView } from './appNavigation';
 import {
   mergeLifelineReconcile,
   mergeLifelineRowData,
@@ -118,10 +119,7 @@ function filterRowByColumns(row, columns) {
 }
 
 function normalizeActiveViewForDb(activeView) {
-  if (activeView === 'overview') return 'roadmap';
-  if (activeView === 'goals' || activeView === 'tasks' || activeView === 'notes') return 'workspace';
-  if (activeView === 'metrics' || activeView === 'feedback') return 'roadmap';
-  return activeView || 'roadmap';
+  return normalizeActiveView(activeView);
 }
 
 function buildCoreRow(state) {
@@ -172,10 +170,7 @@ function mapProjectListItem(row) {
 }
 
 function normalizeActiveViewFromDb(activeView) {
-  const view = activeView === 'overview' ? 'roadmap' : (activeView || 'roadmap');
-  if (view === 'goals' || view === 'tasks' || view === 'notes') return 'workspace';
-  if (view === 'metrics' || view === 'feedback') return 'roadmap';
-  return view;
+  return normalizeActiveView(activeView);
 }
 
 function jsonbField(row, snake, camel) {
@@ -370,34 +365,39 @@ export async function loadAllProjectsActivity() {
   const supabase = requireSupabase();
   await requireUserId();
 
-  const selectWithTasks = 'id, title, stages, notes, canvas_tasks, is_lifeline';
-  const selectFallback = 'id, title, stages, notes, is_lifeline';
+  const selects = [
+    'id, title, stages, notes, canvas_tasks, canvas_obstacles, canvas_resources, canvas_stickies, is_lifeline',
+    'id, title, stages, notes, canvas_tasks, canvas_obstacles, canvas_stickies, is_lifeline',
+    'id, title, stages, notes, canvas_tasks, canvas_obstacles, is_lifeline',
+    'id, title, stages, notes, canvas_tasks, is_lifeline',
+    'id, title, stages, notes, is_lifeline',
+  ];
 
   let data;
   let error;
-  ({ data, error } = await supabase
-    .from('projects')
-    .select(selectWithTasks)
-    .eq('is_lifeline', false));
-
-  if (error && /canvas_tasks|42703|column .* does not exist/i.test(formatSupabaseError(error))) {
-    ({ data, error } = await supabase
-      .from('projects')
-      .select(selectFallback)
-      .eq('is_lifeline', false));
+  for (const select of selects) {
+    ({ data, error } = await supabase.from('projects').select(select));
+    if (!error) break;
+    if (!isMissingColumnError(error) && !/canvas_tasks|canvas_obstacles|canvas_resources|canvas_stickies|42703|column .* does not exist/i.test(formatSupabaseError(error))) {
+      throw error;
+    }
   }
 
   if (error) throw error;
 
-  return (data || [])
-    .filter((row) => row.is_lifeline !== true)
-    .map((row) => ({
+  return (data || []).map((row) => {
+    const isLifeline = row.is_lifeline === true;
+    return {
       id: row.id,
-      title: row.title,
-      stages: processStages(row.stages || []),
+      title: isLifeline ? row.title || 'Lifeline' : row.title,
+      stages: isLifeline ? [] : processStages(row.stages || []),
       notes: row.notes || [],
-      canvasTasks: row.canvas_tasks || row.canvasTasks || [],
-    }));
+      canvasTasks: isLifeline ? [] : row.canvas_tasks || row.canvasTasks || [],
+      canvasObstacles: isLifeline ? [] : row.canvas_obstacles || row.canvasObstacles || [],
+      canvasResources: isLifeline ? [] : row.canvas_resources || row.canvasResources || [],
+      canvasStickies: isLifeline ? [] : row.canvas_stickies || row.canvasStickies || [],
+    };
+  });
 }
 
 /** Compact rows for Brain: every project the user owns, including Lifeline. */
@@ -1167,23 +1167,25 @@ export async function saveProjectToSupabase(state, { columns: requestedColumns }
   throw new Error(formatSupabaseError(first.error));
 }
 
-export async function createProject(title = 'New Business') {
+export async function createProject(title = 'New Business', options = {}) {
   requireCloud();
-  const stages = processStages(createStarterStages());
+  const seed = options && typeof options === 'object' ? options.seed : null;
+  const makeActive = options.makeActive !== false;
+  const stages = seed?.stages || processStages(createStarterStages());
   const supabase = requireSupabase();
   const userId = await requireUserId();
   const data = await insertProjectRow(supabase, {
     user_id: userId,
     title,
     stages,
-    goals: [],
-    notes: [],
+    goals: seed?.goals || [],
+    notes: seed?.notes || [],
     active_view: 'roadmap',
     focus_mode: false,
     is_lifeline: false,
   });
 
-  setStoredProjectId(data.id);
+  if (makeActive) setStoredProjectId(data.id);
   const list = await listProjects();
   const ensured = await ensureLifelineProject();
   return {
@@ -1438,6 +1440,10 @@ async function persistRemoteCapture(projectId, mutate, { retryCapture } = {}) {
 
 export async function appendCaptureToRemoteProject(projectId, capture) {
   return persistRemoteCapture(projectId, (state) => applyCaptureToState(state, capture));
+}
+
+export async function mutateRemoteProject(projectId, mutate) {
+  return persistRemoteCapture(projectId, mutate);
 }
 
 export async function removeCaptureFromRemoteProject(projectId, captureRef) {

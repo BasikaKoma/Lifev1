@@ -1,14 +1,18 @@
 import { localTodayIsoDate } from './selfDateUtils';
 import {
   collectCompletedItemsForDate,
+  collectCompletedCheckpointsFromStages,
   collectNotesCreatedForDate,
+  collectJournalNotesForDate,
   collectScheduledItemsForDate,
   getDayEntry,
+  mergeCompletedItems,
   patchDayEntry,
 } from './lifelineDays';
 import { getSelfHubDayEntry, normalizeSelfHubDayEntry, patchSelfHubDayEntry } from './selfHubDays';
 import { healthMetricsToLifelinePatch } from '../lib/health/healthToLifeline';
 import { ouraRowToLifelineMetrics } from './lifelineSelfMetrics';
+import { buildSelfHubTimelineEvents, normalizeTimelineSnapshot } from './selfHubTimelineEvents';
 
 /**
  * Build a live Self Hub day patch from current sources (health, hub view, projects).
@@ -52,17 +56,38 @@ export function buildSelfHubLivePatch({
       }
     : null;
 
+  const builtTimeline = buildSelfHubTimelineEvents({
+    projectDay: projects,
+    heartRate: hubView?.floatingMetrics?.heartRate ?? null,
+    ouraRow,
+    date: day,
+  });
+  const timeline = normalizeTimelineSnapshot({
+    ...builtTimeline,
+    capturedAt: now,
+  });
+
   return {
     updatedAt: now,
     health,
     hub,
     projects,
+    timeline,
   };
 }
 
 /**
  * Archive a Self Hub day entry into lifelineDays (historical record).
  */
+function pickRicherTimeline(a, b) {
+  const left = normalizeTimelineSnapshot(a);
+  const right = normalizeTimelineSnapshot(b);
+  if (!left) return right;
+  if (!right) return left;
+  const score = (snap) => (snap.events?.length || 0) + (snap.segments?.length || 0);
+  return score(left) >= score(right) ? left : right;
+}
+
 export function selfHubEntryToLifelineArchive(entry) {
   const normalized = normalizeSelfHubDayEntry(entry);
   const journal = normalized.journal || { notes: '', todos: [], routines: {} };
@@ -74,6 +99,7 @@ export function selfHubEntryToLifelineArchive(entry) {
     routines: journal.routines || {},
     projectSnapshot: normalized.projects,
     hubSnapshot: normalized.hub,
+    timelineSnapshot: normalized.timeline,
     archivedAt: normalized.updatedAt || new Date().toISOString(),
     archivedFrom: 'selfHub',
   };
@@ -93,6 +119,7 @@ export function syncSelfHubEntryToLifeline(lifelineDays, dateStr, selfHubEntry) 
         : archive.routines,
     projectSnapshot: archive.projectSnapshot,
     hubSnapshot: archive.hubSnapshot,
+    timelineSnapshot: pickRicherTimeline(archive.timelineSnapshot, current.timelineSnapshot),
     archivedAt: archive.archivedAt,
     archivedFrom: archive.archivedFrom,
   });
@@ -119,34 +146,42 @@ export function captureSelfHubLiveDay({
 /**
  * Resolve project activity for a date: live Self Hub store for today, archive for past.
  */
-export function resolveProjectDayForView({ selfHubDays, lifelineDays, date, projectActivity }) {
+export function resolveProjectDayForView({
+  selfHubDays,
+  lifelineDays,
+  date,
+  projectActivity,
+  stages = [],
+}) {
   const day = date || localTodayIsoDate();
   const today = localTodayIsoDate();
   const selfEntry = getSelfHubDayEntry(selfHubDays, day);
   const lifelineEntry = getDayEntry(lifelineDays, day);
 
-  if (day === today && selfEntry.projects) {
-    return {
-      source: 'selfHub',
-      completed: selfEntry.projects.completed || [],
-      notes: selfEntry.projects.notes || [],
-      scheduled: selfEntry.projects.scheduled || [],
-    };
-  }
-
-  if (lifelineEntry.projectSnapshot) {
-    return {
-      source: 'archive',
-      completed: lifelineEntry.projectSnapshot.completed || [],
-      notes: lifelineEntry.projectSnapshot.notes || [],
-      scheduled: lifelineEntry.projectSnapshot.scheduled || [],
-    };
-  }
+  const completed = mergeCompletedItems(
+    selfEntry.projects?.completed,
+    lifelineEntry.projectSnapshot?.completed,
+    collectCompletedItemsForDate(projectActivity, day),
+    collectCompletedCheckpointsFromStages(stages, day),
+  );
+  const notes = mergeCompletedItems(
+    selfEntry.projects?.notes,
+    lifelineEntry.projectSnapshot?.notes,
+    collectNotesCreatedForDate(projectActivity, day),
+    collectJournalNotesForDate(selfEntry.journal?.notes || lifelineEntry.notes, day),
+  );
+  const scheduled = mergeCompletedItems(
+    selfEntry.projects?.scheduled,
+    lifelineEntry.projectSnapshot?.scheduled,
+    collectScheduledItemsForDate(projectActivity, day),
+  );
 
   return {
-    source: projectActivity?.length ? 'live' : 'none',
-    completed: collectCompletedItemsForDate(projectActivity, day),
-    notes: collectNotesCreatedForDate(projectActivity, day),
-    scheduled: collectScheduledItemsForDate(projectActivity, day),
+    source: completed.length || notes.length || scheduled.length
+      ? (day === today ? 'merged' : 'archive')
+      : 'none',
+    completed,
+    notes,
+    scheduled,
   };
 }

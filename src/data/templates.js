@@ -42,6 +42,7 @@ export function createEmptyIdea(overrides = {}) {
     linkedStageId: null,
     canvasStyle: null,
     category: '',
+    completedAt: null,
     ...overrides,
   };
 }
@@ -67,6 +68,7 @@ export function createEmptySticky(overrides = {}) {
     archived: false,
     archivedAt: null,
     done: false,
+    completedAt: null,
     ...overrides,
   };
 }
@@ -86,6 +88,7 @@ export function createEmptyCanvasObstacle(overrides = {}) {
     canvasStyle: null,
     category: '',
     linkedCheckpointIds: [],
+    completedAt: null,
     ...overrides,
   };
 }
@@ -105,6 +108,7 @@ export function createEmptyCanvasResource(overrides = {}) {
     canvasStyle: null,
     category: '',
     linkedCheckpointIds: [],
+    completedAt: null,
     ...overrides,
   };
 }
@@ -123,6 +127,7 @@ export function createEmptyCanvasTask(overrides = {}) {
     canvasStyle: null,
     category: '',
     linkedCheckpointIds: [],
+    completedAt: null,
     ...overrides,
   };
 }
@@ -143,6 +148,7 @@ export function createEmptyStage(order, isFirst = false) {
     ideas: [],
     blockers: [],
     decisions: [],
+    completedAt: null,
   };
 }
 

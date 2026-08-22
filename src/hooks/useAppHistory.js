@@ -3,6 +3,7 @@ import {
   navigationFromPath,
   pathFromNavigation,
   isRootPath,
+  normalizeActiveView,
 } from '../utils/appNavigation';
 
 export function useAppHistory(state, setState, loading) {
@@ -40,7 +41,7 @@ export function useAppHistory(state, setState, loading) {
           ? state.activeView || 'self'
           : fromUrl.activeView || 'self';
       const nav = {
-        activeView: view === 'overview' ? 'roadmap' : view,
+        activeView: normalizeActiveView(view),
         selectedStageId: null,
       };
 

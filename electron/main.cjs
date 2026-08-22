@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { initAutoUpdates } = require('./updater.cjs');
 const { setupBrainIpc } = require('./brain.cjs');
+const { setupCamerasIpc } = require('./cameras.cjs');
 
 const APP_PORT = 17823;
 const DEV_URL = 'http://localhost:5173';
@@ -176,6 +177,11 @@ function createWindow() {
 
   setupCloseGuard(mainWindow);
 
+  // Chromium caret browsing (F7) draws a text caret on every click.
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.key === 'F7') event.preventDefault();
+  });
+
   mainWindow.once('ready-to-show', () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.show();
@@ -268,6 +274,7 @@ if (!gotSingleInstanceLock) {
     setupPermissions();
     setupScaleBackgroundIpc();
     setupBrainIpc();
+    setupCamerasIpc();
     if (app.isPackaged) {
       await clearStaleServiceWorkers();
     }

@@ -39,6 +39,19 @@ html {
   color-scheme: dark;
 }
 
+html,
+body,
+#root {
+  -webkit-user-select: none;
+  user-select: none;
+  caret-color: transparent;
+  cursor: default;
+}
+
+*:not(input):not(textarea):not([contenteditable="true"]) {
+  caret-color: transparent;
+}
+
 body {
   margin: 0;
   font-family: var(--font);
@@ -59,9 +72,19 @@ button {
 
 input,
 select,
-textarea {
+textarea,
+[contenteditable="true"] {
   font-family: inherit;
   color-scheme: dark;
+  -webkit-user-select: text;
+  user-select: text;
+  caret-color: auto;
+}
+
+input:not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]),
+textarea,
+[contenteditable="true"] {
+  cursor: text;
 }
 
 .sr-only {

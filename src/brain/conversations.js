@@ -36,23 +36,41 @@ export function createEmptyConversation() {
   };
 }
 
-export function createUserMessage(text, kind = 'ask') {
+function normalizeAttachments(raw) {
+  return (Array.isArray(raw) ? raw : [])
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const dataUrl = String(item.dataUrl || '');
+      if (!dataUrl.startsWith('data:')) return null;
+      return {
+        id: item.id || createMessageId(),
+        kind: 'image',
+        name: String(item.name || 'image'),
+        mime: String(item.mime || 'image/png'),
+        dataUrl,
+      };
+    })
+    .filter(Boolean);
+}
+
+export function createUserMessage(text, kind = 'ask', attachments = []) {
   return {
     id: createMessageId(),
     role: 'user',
     kind,
     text: String(text || '').trim(),
+    attachments: normalizeAttachments(attachments),
     createdAt: nowIso(),
   };
 }
 
-export function createAssistantMessage({ insights = [], error = null } = {}) {
+export function createAssistantMessage({ insights = [], error = null, meta = {} } = {}) {
   return {
     id: createMessageId(),
     role: 'assistant',
     insights: Array.isArray(insights) ? insights : [],
     error: error ? String(error) : null,
-    meta: {},
+    meta: meta && typeof meta === 'object' ? meta : {},
     createdAt: nowIso(),
   };
 }
@@ -65,6 +83,7 @@ function normalizeMessage(raw) {
     role,
     kind: raw.kind === 'analyze' ? 'analyze' : 'ask',
     text: String(raw.text || ''),
+    attachments: normalizeAttachments(raw.attachments),
     insights: Array.isArray(raw.insights) ? raw.insights : [],
     error: raw.error ? String(raw.error) : null,
     meta: raw.meta && typeof raw.meta === 'object' ? raw.meta : {},
@@ -165,7 +184,12 @@ export function compactConversationHistory(messages = []) {
   return (messages || [])
     .map((message) => {
       if (message.role === 'user') {
-        return { role: 'user', text: String(message.text || '').trim() };
+        const imageCount = (message.attachments || []).length;
+        const base = String(message.text || '').trim();
+        const text = imageCount
+          ? `${base}${base ? ' ' : ''}[επισυναπτόμενες εικόνες: ${imageCount}]`.trim()
+          : base;
+        return { role: 'user', text };
       }
       if (message.error) return { role: 'assistant', text: String(message.error) };
       const insights = message.insights || [];

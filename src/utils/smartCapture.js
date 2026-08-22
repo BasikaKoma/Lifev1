@@ -5,6 +5,7 @@ import {
   generateId,
   reindexGoals,
 } from '../data/templates';
+import { nextFreeCanvasTaskPosition } from './canvasNodes';
 import { processStages } from './logic';
 
 export const CAPTURE_TYPES = ['note', 'idea', 'task', 'goal'];
@@ -328,10 +329,12 @@ export function applyCaptureToState(state, capture) {
   }
 
   if (type === 'task') {
+    const pos = nextFreeCanvasTaskPosition(state);
     const task = createEmptyCanvasTask({
       id: itemId.startsWith('task-') ? itemId : `task-${itemId}`,
       title,
       description: body !== title ? body : '',
+      ...pos,
     });
     return {
       state: {

@@ -1,43 +1,53 @@
 import { freezeBrainContext } from './context';
+import { appModelText } from './appModel';
 import { loadBrainConfig, assertLocalEndpointAllowed, getProviderDestination, getProviderCapabilities, resolveBrainModel } from './config';
 import { loadBrainPolicy, canCloudSeeAppData, canCloudSeeLocalFiles } from './policy';
-import { prependBrainInsights } from './insights';
+import { normalizeInsight, prependBrainInsights } from './insights';
 import { buildMemoryPack } from './memory/pack';
-import { persistMemories, persistMemory, searchMemories } from './memory/repository';
+import { persistLearnedMemories, persistMemory, searchMemories } from './memory/repository';
 import { buildSnapshot, redactSnapshotForCloud } from './snapshot/buildSnapshot';
 import {
-  catalogFromProjectList,
+  catalogFromSnapshotInput,
   findMentionedProjects,
   loadAppCatalog,
+  mergeProjectCatalogs,
   resolveProjectQuery,
 } from './snapshot/loadAppCatalog';
 import { BRAIN_INSIGHTS_SCHEMA, BRAIN_TOOLS } from './schema';
 import { transportRun } from './transport';
+import { applyRouteToSnapshot, routeQuestion } from './router';
+import { buildSourceIndex } from './sources';
 import { brainListDir, brainListRoots, brainReadImage, brainReadText, hasElectronBrain } from '../platform/brain';
 
 const MAX_TOOL_ROUNDS = 4;
 
-function buildInstructions(kind) {
-  return `You are the Brain of lifev1 in an ongoing conversation. Memory lives in Lifev1, not in the model provider.
-MEMORY tells you who the user is, how they want you to work, what they are looking at, what happened in this conversation, and which older facts are still current.
-Prefer MEMORY.standingFacts and MEMORY.relevantMemories with status=current. Treat status=old or superseded as historical only, and say where a fact came from when it matters.
-You also see the whole application in SNAPSHOT: Self, Lifeline, and every project.
-The current focus is only what the user is looking at right now. It is not the only project you know.
-If the user names a project, look it up in SNAPSHOT.mentionedProjects or SNAPSHOT.projects first.
-Use get_project, remember, or search_memory when needed. remember stores durable Lifev1 memory (decisions, preferences, values, goals, style, brand, writing examples, drafts).
+function buildInstructions(kind, routeMode) {
+  const briefing = kind === 'briefing' || routeMode === 'briefing';
+  return `You are the Brain of lifev1: the personal advisor for the whole application, not a chatbot of Brain settings.
+${appModelText()}
+SNAPSHOT.coverage tells you what loaded. If coverage.loaded is true, the app data is in SNAPSHOT — use it.
+SNAPSHOT.route.mode is a local router: today = Self + today + 1-2 active projects; project = named project in depth; strategy = full portfolio; create = app model + related titles; briefing = weekly patterns.
+MEMORY.laws are standing personal laws (max 10). Strategic answers MUST respect them. Do not invent new laws unless the user stated one.
+MEMORY.whoYouAre is only voice, values, and preferences. Never answer a strategy question from settings alone.
+When advising, name real projects, checkpoints, notes, and day outcomes from SNAPSHOT and cite their source IDs.
+Do not emit an ALERT that projects/lifeline were not loaded if coverage.projectCount > 0 or coverage.lifelineDays > 0. Empty arrays mean no items that day, not a failed load.
+The current focus is only the open screen. Look at SNAPSHOT.projects and SNAPSHOT.patterns.portfolio.
+If they state a durable fact about themselves (preference, value, goal, style, brand, writing example, decision, standing law), put it in newMemories. If nothing new, newMemories must be []. Never invent memories. Never use a tool just to store memory.
+${kind === 'ask' ? 'Call get_project only if a named project is missing checkpoints/notes in SNAPSHOT.' : 'Use search_memory or get_project only when packed MEMORY/SNAPSHOT is missing something you must look up.'}
 LOCAL FILES is authoritative. If it lists folders, you already have access. Answer yes, name the folders and files, and use list_dir / read_file / read_image with rootId + relativePath when you need more. Never say no folder is available when LOCAL FILES is present.
 Never rely on OpenAI conversation_id or previous_response_id. Never invent facts.
 Reply in the user's language (Greek or English).
-${kind === 'ask' ? 'Answer the latest user message using MEMORY, the conversation, and the full app catalog.' : 'Analyze across the full app when useful, and produce 3-6 concrete insights.'}
-Every insight must include real source IDs from the snapshot or memory ids.
-If data is missing after checking the catalog and memory, say so.`;
+${briefing
+    ? 'WEEKLY BRIEFING. From SNAPSHOT.patterns say: what moved, what is stuck, the next move. 3-6 concrete insights with real source IDs. actions=[] unless they asked to create or complete something.'
+    : (kind === 'ask'
+      ? 'Answer as their advisor using APP MODEL + SNAPSHOT first, then MEMORY for tone and MEMORY.laws for strategy. If they ask whether something should be a project, use APP MODEL.personalBrandRule / decisionRule and the existing SNAPSHOT.projects. If they asked you to create it in the app (φτιάξτο, δημιούργησε, κάνε το, create it, πρόσθεσέ το), fill actions. Advice-only questions must have actions=[]. Never duplicate an existing SNAPSHOT.projects title. For create_project: title, body=purpose, stageTitle=first milestone, items=checkpoint titles (max 8). After creating, also emit open_project with the same title. To add/complete/update on an EXISTING project, set projectTitle to that project and use create_checkpoint, complete_checkpoint, update_note, or update_checkpoint — this works from Lifeline.'
+      : 'Analyze across Self, Lifeline days, and every project. Produce 3-6 concrete insights with real source IDs from projects, checkpoints, notes, or days. actions=[] unless they asked to create something.')}
+Every insight must include real source IDs from SNAPSHOT (project:, checkpoint:, note:, lifeline-day:, self:).`;
 }
 
-function allowedTools(policy, destination) {
-  const tools = [
-    BRAIN_TOOLS.find((tool) => tool.name === 'remember'),
-    BRAIN_TOOLS.find((tool) => tool.name === 'search_memory'),
-  ];
+function allowedTools(policy, destination, kind) {
+  const tools = [];
+  if (kind !== 'ask') tools.push(BRAIN_TOOLS.find((tool) => tool.name === 'search_memory'));
   if (policy.appScopes.projects) tools.push(BRAIN_TOOLS.find((tool) => tool.name === 'get_project'));
   if (hasElectronBrain() && canCloudSeeLocalFiles(policy, destination)) {
     if (policy.tools.listDir !== false) tools.push(BRAIN_TOOLS.find((tool) => tool.name === 'list_dir'));
@@ -148,6 +158,34 @@ function collectInsights(result) {
   return [];
 }
 
+function collectNewMemories(result) {
+  const parsed = result?.parsed;
+  if (Array.isArray(parsed?.newMemories)) return parsed.newMemories;
+  if (result?.text) {
+    try {
+      const fromText = JSON.parse(result.text);
+      if (Array.isArray(fromText.newMemories)) return fromText.newMemories;
+    } catch {
+      /* ignore */
+    }
+  }
+  return [];
+}
+
+function collectActions(result) {
+  const parsed = result?.parsed;
+  if (Array.isArray(parsed?.actions)) return parsed.actions;
+  if (result?.text) {
+    try {
+      const fromText = JSON.parse(result.text);
+      if (Array.isArray(fromText.actions)) return fromText.actions;
+    } catch {
+      /* ignore */
+    }
+  }
+  return [];
+}
+
 export async function runBrainJob({
   kind = 'analyze',
   question = '',
@@ -155,6 +193,7 @@ export async function runBrainJob({
   conversationId = null,
   liveContext,
   snapshotInput,
+  userAttachments = [],
   signal,
 } = {}) {
   const loaded = loadBrainConfig();
@@ -172,13 +211,12 @@ export async function runBrainJob({
   assertLocalEndpointAllowed(config);
 
   const context = freezeBrainContext(liveContext);
-  let catalog = [];
-  if (policy.appScopes.projects) {
-    try {
-      catalog = await loadAppCatalog();
-    } catch {
-      catalog = catalogFromProjectList(snapshotInput?.projectList || []);
-    }
+  const localCatalog = catalogFromSnapshotInput(snapshotInput);
+  let catalog = localCatalog;
+  try {
+    catalog = mergeProjectCatalogs(localCatalog, await loadAppCatalog());
+  } catch {
+    catalog = localCatalog;
   }
   const questionText = String(question || '').trim();
   const mentionText = [
@@ -210,12 +248,17 @@ export async function runBrainJob({
   if (!canCloudSeeAppData(policy, destination)) {
     snapshot = redactSnapshotForCloud(snapshot);
   }
+  const route = routeQuestion(questionText, { catalog, kind });
+  const sourceIndex = buildSourceIndex({ snapshot, catalog });
+  snapshot = applyRouteToSnapshot(snapshot, route, catalog);
 
   const userText = kind === 'ask'
     ? questionText || 'Τι βλέπεις στο τρέχον context;'
-    : questionText || 'Ανάλυσε το τρέχον Lifeline context και βγάλε insights.';
+    : kind === 'briefing'
+      ? questionText || 'Κάνε weekly briefing: τι κινήθηκε, τι έχει κολλήσει, ποια είναι η επόμενη κίνηση.'
+      : questionText || 'Ανάλυσε το τρέχον Lifeline context και βγάλε insights.';
 
-  const tools = capabilities.supportsTools ? allowedTools(policyWithRoots, destination) : [];
+  const tools = capabilities.supportsTools ? allowedTools(policyWithRoots, destination, kind) : [];
   const memory = buildMemoryPack({
     question: questionText,
     history,
@@ -228,8 +271,18 @@ export async function runBrainJob({
     : (hasElectronBrain()
       ? '\n\nLOCAL FILES\nNo allowlisted folder is registered in the desktop app yet.'
       : '\n\nLOCAL FILES\nLocal folders work only in the desktop app.');
-  let input = `${userText}${localFilesBlock}\n\nMEMORY\n${JSON.stringify(memory)}\n\nSNAPSHOT\n${JSON.stringify(snapshot)}`;
+  let input = `${userText}${localFilesBlock}\n\nSNAPSHOT\n${JSON.stringify(snapshot)}\n\nMEMORY\n${JSON.stringify(memory)}`;
   const attachments = [];
+  for (const file of Array.isArray(userAttachments) ? userAttachments : []) {
+    if (file?.dataUrl) {
+      attachments.push({
+        kind: 'image',
+        name: file.name || 'image',
+        mime: file.mime || 'image/png',
+        dataUrl: file.dataUrl,
+      });
+    }
+  }
   if (canUseLocalFiles && IMAGE_HINT.test(mentionText)) {
     for (const image of collectFolderImages(localFolders).slice(0, 2)) {
       try {
@@ -243,7 +296,7 @@ export async function runBrainJob({
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
     const result = await transportRun(config, {
-      instructions: buildInstructions(kind),
+      instructions: buildInstructions(kind, route.mode),
       input,
       tools,
       outputSchema: capabilities.supportsStructuredOutput ? BRAIN_INSIGHTS_SCHEMA : BRAIN_INSIGHTS_SCHEMA,
@@ -278,23 +331,20 @@ export async function runBrainJob({
       continue;
     }
 
-    const insights = collectInsights(result).map((item) => ({
-      ...item,
-      context,
-      createdAt: new Date().toISOString(),
-    }));
+    const insights = collectInsights(result)
+      .map((item) => normalizeInsight({
+        ...item,
+        context,
+        createdAt: new Date().toISOString(),
+      }))
+      .filter(Boolean);
     prependBrainInsights(insights, context);
-    persistMemories(insights.map((item) => ({
-      kind: item.kind === 'suggestion' || item.kind === 'alert' ? 'conclusion' : 'insight',
-      title: item.title,
-      body: item.body,
-      status: 'current',
-      sourceKind: 'brain',
-      sourceId: item.id || null,
-      conversationId,
-      data: { sources: item.sources || [], confidence: item.confidence, insightKind: item.kind },
-    })));
-    return { context, snapshot, memory, insights, capabilities };
+    try {
+      persistLearnedMemories(collectNewMemories(result), { conversationId });
+    } catch {
+      /* learning must not delay or fail the reply */
+    }
+    return { context, snapshot, memory, insights, actions: collectActions(result), capabilities, sourceIndex, route };
   }
 
   throw new Error('Ο Brain σταμάτησε μετά από πολλά tool calls.');

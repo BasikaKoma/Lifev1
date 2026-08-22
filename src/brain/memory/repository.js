@@ -1,8 +1,90 @@
 import { listOpenConversations, normalizeConversation } from '../conversations';
 import { pullCloudBundle, pushCloudBundle, deleteCloudConversation } from './cloudStore';
-import { loadLocalBundle, saveLocalBundle, saveLocalMemories, saveLocalProfile } from './localStore';
+import { loadLocalBundle, loadLocalProfile, saveLocalBundle, saveLocalMemories, saveLocalProfile } from './localStore';
 import { createMemory, isNewer, normalizeMemory, normalizeProfile, nowIso } from './normalize';
+import { DURABLE_KINDS, IDENTITY_KINDS } from './kinds';
 import { normalizeSearchText } from '../snapshot/loadAppCatalog';
+
+const SEARCH_STOPWORDS = new Set([
+  'the', 'and', 'for', 'with', 'this', 'that', 'from', 'have', 'what', 'when',
+  'your', 'you', 'are', 'was', 'can', 'how', 'why', 'please',
+  'και', 'για', 'να', 'το', 'τα', 'τη', 'την', 'του', 'των', 'με', 'μου', 'σου',
+  'που', 'πως', 'τι', 'αν', 'δε', 'δεν', 'θα', 'ειναι', 'μια', 'ενα', 'στο', 'στη', 'στην',
+]);
+
+function tokensFrom(text) {
+  return normalizeSearchText(text)
+    .split(' ')
+    .filter((token) => token.length >= 3 && !SEARCH_STOPWORDS.has(token));
+}
+
+function memoryKey(memory) {
+  return `${memory.kind}:${normalizeSearchText(memory.title).slice(0, 64)}`;
+}
+
+function appendUnique(existing, addition, max = 800) {
+  const next = String(addition || '').trim();
+  if (!next) return existing;
+  const current = String(existing || '').trim();
+  if (!current) return next.slice(0, max);
+  if (normalizeSearchText(current).includes(normalizeSearchText(next).slice(0, 48))) return current;
+  const merged = `${current}\n${next}`;
+  return merged.length <= max ? merged : current;
+}
+
+function foldMemoriesIntoProfile(memories) {
+  const profile = loadLocalProfile();
+  const next = { ...profile, preferences: { ...(profile.preferences || {}) }, laws: [...(profile.laws || [])] };
+  let changed = false;
+
+  for (const memory of memories || []) {
+    if (memory.kind === 'preference') {
+      const key = normalizeSearchText(memory.title).replace(/\s+/g, '_').slice(0, 40) || 'note';
+      if (!next.preferences[key]) {
+        next.preferences[key] = String(memory.body || '').slice(0, 200);
+        changed = true;
+      }
+      continue;
+    }
+    if (memory.kind === 'style' && !String(next.style || '').trim()) {
+      next.style = String(memory.body || '').slice(0, 400);
+      changed = true;
+      continue;
+    }
+    if (memory.kind === 'brand' && !String(next.brand || '').trim()) {
+      next.brand = String(memory.body || '').slice(0, 400);
+      changed = true;
+      continue;
+    }
+    if (memory.kind === 'value') {
+      const merged = appendUnique(next.values, memory.body, 800);
+      if (merged !== next.values) {
+        next.values = merged;
+        changed = true;
+      }
+    }
+    if (memory.kind === 'goal') {
+      const merged = appendUnique(next.goals, memory.body, 800);
+      if (merged !== next.goals) {
+        next.goals = merged;
+        changed = true;
+      }
+    }
+    if (memory.kind === 'law') {
+      const text = String(memory.body || memory.title || '').replace(/\s+/g, ' ').trim();
+      if (text) {
+        const laws = Array.isArray(next.laws) ? [...next.laws] : [];
+        const exists = laws.some((law) => normalizeSearchText(law) === normalizeSearchText(text));
+        if (!exists && laws.length < 10) {
+          next.laws = [...laws, text.slice(0, 180)];
+          changed = true;
+        }
+      }
+    }
+  }
+
+  if (changed) persistProfile(next);
+}
 
 function mergeById(localItems, cloudItems, getUpdatedAt) {
   const map = new Map();
@@ -136,16 +218,82 @@ export async function archiveConversationRemote(id) {
   }
 }
 
+export function persistLearnedMemories(incoming = [], { conversationId = null } = {}) {
+  const learned = incoming
+    .map((item) => normalizeMemory({
+      ...item,
+      status: 'current',
+      sourceKind: item.sourceKind || 'brain',
+      conversationId: item.conversationId || conversationId || null,
+    }))
+    .filter((item) => item && DURABLE_KINDS.includes(item.kind));
+
+  if (!learned.length) return [];
+
+  const existing = loadLocalBundle().memories;
+  const currentByKey = new Map();
+  for (const item of existing) {
+    if (item.status === 'current') currentByKey.set(memoryKey(item), item);
+  }
+
+  const nextById = new Map(existing.map((item) => [item.id, item]));
+  const created = [];
+
+  for (const item of learned) {
+    const key = memoryKey(item);
+    const previous = currentByKey.get(key);
+    if (previous && normalizeSearchText(previous.body) === normalizeSearchText(item.body)) continue;
+    if (previous) {
+      nextById.set(previous.id, {
+        ...previous,
+        status: 'superseded',
+        supersededBy: item.id,
+        updatedAt: nowIso(),
+      });
+    }
+    nextById.set(item.id, item);
+    currentByKey.set(key, item);
+    created.push(item);
+  }
+
+  if (!created.length) return [];
+
+  const memories = [...nextById.values()].sort((a, b) => (
+    String(b.updatedAt || '').localeCompare(String(a.updatedAt || ''))
+  ));
+  saveLocalMemories(memories);
+  pushCloudBundle(loadLocalBundle()).catch(() => {});
+  foldMemoriesIntoProfile(created);
+  return created;
+}
+
 export function searchMemories(query, { status = 'current', limit = 12 } = {}) {
-  const needle = normalizeSearchText(query);
   const memories = loadLocalBundle().memories.filter((item) => !status || item.status === status);
-  if (!needle) return memories.slice(0, limit);
+  const tokens = tokensFrom(query);
+  if (!tokens.length) {
+    return memories
+      .filter((item) => DURABLE_KINDS.includes(item.kind))
+      .slice(0, limit);
+  }
+
   return memories
-    .filter((item) => {
+    .map((item) => {
       const hay = normalizeSearchText(`${item.title} ${item.body} ${item.kind}`);
-      return hay.includes(needle);
+      let score = 0;
+      for (const token of tokens) {
+        if (hay.includes(token)) score += token.length >= 6 ? 2 : 1;
+      }
+      if (!score) return { item, score: 0 };
+      if (DURABLE_KINDS.includes(item.kind)) score += 2;
+      if (IDENTITY_KINDS.includes(item.kind)) score += 2;
+      if (item.sourceKind === 'user') score += 1;
+      if (item.kind === 'insight' || item.kind === 'draft') score -= 1;
+      return { item, score };
     })
-    .slice(0, limit);
+    .filter((row) => row.score > 0)
+    .sort((a, b) => b.score - a.score || String(b.item.updatedAt || '').localeCompare(String(a.item.updatedAt || '')))
+    .slice(0, limit)
+    .map((row) => row.item);
 }
 
 export function currentMemoriesByKind(kinds = []) {

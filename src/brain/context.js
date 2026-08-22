@@ -15,7 +15,7 @@ export function normalizeBrainContext(raw = {}) {
     selectedProjectId: typeof raw.selectedProjectId === 'string' ? raw.selectedProjectId : null,
     selectedCheckpointId: typeof raw.selectedCheckpointId === 'string' ? raw.selectedCheckpointId : null,
     selectedStageId: typeof raw.selectedStageId === 'string' ? raw.selectedStageId : null,
-    openedFrom: raw.openedFrom === 'lifeline' ? 'lifeline' : 'lifeline',
+    openedFrom: raw.openedFrom === 'project' ? 'project' : 'lifeline',
     capturedAt: typeof raw.capturedAt === 'string' ? raw.capturedAt : null,
   };
 }
@@ -38,6 +38,6 @@ export function formatBrainContextLabel(context, extras = {}) {
   if (extras.projectTitle) parts.push(extras.projectTitle);
   if (extras.checkpointTitle) parts.push(extras.checkpointTitle);
   if (extras.stageTitle) parts.push(extras.stageTitle);
-  if (!parts.length) return 'Lifeline · τώρα';
+  if (!parts.length) return extras.openedFrom === 'project' ? 'Project · τώρα' : 'Lifeline · τώρα';
   return parts.join(' · ');
 }

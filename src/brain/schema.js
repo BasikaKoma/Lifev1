@@ -1,7 +1,7 @@
 export const BRAIN_INSIGHTS_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['insights'],
+  required: ['insights', 'newMemories', 'actions'],
   properties: {
     insights: {
       type: 'array',
@@ -15,6 +15,52 @@ export const BRAIN_INSIGHTS_SCHEMA = {
           body: { type: 'string' },
           confidence: { type: 'number' },
           sources: { type: 'array', items: { type: 'string' } },
+        },
+      },
+    },
+    newMemories: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['kind', 'title', 'body'],
+        properties: {
+          kind: {
+            type: 'string',
+            enum: ['decision', 'conclusion', 'preference', 'value', 'goal', 'style', 'brand', 'writing_example', 'law'],
+          },
+          title: { type: 'string' },
+          body: { type: 'string' },
+        },
+      },
+    },
+    actions: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['type', 'title', 'body', 'stageTitle', 'projectTitle', 'items'],
+        properties: {
+          type: {
+            type: 'string',
+            enum: [
+              'create_project',
+              'create_stage',
+              'create_checkpoint',
+              'create_goal',
+              'create_note',
+              'create_idea',
+              'complete_checkpoint',
+              'update_checkpoint',
+              'update_note',
+              'open_project',
+            ],
+          },
+          title: { type: 'string' },
+          body: { type: 'string' },
+          stageTitle: { type: 'string' },
+          projectTitle: { type: 'string' },
+          items: { type: 'array', items: { type: 'string' } },
         },
       },
     },

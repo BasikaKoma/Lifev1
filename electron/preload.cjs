@@ -20,6 +20,12 @@ contextBridge.exposeInMainWorld('electronScale', {
   },
 });
 
+contextBridge.exposeInMainWorld('electronCameras', {
+  snapshot(camera) {
+    return ipcRenderer.invoke('cameras:snapshot', camera);
+  },
+});
+
 contextBridge.exposeInMainWorld('electronBrain', {
   pickFolder() {
     return ipcRenderer.invoke('brain:pick-folder');

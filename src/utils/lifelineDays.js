@@ -5,6 +5,7 @@ import { toDateString, parseDate } from './lifeline';
 import { normalizeDayMetrics } from './lifelineSelfMetrics';
 import { normalizeSelfHubDayEntry } from './selfHubDays';
 import { normalizeRoutineLog } from './lifelineRoutines';
+import { normalizeTimelineSnapshot } from './selfHubTimelineEvents';
 
 export {
   createRoutineTemplate,
@@ -54,6 +55,7 @@ export function createEmptyDayEntry() {
     metrics: null,
     projectSnapshot: null,
     hubSnapshot: null,
+    timelineSnapshot: null,
     archivedAt: null,
     archivedFrom: null,
   };
@@ -79,6 +81,7 @@ export function getDayEntry(lifelineDays, dateStr) {
     metrics: normalizeDayMetrics(entry.metrics),
     projectSnapshot: normalizeProjectSnapshotArchive(entry.projectSnapshot),
     hubSnapshot: normalizeHubSnapshotArchive(entry.hubSnapshot),
+    timelineSnapshot: normalizeTimelineSnapshot(entry.timelineSnapshot),
     archivedAt: typeof entry.archivedAt === 'string' ? entry.archivedAt : null,
     archivedFrom: typeof entry.archivedFrom === 'string' ? entry.archivedFrom : null,
   };
@@ -103,6 +106,7 @@ export function normalizeLifelineDays(raw) {
       metrics: normalizeDayMetrics(entry?.metrics),
       projectSnapshot: normalizeProjectSnapshotArchive(entry?.projectSnapshot),
       hubSnapshot: normalizeHubSnapshotArchive(entry?.hubSnapshot),
+      timelineSnapshot: normalizeTimelineSnapshot(entry?.timelineSnapshot),
       archivedAt: typeof entry?.archivedAt === 'string' ? entry.archivedAt : null,
       archivedFrom: typeof entry?.archivedFrom === 'string' ? entry.archivedFrom : null,
     };
@@ -141,6 +145,7 @@ export function mergeLifelineDayEntry(cloud, local) {
     metrics: local.metrics || cloud.metrics || null,
     projectSnapshot: local.projectSnapshot || cloud.projectSnapshot || null,
     hubSnapshot: local.hubSnapshot || cloud.hubSnapshot || null,
+    timelineSnapshot: pickRicherObject(local.timelineSnapshot, cloud.timelineSnapshot),
     archivedAt: local.archivedAt || cloud.archivedAt || null,
     archivedFrom: local.archivedFrom || cloud.archivedFrom || null,
   };
@@ -178,14 +183,112 @@ export function patchMultipleDayEntries(lifelineDays, patchesByDate) {
 
 export function isTimestampOnDate(iso, dateStr) {
   if (!iso || !dateStr) return false;
-  return toDateString(iso) === toDateString(dateStr);
+  const target = toDateString(dateStr);
+  if (!target) return false;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return toDateString(iso) === target;
+  const local = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  return local === target;
+}
+
+export function mergeCompletedItems(...lists) {
+  const byKey = new Map();
+  for (const list of lists) {
+    if (!Array.isArray(list)) continue;
+    for (const item of list) {
+      if (!item?.id) continue;
+      const key = item.kind
+        ? `${item.kind}:${String(item.id).split(':').pop()}`
+        : item.id;
+      const prev = byKey.get(key);
+      if (!prev || (item.completedAt && !prev.completedAt)) byKey.set(key, item);
+    }
+  }
+  return [...byKey.values()];
+}
+
+export function collectCompletedCheckpointsFromStages(stages, dateStr, projectTitle = 'Project') {
+  if (!Array.isArray(stages) || !stages.length) return [];
+  return collectCompletedItemsForDate(
+    [{ id: 'current', title: projectTitle, stages }],
+    dateStr,
+  );
 }
 
 function pushCompletedItem(items, item) {
   if (item?.title) items.push(item);
 }
 
-/** Collect calendar dates with completed checkpoints, tasks, or notes across projects. */
+function itemActivityAt(item) {
+  return item?.completedAt || item?.archivedAt || item?.updatedAt || null;
+}
+
+const TASK_DONE = new Set(['Done']);
+const OBSTACLE_DONE = new Set(['Mitigated', 'Resolved']);
+const RESOURCE_DONE = new Set(['Secured']);
+const IDEA_DONE = new Set(['Executed']);
+
+function isCanvasComplete(item, completeStatuses) {
+  if (!item) return false;
+  if (item.done || item.archived) return true;
+  return completeStatuses.has(String(item.status || ''));
+}
+
+function timedCompletedItem(item) {
+  const at = item.completedAt || item.timestamp;
+  return {
+    ...item,
+    timeLabel: item.timeLabel || (at ? formatNoteClock(at) : ''),
+  };
+}
+
+function collectCanvasCompleted(items, {
+  kind,
+  projectId,
+  projectTitle,
+  dateStr,
+  completeStatuses,
+  titleOf,
+}) {
+  const out = [];
+  for (const item of items || []) {
+    if (!isCanvasComplete(item, completeStatuses)) continue;
+    const at = itemActivityAt(item);
+    if (!isTimestampOnDate(at, dateStr)) continue;
+    pushCompletedItem(out, timedCompletedItem({
+      kind,
+      id: `${projectId}:${kind}:${item.id}`,
+      title: titleOf(item),
+      projectTitle,
+      stageTitle: null,
+      completedAt: at,
+    }));
+  }
+  return out;
+}
+
+function isStageComplete(stage) {
+  return stage?.status === 'Done' || Boolean(stage?.done);
+}
+
+/** Prefer the stage stamp; otherwise the last finished checkpoint. */
+function stageCompletedAt(stage) {
+  if (stage?.completedAt) return stage.completedAt;
+  if (stage?.archivedAt) return stage.archivedAt;
+  let latest = 0;
+  let latestIso = null;
+  for (const checkpoint of stage?.checkpoints || []) {
+    const iso = checkpoint?.completedAt || checkpoint?.archivedAt;
+    if (!iso) continue;
+    const time = new Date(iso).getTime();
+    if (!Number.isFinite(time) || time <= latest) continue;
+    latest = time;
+    latestIso = iso;
+  }
+  return latestIso;
+}
+
+/** Collect calendar dates with completed milestones, checkpoints, tasks, or notes across projects. */
 export function collectLifelineActivityDates(projects) {
   const dates = new Set();
   if (!projects?.length) return dates;
@@ -197,9 +300,16 @@ export function collectLifelineActivityDates(projects) {
 
   for (const project of projects) {
     for (const stage of project.stages || []) {
+      if (isStageComplete(stage)) {
+        addDate(stageCompletedAt(stage));
+      }
       for (const checkpoint of stage.checkpoints || []) {
         if (!checkpoint.done && !checkpoint.archived) continue;
         addDate(checkpoint.completedAt || checkpoint.archivedAt);
+      }
+      for (const idea of stage.ideas || []) {
+        if (!isCanvasComplete(idea, IDEA_DONE)) continue;
+        addDate(itemActivityAt(idea));
       }
     }
 
@@ -209,16 +319,65 @@ export function collectLifelineActivityDates(projects) {
     }
 
     for (const task of project.canvasTasks || []) {
-      const done = task.status === 'Done' || task.done === true;
-      if (!done) continue;
-      addDate(task.completedAt || task.updatedAt);
+      if (!isCanvasComplete(task, TASK_DONE)) continue;
+      addDate(itemActivityAt(task));
+    }
+
+    for (const obstacle of project.canvasObstacles || []) {
+      if (!isCanvasComplete(obstacle, OBSTACLE_DONE)) continue;
+      addDate(itemActivityAt(obstacle));
+    }
+
+    for (const resource of project.canvasResources || []) {
+      if (!isCanvasComplete(resource, RESOURCE_DONE)) continue;
+      addDate(itemActivityAt(resource));
+    }
+
+    for (const sticky of project.canvasStickies || []) {
+      if (!isItemDone(sticky)) continue;
+      addDate(itemActivityAt(sticky));
     }
   }
 
   return dates;
 }
 
-/** Collect checkpoints, tasks, and notes completed on a given day across projects. */
+/**
+ * Overlay the currently loaded project onto activity snapshots.
+ * Lifeline stages stay out of "today in projects" work items, but its notes
+ * (Inbox captures) must still appear in Self / day views.
+ */
+export function mergeLiveProjectActivity(projectActivity, liveProject) {
+  if (!liveProject?.id) return projectActivity || [];
+
+  const list = [...(projectActivity || [])];
+  const idx = list.findIndex((project) => project.id === liveProject.id);
+  const isLifeline = liveProject.isLifeline === true;
+  const overlay = {
+    id: liveProject.id,
+    title: liveProject.title || (isLifeline ? 'Lifeline' : 'Project'),
+    notes: liveProject.notes || [],
+    canvasTasks: liveProject.canvasTasks || [],
+    canvasObstacles: liveProject.canvasObstacles || [],
+    canvasResources: liveProject.canvasResources || [],
+    canvasStickies: liveProject.canvasStickies || [],
+    stages: isLifeline ? [] : liveProject.stages || [],
+  };
+
+  if (idx >= 0) {
+    list[idx] = {
+      ...list[idx],
+      ...overlay,
+      stages: isLifeline ? list[idx].stages || [] : overlay.stages,
+    };
+    return list;
+  }
+
+  list.push(overlay);
+  return list;
+}
+
+/** Collect milestones, checkpoints, tasks, and notes completed on a given day across projects. */
 export function collectCompletedItemsForDate(projects, dateStr) {
   const target = toDateString(dateStr);
   if (!target || !projects?.length) return [];
@@ -229,48 +388,96 @@ export function collectCompletedItemsForDate(projects, dateStr) {
     const projectTitle = project.title || 'Project';
 
     for (const stage of project.stages || []) {
+      if (isStageComplete(stage)) {
+        const at = stageCompletedAt(stage);
+        if (isTimestampOnDate(at, target)) {
+          pushCompletedItem(items, timedCompletedItem({
+            kind: 'milestone',
+            id: `${project.id}:${stage.id}`,
+            title: stage.title || 'Milestone',
+            projectTitle,
+            stageTitle: null,
+            completedAt: at,
+          }));
+        }
+      }
       for (const checkpoint of stage.checkpoints || []) {
         if (!checkpoint.done && !checkpoint.archived) continue;
         const at = checkpoint.completedAt || checkpoint.archivedAt;
         if (!isTimestampOnDate(at, target)) continue;
-        pushCompletedItem(items, {
+        pushCompletedItem(items, timedCompletedItem({
           kind: 'checkpoint',
           id: `${project.id}:${stage.id}:${checkpoint.id}`,
           title: checkpoint.title || checkpoint.metricName || 'Checkpoint',
           projectTitle,
           stageTitle: stage.title,
           completedAt: at,
-        });
+        }));
       }
+      items.push(...collectCanvasCompleted(stage.ideas, {
+        kind: 'idea',
+        projectId: project.id,
+        projectTitle,
+        dateStr: target,
+        completeStatuses: IDEA_DONE,
+        titleOf: (idea) => idea.title || 'Ιδέα',
+      }).map((item) => ({ ...item, stageTitle: stage.title })));
     }
 
     for (const note of project.notes || []) {
       if (!isItemDone(note)) continue;
       const at = note.completedAt || note.archivedAt || note.updatedAt;
       if (!isTimestampOnDate(at, target)) continue;
-      pushCompletedItem(items, {
+      pushCompletedItem(items, timedCompletedItem({
         kind: 'note',
         id: `${project.id}:note:${note.id}`,
         title: note.title || note.body?.slice(0, 80) || 'Σημείωση',
         projectTitle,
         stageTitle: null,
         completedAt: at,
-      });
+      }));
     }
 
-    for (const task of project.canvasTasks || []) {
-      const done = task.status === 'Done' || task.done === true;
-      if (!done) continue;
-      const at = task.completedAt || task.updatedAt;
-      if (!isTimestampOnDate(at, target)) continue;
-      pushCompletedItem(items, {
+    items.push(
+      ...collectCanvasCompleted(project.canvasTasks, {
         kind: 'task',
-        id: `${project.id}:task:${task.id}`,
-        title: task.title || 'Task',
+        projectId: project.id,
+        projectTitle,
+        dateStr: target,
+        completeStatuses: TASK_DONE,
+        titleOf: (task) => task.title || 'Task',
+      }),
+      ...collectCanvasCompleted(project.canvasObstacles, {
+        kind: 'obstacle',
+        projectId: project.id,
+        projectTitle,
+        dateStr: target,
+        completeStatuses: OBSTACLE_DONE,
+        titleOf: (obstacle) => obstacle.title || 'Obstacle',
+      }),
+      ...collectCanvasCompleted(project.canvasResources, {
+        kind: 'resource',
+        projectId: project.id,
+        projectTitle,
+        dateStr: target,
+        completeStatuses: RESOURCE_DONE,
+        titleOf: (resource) => resource.title || 'Resource',
+      }),
+    );
+
+    for (const sticky of project.canvasStickies || []) {
+      if (!isItemDone(sticky)) continue;
+      const at = itemActivityAt(sticky);
+      if (!isTimestampOnDate(at, target)) continue;
+      const isImage = Boolean(sticky.imageSrc);
+      pushCompletedItem(items, timedCompletedItem({
+        kind: isImage ? 'image' : 'sticky',
+        id: `${project.id}:${isImage ? 'image' : 'sticky'}:${sticky.id}`,
+        title: sticky.text?.trim()?.slice(0, 80) || (isImage ? 'Εικόνα' : 'Σημείωση'),
         projectTitle,
         stageTitle: null,
         completedAt: at,
-      });
+      }));
     }
   }
 
@@ -285,20 +492,27 @@ export function collectNotesCreatedForDate(projects, dateStr) {
   if (!target || !projects?.length) return [];
 
   const items = [];
+  const today = toDateString(new Date());
 
   for (const project of projects) {
     const projectTitle = project.title || 'Project';
 
     for (const note of project.notes || []) {
-      if (note.archived) continue;
-      if (!isTimestampOnDate(note.createdAt, target)) continue;
+      if (!note || typeof note !== 'object' || note.archived) continue;
+      const created = note.createdAt || note.updatedAt;
+      if (created) {
+        if (!isTimestampOnDate(created, target)) continue;
+      } else if (target !== today) {
+        continue;
+      }
       pushCompletedItem(items, {
         kind: 'note',
         id: `${project.id}:note:${note.id}`,
         title: note.title || note.body?.slice(0, 80) || 'Σημείωση',
         projectTitle,
         stageTitle: null,
-        timestamp: note.createdAt,
+        timeLabel: created ? formatNoteClock(created) : '',
+        timestamp: created || null,
       });
     }
   }
@@ -306,6 +520,109 @@ export function collectNotesCreatedForDate(projects, dateStr) {
   return items.sort(
     (a, b) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime()
   );
+}
+
+export function formatNoteClock(isoOrDate = new Date()) {
+  if (typeof isoOrDate === 'string' && /^\d{1,2}:\d{2}$/.test(isoOrDate.trim())) {
+    const [hours, minutes] = isoOrDate.trim().split(':');
+    return `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`;
+  }
+  const date = isoOrDate instanceof Date ? isoOrDate : new Date(isoOrDate);
+  if (Number.isNaN(date.getTime())) return '';
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+const NOTE_TIME_PREFIX = /^(\d{1,2}:\d{2})\s*[—–-]\s*/;
+const NOTE_TIME_LINE = /^(\d{1,2}:\d{2})\s*\n/;
+
+function hasNoteTimePrefix(text) {
+  const value = String(text || '').trim();
+  return NOTE_TIME_PREFIX.test(value) || NOTE_TIME_LINE.test(value);
+}
+
+export function stampNoteText(text, at = new Date()) {
+  const body = String(text || '').trim();
+  if (!body) return '';
+  if (hasNoteTimePrefix(body)) return body;
+  const clock = formatNoteClock(at);
+  if (!clock) return body;
+  return body.includes('\n') ? `${clock}\n${body}` : `${clock} — ${body}`;
+}
+
+function timestampFromDateAndClock(dateStr, clock) {
+  const target = toDateString(dateStr);
+  const match = String(clock || '').match(/^(\d{1,2}):(\d{2})$/);
+  if (!target || !match) return null;
+  const [year, month, day] = target.split('-').map(Number);
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const date = new Date(year, month - 1, day, hours, minutes, 0);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+export function parseStampedNote(chunk, dateStr) {
+  const text = String(chunk || '').trim();
+  const prefixed = text.match(NOTE_TIME_PREFIX);
+  const lined = !prefixed ? text.match(NOTE_TIME_LINE) : null;
+  const clock = prefixed?.[1] || lined?.[1] || '';
+  const body = prefixed
+    ? text.slice(prefixed[0].length).trim()
+    : lined
+      ? text.slice(lined[0].length).trim()
+      : text;
+  return {
+    timeLabel: clock ? formatNoteClock(clock) : '',
+    title: (body.split('\n')[0] || clock || 'Σημείωση').slice(0, 120),
+    timestamp: clock ? timestampFromDateAndClock(dateStr, clock) : null,
+  };
+}
+
+export function stampNewJournalBlocks(previous, next, at = new Date()) {
+  const prevBlocks = String(previous || '')
+    .split(/\n\s*\n/)
+    .map((chunk) => chunk.trim())
+    .filter(Boolean);
+  const nextBlocks = String(next || '')
+    .split(/\n\s*\n/)
+    .map((chunk) => chunk.trim())
+    .filter(Boolean);
+  if (!nextBlocks.length) return '';
+  return nextBlocks
+    .map((block) => (prevBlocks.includes(block) || hasNoteTimePrefix(block) ? block : stampNoteText(block, at)))
+    .join('\n\n');
+}
+
+export function appendDayJournalNote(existing, text, at = new Date()) {
+  const prev = String(existing || '').trim();
+  const raw = String(text || '').trim();
+  const next = stampNoteText(raw, at);
+  if (!next) return prev;
+  if (!prev) return next;
+  if (raw && prev.includes(raw)) return prev;
+  if (prev.includes(next)) return prev;
+  return `${prev}\n\n${next}`;
+}
+
+export function collectJournalNotesForDate(journalText, dateStr) {
+  const target = toDateString(dateStr);
+  const text = String(journalText || '').trim();
+  if (!target || !text) return [];
+  return text
+    .split(/\n\s*\n/)
+    .map((chunk) => chunk.trim())
+    .filter(Boolean)
+    .map((chunk, index) => {
+      const parsed = parseStampedNote(chunk, target);
+      return {
+        kind: 'note',
+        id: `journal:${target}:${index}`,
+        title: parsed.title,
+        projectTitle: 'Lifeline',
+        stageTitle: null,
+        timeLabel: parsed.timeLabel,
+        timestamp: parsed.timestamp,
+      };
+    });
 }
 
 /** Collect checkpoints and canvas tasks scheduled for a given day across projects. */
@@ -368,8 +685,14 @@ export function formatFullDayLabel(dateStr) {
 }
 
 export function kindLabel(kind) {
+  if (kind === 'milestone') return 'Milestone';
   if (kind === 'checkpoint') return 'Checkpoint';
   if (kind === 'task') return 'Task';
+  if (kind === 'obstacle') return 'Obstacle';
+  if (kind === 'resource') return 'Resource';
+  if (kind === 'idea') return 'Ιδέα';
+  if (kind === 'image') return 'Εικόνα';
+  if (kind === 'sticky') return 'Σημείωση';
   if (kind === 'note') return 'Σημείωση';
   return 'Item';
 }

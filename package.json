@@ -1,7 +1,7 @@
 {
   "name": "lifev1",
   "private": true,
-  "version": "1.0.39",
+  "version": "1.0.40",
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
@@ -15,7 +15,7 @@
     "cap:dev": "node scripts/cap-dev-live.cjs",
     "cap:dev:restore": "node scripts/cap-dev-live.cjs restore",
     "cap:build:apk": "node scripts/cap-build-apk.cjs",
-    "web:deploy": "npm run build && npx wrangler pages deploy dist --project-name=lifev1-app --config wrangler.app.toml --commit-dirty=true",
+    "web:deploy": "npm run build && npx wrangler pages deploy dist --project-name=lifev1-app --commit-dirty=true",
     "electron:dev": "concurrently -k \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "electron:watch": "concurrently -k \"vite build --watch\" \"node scripts/electron-watch.cjs\"",
     "electron:clean": "node scripts/clean-release.cjs",

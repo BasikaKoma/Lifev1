@@ -141,7 +141,14 @@ function NoteCard({ note, stages, categoryOptions, onUpdate, onDelete, onToggleC
           <CheckpointLinkBadges ids={note.linkedCheckpointIds} stages={stages} />
           <p className="note-card__body">{note.body || <em>No content</em>}</p>
           <span className="note-card__date">
-            {new Date(note.updatedAt || note.createdAt).toLocaleDateString()}
+            {note.createdAt
+              ? new Date(note.createdAt).toLocaleString('el-GR', {
+                  day: 'numeric',
+                  month: 'short',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })
+              : new Date(note.updatedAt).toLocaleDateString()}
           </span>
         </>
       )}

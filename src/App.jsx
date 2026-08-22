@@ -2,18 +2,18 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from './hooks/useAuth';
 import { useAppState } from './hooks/useAppState';
 import { filterRegularProjects } from './utils/lifeline';
+import { mergeLiveProjectActivity } from './utils/lifelineDays';
 import { getSupabaseConfigError, isSupabaseConfigured } from './lib/supabase';
 import { Sidebar } from './components/Sidebar';
-import { BusinessPath } from './components/BusinessPath';
 import { RoadmapCanvas } from './components/RoadmapCanvas';
 import { LifelineWorkspace } from './components/brain/LifelineWorkspace';
 import { CurrentFocusPanel } from './components/CurrentFocusPanel';
 import { DoNotStartYet } from './components/DoNotStartYet';
 import { StageDetails } from './components/StageDetails';
 import { WorkspaceView } from './components/WorkspaceView';
-import { GlobalRoadmapView } from './components/GlobalRoadmapView';
 import { SettingsView } from './components/SettingsView';
 import { SelfView } from './components/SelfView';
+import { CallsView } from './components/CallsView';
 import { OuraConnectModal } from './components/OuraConnectModal';
 import { AssistantOrb } from './components/AssistantOrb';
 import { QuickNoteOrb } from './components/QuickNoteOrb';
@@ -29,9 +29,13 @@ import { buildSelfHubView } from './utils/selfHubData';
 import { useHealthData } from './hooks/useHealthData';
 import { useScale, saveScaleProfile } from './hooks/useScale';
 import { ScaleConnectModal } from './components/ScaleConnectModal';
+import { CamerasConnectModal } from './components/CamerasConnectModal';
+import { CamerasView } from './components/CamerasView';
+import { PersonalBrandView } from './components/brand/PersonalBrandView';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { platform } from './platform';
 import { useMobilePinchZoom } from './hooks/useMobilePinchZoom';
+import { useCameras } from './hooks/useCameras';
 import * as deepLink from './platform/deepLink';
 import { installOfflineFlush } from './lib/sync/offlineQueue';
 import { upsertMetricsBatch } from './lib/health/healthMetrics';
@@ -88,6 +92,10 @@ function MainApp({ user, onSignOut }) {
     canvasInk,
     mapTheme,
     updateMapTheme,
+    lifelineRoutineTemplates,
+    updateLifelineRoutineTemplates,
+    lifelineNorthStars,
+    updateLifelineNorthStars,
     selectedStageId,
     focusMode,
     activeView,
@@ -185,6 +193,7 @@ function MainApp({ user, onSignOut }) {
     updateNote,
     deleteNote,
     applyAssistantIntents,
+    applyBrainActions,
     applySmartCapture,
     undoSmartCapture,
   } = useAppState(user?.id);
@@ -245,6 +254,7 @@ function MainApp({ user, onSignOut }) {
 
   const [ouraModalOpen, setOuraModalOpen] = useState(false);
   const [scaleModalOpen, setScaleModalOpen] = useState(false);
+  const [camerasModalOpen, setCamerasModalOpen] = useState(false);
   const [canvasFullscreen, setCanvasFullscreen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try {
@@ -265,6 +275,26 @@ function MainApp({ user, onSignOut }) {
     onWeightSaved: handleWeightSaved,
   });
 
+  const cameras = useCameras({
+    pollWhenActive: activeView === 'devices' || camerasModalOpen,
+  });
+
+  const hubProjectActivity = useMemo(
+    () =>
+      mergeLiveProjectActivity(projectActivity, {
+        id: projectId,
+        title: projectTitle,
+        stages,
+        notes,
+        canvasTasks,
+        canvasObstacles,
+        canvasResources,
+        canvasStickies,
+        isLifeline,
+      }),
+    [projectActivity, projectId, projectTitle, stages, notes, canvasTasks, canvasObstacles, canvasResources, canvasStickies, isLifeline],
+  );
+
   const hubView = useMemo(
     () =>
       buildSelfHubView({
@@ -274,8 +304,10 @@ function MainApp({ user, onSignOut }) {
         scaleConnected: scale.isLinked,
         stages,
         ouraRow: ouraMetricsRow,
-        projectActivity,
+        projectActivity: hubProjectActivity,
         selfHubDays,
+        isLifeline,
+        lifelineDays,
       }),
     [
       selfData,
@@ -284,8 +316,10 @@ function MainApp({ user, onSignOut }) {
       scale.isLinked,
       stages,
       ouraMetricsRow,
-      projectActivity,
+      hubProjectActivity,
       selfHubDays,
+      isLifeline,
+      lifelineDays,
     ],
   );
 
@@ -294,19 +328,20 @@ function MainApp({ user, onSignOut }) {
     activeView,
     selfData,
     hubView,
-    projectActivity,
+    projectActivity: hubProjectActivity,
     healthMetrics,
     ouraRow: ouraMetricsRow,
     onCapture: captureSelfHubLiveDay,
   });
 
   const pinchZoomEnabled =
-    platform.isMobile && !canvasFullscreen && activeView !== 'roadmap' && activeView !== 'overview';
+    platform.isMobile && !canvasFullscreen && activeView !== 'roadmap';
   const pinchRef = useMobilePinchZoom(pinchZoomEnabled);
 
   const handleNavigate = (view) => {
     setFocusMode(false);
-    const keepsLifelineProject = view === 'self' || view === 'settings' || view === 'overview';
+    const keepsLifelineProject =
+      view === 'self' || view === 'brand' || view === 'settings' || view === 'review' || view === 'devices';
     if (isLifeline && !keepsLifelineProject) {
       const regular = filterRegularProjects(projectList);
       const target = regular.find((p) => p.id === projectId && !p.isLifeline) || regular[0];
@@ -314,6 +349,7 @@ function MainApp({ user, onSignOut }) {
         switchProject(target.id).then(() => setActiveView(view));
         return;
       }
+      if (!target && view === 'workspace') return;
     }
     setActiveView(view);
   };
@@ -395,12 +431,12 @@ function MainApp({ user, onSignOut }) {
   }, [activeView, setActiveView]);
 
   useEffect(() => {
-    if (activeView !== 'roadmap') setCanvasFullscreen(false);
-  }, [activeView]);
+    if (isLifeline && activeView === 'workspace') setActiveView('roadmap');
+  }, [isLifeline, activeView, setActiveView]);
 
   useEffect(() => {
-    if (!isLifeline && brainMode !== 'closed') setBrainMode('closed');
-  }, [isLifeline, brainMode]);
+    if (activeView !== 'roadmap') setCanvasFullscreen(false);
+  }, [activeView]);
 
   useEffect(() => {
     if (selectedStage) setCanvasFullscreen(false);
@@ -417,6 +453,25 @@ function MainApp({ user, onSignOut }) {
   const handleSelectStage = (stageId) => {
     openStage(stageId);
   };
+
+  const handleOpenBrainSource = useCallback(async (source) => {
+    if (!source) return;
+    if (source.kind === 'brand') {
+      setActiveView('brand');
+      return;
+    }
+    if (source.kind === 'self') {
+      setActiveView('self');
+      return;
+    }
+    if (source.kind === 'lifeline-day') {
+      await openLifeline();
+      return;
+    }
+    if (source.projectId) {
+      await openProjectRoadmap(source.projectId, source.stageId || null);
+    }
+  }, [openLifeline, openProjectRoadmap, setActiveView]);
 
   if (loading) {
     return (
@@ -485,15 +540,6 @@ function MainApp({ user, onSignOut }) {
     }
 
     switch (activeView) {
-      case 'overview':
-        return (
-          <GlobalRoadmapView
-            currentProjectId={projectId}
-            projectList={projectList}
-            onSelectStage={(id, stageId) => openProjectRoadmap(id, stageId)}
-            onOpenProject={(id) => openProjectRoadmap(id)}
-          />
-        );
       case 'roadmap': {
         const canvas = (
           <RoadmapCanvas
@@ -558,6 +604,7 @@ function MainApp({ user, onSignOut }) {
             isFullscreen={canvasFullscreen}
             onFullscreenChange={setCanvasFullscreen}
             isLifeline={isLifeline}
+            projectId={projectId}
             lifelineAnchors={lifelineAnchors}
             onUpdateLifelineAnchor={setLifelineAnchorDate}
             onAssignLifelineToday={assignLifelineAnchorToday}
@@ -565,33 +612,41 @@ function MainApp({ user, onSignOut }) {
             lifelineDays={lifelineDays}
             selfHubDays={selfHubDays}
             onUpdateLifelineDay={updateLifelineDay}
-            projectActivity={projectActivity}
+            projectActivity={hubProjectActivity}
             onRefreshProjectActivity={refreshProjectActivity}
             lifelineFocusToken={lifelineFocusToken}
             syncing={syncing}
             hasUnsavedChanges={hasUnsavedChanges}
             onSave={flushSaveNow}
-            onOpenWorkspace={!platform.isMobile ? () => handleNavigate('workspace') : undefined}
+            onOpenWorkspace={
+              !isLifeline && !platform.isMobile ? () => handleNavigate('workspace') : undefined
+            }
+            lifelineNorthStars={lifelineNorthStars}
+            onUpdateLifelineNorthStars={updateLifelineNorthStars}
           />
         );
-        if (!isLifeline) return canvas;
         return (
           <LifelineWorkspace
             brainMode={brainMode}
             onBrainModeChange={setBrainMode}
+            onApplyBrainActions={applyBrainActions}
+            onOpenSource={handleOpenBrainSource}
             snapshotInput={{
               selfData,
               lifelineDays,
               selfHubDays,
               projectList,
-              currentProject: { id: projectId, title: projectTitle },
+              projectActivity: hubProjectActivity,
+              currentProject: { id: projectId, title: projectTitle, isLifeline },
               stages,
               goals,
               notes,
+              northStars: lifelineNorthStars,
             }}
             contextExtras={{
               projectTitle,
               stageTitle: selectedStage?.title,
+              openedFrom: isLifeline ? 'lifeline' : 'project',
             }}
           >
             {canvas}
@@ -622,6 +677,7 @@ function MainApp({ user, onSignOut }) {
             onUpdateCheckpoint={updateCheckpoint}
             onAddTask={addCanvasTask}
             onUpdateTask={updateCanvasTask}
+            onBack={() => handleNavigate('roadmap')}
           />
         );
       case 'self':
@@ -644,11 +700,41 @@ function MainApp({ user, onSignOut }) {
             ouraRow={ouraMetricsRow}
             lifelineDays={lifelineDays}
             onUpdateLifelineDay={updateLifelineDay}
-            projectActivity={projectActivity}
+            projectActivity={hubProjectActivity}
+            notes={notes}
             selfHubDays={selfHubDays}
             mapTheme={mapTheme}
             onMapThemeChange={updateMapTheme}
+            isLifeline={isLifeline}
+            routineTemplates={lifelineRoutineTemplates}
+            onUpdateRoutineTemplates={updateLifelineRoutineTemplates}
             onRefreshProjectActivity={refreshProjectActivity}
+            northStars={lifelineNorthStars}
+            onUpdateNorthStars={updateLifelineNorthStars}
+          />
+        );
+      case 'brand':
+        return (
+          <PersonalBrandView
+            displayName={selfDisplayName}
+            lifelineDays={lifelineDays}
+            selfHubDays={selfHubDays}
+            projectActivity={hubProjectActivity}
+            projectList={projectList}
+          />
+        );
+      case 'review':
+        return <CallsView />;
+      case 'devices':
+        return (
+          <CamerasView
+            cameras={cameras.cameras}
+            frames={cameras.frames}
+            supported={cameras.supported}
+            liveId={cameras.liveId}
+            onSetLiveId={cameras.setLiveId}
+            onOpenManage={() => setCamerasModalOpen(true)}
+            onRefreshAll={cameras.refreshAll}
           />
         );
       case 'settings':
@@ -665,6 +751,10 @@ function MainApp({ user, onSignOut }) {
             ouraStatus={ouraStatus}
             onOpenOuraModal={() => setOuraModalOpen(true)}
             onOpenScaleModal={() => setScaleModalOpen(true)}
+            onOpenCamerasModal={() => setCamerasModalOpen(true)}
+            onOpenCamerasView={() => handleNavigate('devices')}
+            camerasConnected={cameras.connected}
+            cameraCount={cameras.cameras.length}
             scaleConnected={scale.isLinked}
             scaleBleConnected={scale.connected}
             scalePaired={scale.isLinked}
@@ -681,7 +771,7 @@ function MainApp({ user, onSignOut }) {
   };
 
   return (
-    <div className={`app ${focusMode ? 'app--focus' : ''} ${selectedStage ? 'app--detail' : ''} ${activeView === 'overview' ? 'app--overview' : ''} ${activeView === 'roadmap' && !selectedStage ? 'app--roadmap' : ''} ${activeView === 'self' ? 'app--self' : ''} ${activeView === 'settings' ? 'app--settings' : ''} ${canvasFullscreen ? 'app--canvas-fullscreen' : ''} ${sidebarCollapsed ? 'app--sidebar-collapsed' : ''} ${platform.isMobile ? 'app--mobile' : ''}`}>
+    <div className={`app ${focusMode ? 'app--focus' : ''} ${selectedStage ? 'app--detail' : ''} ${activeView === 'roadmap' && !selectedStage ? 'app--roadmap' : ''} ${activeView === 'self' ? 'app--self' : ''} ${activeView === 'brand' ? 'app--brand' : ''} ${activeView === 'settings' ? 'app--settings' : ''} ${activeView === 'review' ? 'app--review' : ''} ${activeView === 'devices' ? 'app--devices' : ''} ${canvasFullscreen ? 'app--canvas-fullscreen' : ''} ${sidebarCollapsed ? 'app--sidebar-collapsed' : ''} ${platform.isMobile ? 'app--mobile' : ''}`}>
       {!canvasFullscreen && !platform.isMobile && (
         <Sidebar
           activeView={activeView}
@@ -789,6 +879,18 @@ function MainApp({ user, onSignOut }) {
         backgroundCapture={scale.backgroundCapture}
         phoneCapture={scale.phoneCapture}
         debug={scale.debug}
+      />
+      <CamerasConnectModal
+        open={camerasModalOpen}
+        onClose={() => setCamerasModalOpen(false)}
+        cameras={cameras.cameras}
+        frames={cameras.frames}
+        supported={cameras.supported}
+        testingId={cameras.testingId}
+        onSave={cameras.saveCamera}
+        onDelete={cameras.deleteCamera}
+        onTest={cameras.testCamera}
+        onOpenView={() => handleNavigate('devices')}
       />
     </div>
   );

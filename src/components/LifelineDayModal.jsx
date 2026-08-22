@@ -8,15 +8,24 @@ import {
   getRoutineWeekScore,
   groupRoutinesByStack,
   kindLabel,
+  formatNoteClock,
   mergeDayRoutines,
   normalizeRoutineTemplates,
   ROUTINE_STACK_ORDER,
   ROUTINE_STACKS,
+  stampNewJournalBlocks,
   toggleRoutineDone,
 } from '../utils/lifelineDays';
 import { getSelfHubDayEntry } from '../utils/selfHubDays';
 import { resolveProjectDayForView } from '../utils/selfHubSync';
 import { localTodayIsoDate } from '../utils/selfDateUtils';
+import {
+  createDayProgressModel,
+  normalizeTimelineSnapshot,
+  resolveDayTimeline,
+  timelineSnapshotSignature,
+} from '../utils/selfHubTimelineEvents';
+import { SelfDayProgress } from './self/hub/SelfDayProgress';
 import { getDayLabView } from '../utils/lifelineSelfMetrics';
 import { healthMetricsToLifelinePatch } from '../lib/health/healthToLifeline';
 import { getSelfMetricVariant } from '../utils/selfMetricVariant';
@@ -31,6 +40,7 @@ import { SelfMetricCard } from './self/SelfMetricCard';
 import { SelfChart } from './self/SelfCharts';
 import { SelfIcon } from './self/SelfIcons';
 import './SelfView.css';
+import './selfHub.css';
 import './DayLab.css';
 
 /**
@@ -45,6 +55,7 @@ export function LifelineDayModal({
   selfHubDays = {},
   routineTemplates = [],
   projectActivity = [],
+  stages = [],
   onUpdateDay,
   onUpdateRoutineTemplates,
   onClose,
@@ -64,6 +75,7 @@ export function LifelineDayModal({
           ? hubEntry.journal.routines
           : lifelineEntry.routines,
       metrics: hubEntry.health || lifelineEntry.metrics,
+      timelineSnapshot: hubEntry.timeline || lifelineEntry.timelineSnapshot,
     };
   }, [lifelineDays, selfHubDays, date]);
   const [notes, setNotes] = useState(entry.notes);
@@ -98,12 +110,29 @@ export function LifelineDayModal({
     [lifelineDays, templates, date]
   );
 
-  const completed = useMemo(
+  const projectDay = useMemo(
     () =>
       date
-        ? resolveProjectDayForView({ selfHubDays, lifelineDays, date, projectActivity }).completed
-        : [],
-    [selfHubDays, lifelineDays, projectActivity, date],
+        ? resolveProjectDayForView({ selfHubDays, lifelineDays, date, projectActivity, stages })
+        : { completed: [], notes: [], scheduled: [] },
+    [selfHubDays, lifelineDays, projectActivity, stages, date],
+  );
+  const completed = projectDay.completed;
+
+  const timeline = useMemo(
+    () =>
+      resolveDayTimeline({
+        date,
+        ouraRow: ouraRowForDay,
+        routines: dayRoutines,
+        projectDay,
+        archived: entry.timelineSnapshot,
+      }),
+    [date, ouraRowForDay, dayRoutines, projectDay, entry.timelineSnapshot],
+  );
+  const dayProgress = useMemo(
+    () => createDayProgressModel({ date, segments: timeline.segments }),
+    [date, timeline.segments],
   );
 
   const visible =
@@ -180,19 +209,33 @@ export function LifelineDayModal({
 
   useEffect(() => {
     if (!visible) return;
-    setNotes(getDayEntry(lifelineDays, date).notes);
+    setNotes(entry.notes);
     setNewTodo('');
     setNewRoutineLabel('');
     setNewRoutineTime('');
-  }, [visible, date, lifelineDays]);
+  }, [visible, date, entry.notes]);
 
   const persistNotes = useCallback(
     (value) => {
       if (!date) return;
-      onUpdateDay?.(date, { notes: value });
+      onUpdateDay?.(date, { notes: stampNewJournalBlocks(entry.notes, value) });
     },
-    [date, onUpdateDay]
+    [date, entry.notes, onUpdateDay]
   );
+
+  useEffect(() => {
+    if (!visible || !date || timeline.source !== 'live') return;
+    const next = normalizeTimelineSnapshot({
+      events: timeline.events,
+      segments: timeline.segments,
+      capturedAt: new Date().toISOString(),
+    });
+    if (!next) return;
+    if (timelineSnapshotSignature(entry.timelineSnapshot) === timelineSnapshotSignature(next)) {
+      return;
+    }
+    onUpdateDay?.(date, { timelineSnapshot: next });
+  }, [visible, date, timeline, entry.timelineSnapshot, onUpdateDay]);
 
   const handleNotesBlur = () => {
     if (notes !== entry.notes) persistNotes(notes);
@@ -436,13 +479,30 @@ export function LifelineDayModal({
                 onChange={(e) => setNotes(e.target.value)}
                 onBlur={handleNotesBlur}
               />
+              {projectDay.notes.length > 0 ? (
+                <ul className="day-lab__list day-lab__captured-notes">
+                  {projectDay.notes.map((item) => (
+                    <li key={item.id} className="day-lab__completed-item">
+                      <span className="day-lab__kind day-lab__kind--note">
+                        {kindLabel(item.kind) || 'Σημείωση'}
+                      </span>
+                      <div>
+                        <span className="day-lab__completed-title">{item.title}</span>
+                        <span className="day-lab__completed-meta">
+                          {[item.timeLabel, item.projectTitle, item.stageTitle].filter(Boolean).join(' · ')}
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
             </section>
 
             <section className="day-lab__panel">
               <h3 className="day-lab__panel-title">Ολοκληρώθηκαν</h3>
               {completed.length === 0 ? (
                 <p className="day-lab__empty">
-                  Δεν βρέθηκαν checkpoints, tasks ή σημειώσεις που ολοκληρώθηκαν αυτή την ημέρα.
+                  Δεν βρέθηκαν ολοκληρωμένα αντικείμενα αυτή την ημέρα.
                 </p>
               ) : (
                 <ul className="day-lab__list">
@@ -454,8 +514,11 @@ export function LifelineDayModal({
                       <div>
                         <span className="day-lab__completed-title">{item.title}</span>
                         <span className="day-lab__completed-meta">
-                          {item.projectTitle}
-                          {item.stageTitle ? ` · ${item.stageTitle}` : ''}
+                          {[
+                            item.timeLabel || (item.completedAt ? formatNoteClock(item.completedAt) : ''),
+                            item.projectTitle,
+                            item.stageTitle,
+                          ].filter(Boolean).join(' · ')}
                         </span>
                       </div>
                     </li>
@@ -567,6 +630,15 @@ export function LifelineDayModal({
               </div>
             )}
           </aside>
+        </div>
+
+        <div className="day-lab__timeline">
+          <SelfDayProgress
+            dayProgress={dayProgress}
+            events={timeline.events}
+            embedded
+            live={date === localTodayIsoDate()}
+          />
         </div>
       </div>
     </div>

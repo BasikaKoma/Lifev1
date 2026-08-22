@@ -78,10 +78,37 @@ export function MilestoneCanvasCard({
     setEditingTitle(false);
   };
 
+  const compact = done && !isSelected;
+
+  const cardStyle = done
+    ? {
+        ...themeVars,
+        '--node-fill': '#064e3b',
+        '--node-text': '#ecfdf5',
+        '--node-border': '#ffffff',
+        '--node-accent': '#ffffff',
+        '--node-accent-border': '#ffffff',
+        '--node-accent-glow': 'rgba(52, 211, 153, 0.45)',
+        '--node-shadow': '0 0 0 1px rgba(167, 243, 208, 0.2), 0 0 18px rgba(16, 185, 129, 0.45)',
+        color: '#ecfdf5',
+        background: '#064e3b',
+        borderColor: '#ffffff',
+        boxShadow: '0 0 0 1px rgba(167, 243, 208, 0.2), 0 0 18px rgba(16, 185, 129, 0.45)',
+        ...(compact
+          ? {
+              '--node-padding': '8px 12px',
+              '--node-radius': '10px',
+              padding: '8px 12px',
+              borderRadius: '10px',
+            }
+          : {}),
+      }
+    : themeVars;
+
   return (
     <article
-      className={`milestone-canvas-card canvas-node canvas-node--typed milestone-canvas-card--major ${canvasStyleClasses(stage, mapTheme)} milestone-canvas-card--${status.className} milestone-canvas-card--${side}${!onMove ? ' milestone-canvas-card--fixed' : ''}${dragging ? ' milestone-canvas-card--dragging' : ''}${isConnectSource ? ' canvas-node--connect-source' : ''}${isSelected ? ' canvas-node--selected' : ''}${readOnly ? ' milestone-canvas-card--readonly' : ''}${done ? ' milestone-canvas-card--done' : ''}`}
-      style={{ left: stage.posX, top: stage.posY, ...themeVars }}
+      className={`milestone-canvas-card canvas-node canvas-node--typed milestone-canvas-card--major ${canvasStyleClasses(stage, mapTheme)} milestone-canvas-card--${status.className} milestone-canvas-card--${side}${!onMove ? ' milestone-canvas-card--fixed' : ''}${dragging ? ' milestone-canvas-card--dragging' : ''}${isConnectSource ? ' canvas-node--connect-source' : ''}${isSelected ? ' canvas-node--selected' : ''}${readOnly ? ' milestone-canvas-card--readonly' : ''}${done ? ' milestone-canvas-card--done' : ''}${compact ? ' milestone-canvas-card--compact' : ''}`}
+      style={{ left: stage.posX, top: stage.posY, ...cardStyle }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
@@ -91,42 +118,9 @@ export function MilestoneCanvasCard({
         onSelect?.(stage.id);
       }}
     >
-      <div className="milestone-canvas-card__head">
-        <span className="milestone-canvas-card__type">
-          {done && <span className="milestone-canvas-card__done-mark" aria-hidden="true" />}
-          Milestone
-        </span>
-        <div className="milestone-canvas-card__head-actions">
-          <CategoryBadge category={stage.category} />
-          {onUpdateStage && (
-            <PrioritySelect
-              compact
-              value={stage.priority}
-              onChange={(priority) => onUpdateStage(stage.id, { priority })}
-            />
-          )}
-          <span className={`roadmap-badge roadmap-badge--outline roadmap-badge--${status.className}`}>
-            {status.label}
-          </span>
-          {onRemove && (
-            <button
-              type="button"
-              className="canvas-node__delete"
-              onClick={(e) => {
-                e.stopPropagation();
-                onRemove(stage.id);
-              }}
-              title="Remove milestone"
-              aria-label="Remove milestone"
-            >
-              ×
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div className="milestone-canvas-card__body">
-        <div className="milestone-canvas-card__title-row">
+      {compact ? (
+        <div className="milestone-canvas-card__compact">
+          <span className="milestone-canvas-card__done-mark" aria-hidden="true" />
           {editingTitle ? (
             <input
               ref={titleInputRef}
@@ -155,86 +149,175 @@ export function MilestoneCanvasCard({
                 e.stopPropagation();
                 setEditingTitle(true);
               }}
-              title={onUpdateStage ? 'Διπλό κλικ για επεξεργασία τίτλου' : undefined}
+              title={onUpdateStage ? 'Διπλό κλικ για επεξεργασία τίτλου' : stage.title}
             >
               {stage.title}
             </h3>
           )}
           <span className="milestone-canvas-card__order" aria-hidden="true">{orderLabel}</span>
-        </div>
-        {stage.description && (
-          <p className="milestone-canvas-card__desc canvas-node__body">{stage.description}</p>
-        )}
-        {isPlanMode(stage) && (
-          <div className="milestone-canvas-card__plan">
-            <span className="milestone-canvas-card__plan-badge">Πλάνο</span>
-            <span className="milestone-canvas-card__plan-dates">
-              {formatPlanDateShort(stage.planStartDate)} → {formatPlanDateShort(stage.planEndDate)}
-            </span>
-            <span className="milestone-canvas-card__plan-duration">{getPlanDurationDays(stage)} ημ.</span>
-            {stage.planGoal && (
-              <span className="milestone-canvas-card__plan-goal" title={stage.planGoal}>
-                🎯 {stage.planGoal}
-              </span>
-            )}
-            {openCheckpoints.length > 0 && (
-              <ul className="milestone-canvas-card__checkpoint-list">
-                {openCheckpoints.map((cp) => (
-                  <li key={cp.id}>
-                    <button
-                      type="button"
-                      className={`milestone-canvas-card__checkpoint-btn${isCheckpointDone(cp) ? ' milestone-canvas-card__checkpoint-btn--done' : ''}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onOpenCheckpoint?.(stage.id, cp.id);
-                      }}
-                      title={cp.planDate ? formatPlanDayHeader(stage, cp.planDate) : cp.title}
-                    >
-                      <span className="milestone-canvas-card__checkpoint-title">{cp.title}</span>
-                      {cp.planDate && (
-                        <span className="milestone-canvas-card__checkpoint-date">
-                          {formatPlanDateShort(cp.planDate)}
-                        </span>
-                      )}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-      </div>
-
-      <div className="milestone-canvas-card__footer">
-        <span className="milestone-canvas-card__progress">
-          {completed} / {totalCp}
-        </span>
-        <div className="milestone-canvas-card__footer-actions">
-          {onAddCheckpoint && (
+          {onRemove && (
             <button
               type="button"
-              className="milestone-canvas-card__add-cp"
+              className="canvas-node__delete"
               onClick={(e) => {
                 e.stopPropagation();
-                onAddCheckpoint(stage.id);
+                onRemove(stage.id);
               }}
-              title="Προσθήκη checkpoint"
+              title="Remove milestone"
+              aria-label="Remove milestone"
             >
-              + Checkpoint
+              ×
             </button>
           )}
-          <button
-            type="button"
-            className="milestone-canvas-card__open"
-            onClick={(e) => {
-              e.stopPropagation();
-              onSelect?.(stage.id);
-            }}
-          >
-            Open →
-          </button>
         </div>
-      </div>
+      ) : (
+        <>
+          <div className="milestone-canvas-card__head">
+            <span className="milestone-canvas-card__type">
+              {done && <span className="milestone-canvas-card__done-mark" aria-hidden="true" />}
+              Milestone
+            </span>
+            <div className="milestone-canvas-card__head-actions">
+              <CategoryBadge category={stage.category} />
+              {onUpdateStage && (
+                <PrioritySelect
+                  compact
+                  value={stage.priority}
+                  onChange={(priority) => onUpdateStage(stage.id, { priority })}
+                />
+              )}
+              <span className={`roadmap-badge roadmap-badge--outline roadmap-badge--${status.className}`}>
+                {status.label}
+              </span>
+              {onRemove && (
+                <button
+                  type="button"
+                  className="canvas-node__delete"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemove(stage.id);
+                  }}
+                  title="Remove milestone"
+                  aria-label="Remove milestone"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="milestone-canvas-card__body">
+            <div className="milestone-canvas-card__title-row">
+              {editingTitle ? (
+                <input
+                  ref={titleInputRef}
+                  className="input input--sm milestone-canvas-card__title-input"
+                  value={titleDraft}
+                  onChange={(e) => setTitleDraft(e.target.value)}
+                  onBlur={commitTitle}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      commitTitle();
+                    }
+                    if (e.key === 'Escape') {
+                      setTitleDraft(stage.title || '');
+                      setEditingTitle(false);
+                    }
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  aria-label="Τίτλος milestone"
+                />
+              ) : (
+                <h3
+                  className="milestone-canvas-card__title canvas-node__title"
+                  onDoubleClick={(e) => {
+                    if (readOnly || !onUpdateStage) return;
+                    e.stopPropagation();
+                    setEditingTitle(true);
+                  }}
+                  title={onUpdateStage ? 'Διπλό κλικ για επεξεργασία τίτλου' : undefined}
+                >
+                  {stage.title}
+                </h3>
+              )}
+              <span className="milestone-canvas-card__order" aria-hidden="true">{orderLabel}</span>
+            </div>
+            {stage.description && (
+              <p className="milestone-canvas-card__desc canvas-node__body">{stage.description}</p>
+            )}
+            {isPlanMode(stage) && (
+              <div className="milestone-canvas-card__plan">
+                <span className="milestone-canvas-card__plan-badge">Πλάνο</span>
+                <span className="milestone-canvas-card__plan-dates">
+                  {formatPlanDateShort(stage.planStartDate)} → {formatPlanDateShort(stage.planEndDate)}
+                </span>
+                <span className="milestone-canvas-card__plan-duration">{getPlanDurationDays(stage)} ημ.</span>
+                {stage.planGoal && (
+                  <span className="milestone-canvas-card__plan-goal" title={stage.planGoal}>
+                    🎯 {stage.planGoal}
+                  </span>
+                )}
+                {!done && openCheckpoints.length > 0 && (
+                  <ul className="milestone-canvas-card__checkpoint-list">
+                    {openCheckpoints.map((cp) => (
+                      <li key={cp.id}>
+                        <button
+                          type="button"
+                          className={`milestone-canvas-card__checkpoint-btn${isCheckpointDone(cp) ? ' milestone-canvas-card__checkpoint-btn--done' : ''}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenCheckpoint?.(stage.id, cp.id);
+                          }}
+                          title={cp.planDate ? formatPlanDayHeader(stage, cp.planDate) : cp.title}
+                        >
+                          <span className="milestone-canvas-card__checkpoint-title">{cp.title}</span>
+                          {cp.planDate && (
+                            <span className="milestone-canvas-card__checkpoint-date">
+                              {formatPlanDateShort(cp.planDate)}
+                            </span>
+                          )}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="milestone-canvas-card__footer">
+            <span className="milestone-canvas-card__progress">
+              {completed} / {totalCp}
+            </span>
+            <div className="milestone-canvas-card__footer-actions">
+              {!done && onAddCheckpoint && (
+                <button
+                  type="button"
+                  className="milestone-canvas-card__add-cp"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAddCheckpoint(stage.id);
+                  }}
+                  title="Προσθήκη checkpoint"
+                >
+                  + Checkpoint
+                </button>
+              )}
+              <button
+                type="button"
+                className="milestone-canvas-card__open"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelect?.(stage.id);
+                }}
+              >
+                Open →
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </article>
   );
 }

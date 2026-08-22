@@ -12,6 +12,7 @@ import {
   partitionOpenDone,
 } from '../utils/archive';
 import { collectProjectCategories } from '../utils/categories';
+import { formatNoteClock } from '../utils/lifelineDays';
 import {
   getStickiesForStage,
   getUnlinkedStickies,
@@ -386,6 +387,11 @@ function NoteListItem({
             <strong>{note.title}</strong>
             <CategoryBadge category={note.category} />
             {isSticky && <span className="workspace-note__sticky-badge">Sticky</span>}
+            {note.createdAt && (
+              <span className="workspace-note__archive-date">
+                {formatNoteClock(note.createdAt)}
+              </span>
+            )}
             {done && (
               <span className="badge badge--done">Εκτελεσμένο</span>
             )}
@@ -1010,6 +1016,7 @@ export function WorkspaceView({
   onUpdateCheckpoint,
   onAddTask,
   onUpdateTask,
+  onBack,
 }) {
   const [workspaceTab, setWorkspaceTab] = useState('chapters');
   const [selectedChapterId, setSelectedChapterId] = useState(null);
@@ -1094,6 +1101,12 @@ export function WorkspaceView({
           archivedAt={celebration.archivedAt}
           onDone={() => setCelebration(null)}
         />
+      )}
+
+      {onBack && (
+        <button type="button" className="workspace-view__back btn btn--text" onClick={onBack}>
+          ← Roadmap
+        </button>
       )}
 
       <div className="workspace-header">

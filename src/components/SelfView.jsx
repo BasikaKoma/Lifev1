@@ -3,6 +3,7 @@ import { buildSelfHubView } from '../utils/selfHubData';
 import { localTodayIsoDate } from '../utils/selfDateUtils';
 import { useLifelineDayView, DAY_VIEW_PHASE } from '../hooks/useLifelineDayView';
 import { LifelineDayModal } from './LifelineDayModal';
+import { LifelineNorthStars } from './LifelineNorthStars';
 import {
   SelfCompactHeader,
   SelfHub,
@@ -21,8 +22,12 @@ import {
   normalizeRoutineTemplates,
   toggleRoutineDone,
   getRoutineWeekScore,
+  collectNotesCreatedForDate,
+  isTimestampOnDate,
+  stampNoteText,
 } from '../utils/lifelineDays';
 import { getSelfHubDayEntry } from '../utils/selfHubDays';
+import { buildSelfHubTimelineEvents } from '../utils/selfHubTimelineEvents';
 import './SelfView.css';
 import './selfHub.css';
 
@@ -43,14 +48,21 @@ export function SelfView({
   lifelineDays = {},
   onUpdateLifelineDay,
   projectActivity = [],
+  notes = [],
   selfHubDays = {},
   mapTheme = null,
   onMapThemeChange,
+  isLifeline = false,
+  routineTemplates: routineTemplatesProp,
+  onUpdateRoutineTemplates,
   onRefreshProjectActivity,
+  northStars = [],
+  onUpdateNorthStars,
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [focusMessage, setFocusMessage] = useState(null);
   const menuRef = useRef(null);
+  const recoveredJournalRef = useRef(false);
   const dayView = useLifelineDayView();
   const {
     isActive: dayViewActive,
@@ -76,6 +88,30 @@ export function SelfView({
     onRefreshProjectActivity?.();
   }, [onRefreshProjectActivity]);
 
+  useEffect(() => {
+    if (recoveredJournalRef.current || !onUpdateLifelineDay) return;
+    const today = localTodayIsoDate();
+    const journal = String(getDayEntry(lifelineDays, today).notes || '').trim();
+    if (journal) {
+      recoveredJournalRef.current = true;
+      return;
+    }
+    const fromActivity = collectNotesCreatedForDate(projectActivity, today).map((item) =>
+      stampNoteText(item.title, item.timestamp || new Date())
+    );
+    const fromLive = (notes || [])
+      .filter((note) => {
+        if (!note || note.archived) return false;
+        const created = note.createdAt || note.updatedAt;
+        return !created || isTimestampOnDate(created, today);
+      })
+      .map((note) => stampNoteText(note.body || note.title, note.createdAt || note.updatedAt || new Date()));
+    const unique = [...new Set([...fromLive, ...fromActivity].filter(Boolean))];
+    if (!unique.length) return;
+    recoveredJournalRef.current = true;
+    onUpdateLifelineDay(today, { notes: unique.join('\n\n') });
+  }, [lifelineDays, notes, onUpdateLifelineDay, projectActivity]);
+
   const hubView = useMemo(
     () =>
       buildSelfHubView({
@@ -87,8 +123,10 @@ export function SelfView({
         ouraRow,
         projectActivity,
         selfHubDays,
+        isLifeline,
+        lifelineDays,
       }),
-    [selfData, displayName, ouraStatus, scaleConnected, stages, ouraRow, projectActivity, selfHubDays],
+    [selfData, displayName, ouraStatus, scaleConnected, stages, ouraRow, projectActivity, selfHubDays, isLifeline, lifelineDays],
   );
 
   const waitingForData = ouraStatus?.connected && selfData?.source === 'oura-empty';
@@ -109,6 +147,10 @@ export function SelfView({
 
   const handleUpdateRoutineTemplates = useCallback(
     (templates) => {
+      if (onUpdateRoutineTemplates) {
+        onUpdateRoutineTemplates(templates);
+        return;
+      }
       onMapThemeChange?.({
         lifeline: {
           ...(mapTheme?.lifeline || {}),
@@ -116,11 +158,13 @@ export function SelfView({
         },
       });
     },
-    [mapTheme, onMapThemeChange],
+    [mapTheme, onMapThemeChange, onUpdateRoutineTemplates],
   );
 
   const today = localTodayIsoDate();
-  const routineTemplates = normalizeRoutineTemplates(mapTheme?.lifeline?.routineTemplates);
+  const routineTemplates = normalizeRoutineTemplates(
+    routineTemplatesProp ?? mapTheme?.lifeline?.routineTemplates,
+  );
   const todayRoutineLog = useMemo(() => {
     const lifelineEntry = getDayEntry(lifelineDays, today);
     const hubEntry = getSelfHubDayEntry(selfHubDays, today);
@@ -135,6 +179,25 @@ export function SelfView({
   const routineWeek = useMemo(
     () => getRoutineWeekScore(lifelineDays, routineTemplates, today, (date) => getDayEntry(lifelineDays, date)),
     [lifelineDays, routineTemplates, today]
+  );
+
+  const timeline = useMemo(
+    () =>
+      buildSelfHubTimelineEvents({
+        routines: todayRoutines,
+        projectDay: hubView.projectDay,
+        heartRate: hubView.floatingMetrics?.heartRate,
+        ouraRow,
+        date: today,
+      }),
+    [todayRoutines, hubView.projectDay, hubView.floatingMetrics, ouraRow, today],
+  );
+  const dayProgress = useMemo(
+    () => ({
+      ...hubView.dayProgress,
+      segments: [...(hubView.dayProgress?.segments ?? []), ...(timeline.segments ?? [])],
+    }),
+    [hubView.dayProgress, timeline.segments],
   );
 
   const handleToggleTodayRoutine = useCallback(
@@ -188,10 +251,17 @@ export function SelfView({
         )}
 
         <div className="self-view__hub-body">
+          <LifelineNorthStars
+            stars={northStars}
+            onChange={onUpdateNorthStars}
+            variant="hub"
+          />
+
           <SelfHub floatingMetrics={hubView.floatingMetrics} capacity={hubView.capacity} />
 
           <SelfDayProgress
-            dayProgress={hubView.dayProgress}
+            dayProgress={dayProgress}
+            events={timeline.events}
             onOpenDayDetails={handleOpenDayDetails}
           />
 
@@ -242,8 +312,9 @@ export function SelfView({
         phase={dayViewPhase || DAY_VIEW_PHASE.timeline}
         lifelineDays={lifelineDays}
         selfHubDays={selfHubDays}
-        routineTemplates={mapTheme?.lifeline?.routineTemplates ?? []}
+        routineTemplates={routineTemplates}
         projectActivity={projectActivity}
+        stages={stages}
         onUpdateDay={onUpdateLifelineDay}
         onUpdateRoutineTemplates={handleUpdateRoutineTemplates}
         onClose={handleCloseDayDetails}

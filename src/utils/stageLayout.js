@@ -116,10 +116,10 @@ function snapCanvasItemToRoadmap(posX, posY, layout, size) {
   const side = posX + w / 2 < (layout.centerX ?? CENTER_X) ? 'left' : 'right';
   return {
     onRoadmap: true,
-    timelineY: Math.max(24 + h / 2, centerY),
+    timelineY: centerY,
     roadmapSide: side,
     x: getAttachedPosXForWidth(w, side, layout),
-    y: Math.max(24, centerY - h / 2),
+    y: centerY - h / 2,
   };
 }
 
@@ -617,13 +617,12 @@ export function positionMilestoneOnTimeline(stage, timelineY, layout = {}, sideH
       : stage.roadmapSide === 'left' || stage.roadmapSide === 'right'
         ? stage.roadmapSide
         : 'right';
-  const clampedY = Math.max(40 + h / 2, timelineY);
   return {
     ...stage,
     onRoadmap: true,
-    timelineY: clampedY,
+    timelineY,
     posX: getAttachedPosX(stage, side, layout),
-    posY: clampedY - h / 2,
+    posY: timelineY - h / 2,
     roadmapSide: side,
   };
 }
@@ -1102,7 +1101,6 @@ export function getNextIdeaPosition(stages, backlog = [], layout = DEFAULT_ROADM
       const topMost = [...ideasOnLine].sort((a, b) => a.timelineY - b.timelineY)[0];
       timelineY = topMost.timelineY - GAP_Y - IDEA_H / 2;
     }
-    timelineY = Math.max(24 + IDEA_H / 2, timelineY);
     const side = totalOnLine % 2 === 0 ? 'right' : 'left';
     return {
       canvasX: getAttachedPosXForWidth(IDEA_W, side, layout),

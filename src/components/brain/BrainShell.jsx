@@ -28,6 +28,8 @@ export function BrainOrb({ open, onClick }) {
 export function BrainShell({
   mode,
   onModeChange,
+  onApplyBrainActions,
+  onOpenSource,
   context,
   snapshotInput,
   contextExtras,
@@ -44,6 +46,8 @@ export function BrainShell({
             context={context}
             snapshotInput={snapshotInput}
             contextExtras={contextExtras}
+            onApplyBrainActions={onApplyBrainActions}
+            onOpenSource={onOpenSource}
             onClose={() => onModeChange('closed')}
             onExpand={() => onModeChange('expanded')}
             onCollapse={() => onModeChange('docked')}

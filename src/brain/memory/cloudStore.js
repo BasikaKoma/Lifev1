@@ -86,7 +86,10 @@ export async function pushCloudBundle(bundle) {
     goals: profile.goals,
     style: profile.style,
     brand: profile.brand,
-    preferences: profile.preferences,
+    preferences: {
+      ...(profile.preferences || {}),
+      __laws: profile.laws || [],
+    },
     updated_at: profile.updatedAt,
   };
 

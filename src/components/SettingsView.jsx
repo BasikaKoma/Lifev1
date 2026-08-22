@@ -21,6 +21,10 @@ export function SettingsView({
   ouraStatus,
   onOpenOuraModal,
   onOpenScaleModal,
+  onOpenCamerasModal,
+  onOpenCamerasView,
+  camerasConnected = false,
+  cameraCount = 0,
   scaleConnected = false,
   scalePaired = false,
   selfDisplayName = '',
@@ -298,6 +302,25 @@ export function SettingsView({
                 <button type="button" className="btn btn--primary" onClick={onOpenScaleModal}>
                   {scaleConnected ? 'Διαχείριση Scale' : 'Connect Scale'}
                 </button>
+              </div>
+
+              <div className="settings-block">
+                <h3 className="settings-block__title">Κάμερες Dahua (DMSS)</h3>
+                <p className="settings-block__desc">
+                  {camerasConnected
+                    ? `${cameraCount} κάμερ${cameraCount === 1 ? 'α' : 'ες'} στο τοπικό δίκτυο — snapshots στο Next Move.`
+                    : 'Σύνδεσε τις κάμερες Dahua / NVR με LAN IP, χρήστη και κωδικό. Χρειάζεται το ίδιο Wi‑Fi.'}
+                </p>
+                <div className="settings-inline-actions">
+                  <button type="button" className="btn btn--primary" onClick={onOpenCamerasModal}>
+                    {camerasConnected ? 'Διαχείριση καμερών' : 'Connect Cameras'}
+                  </button>
+                  {camerasConnected && (
+                    <button type="button" className="btn btn--outline" onClick={onOpenCamerasView}>
+                      Άνοιγμα
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="settings-block">

@@ -27,6 +27,7 @@ export const DEFAULT_MAP_THEME = {
     dayHeight: 24,
     futureDays: 365,
     routineTemplates: [],
+    northStars: [],
   },
   canvas: {
     backgroundColor: '#000000',

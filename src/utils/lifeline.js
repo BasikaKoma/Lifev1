@@ -2,41 +2,59 @@ import { DEFAULT_MAP_THEME } from './mapTheme';
 import { processStages } from './logic';
 import { createStarterStages, generateId } from '../data/templates';
 import { normalizeProjectBrief } from './projectBrief';
+import { isMobilePlatform } from '../platform/capabilities';
 
 export const LIFELINE_TITLE = 'Lifeline';
 
 export const DEFAULT_LIFELINE_CONFIG = {
   startDate: null,
   dayHeight: 24,
-  futureDays: 365,
+  /** Days shown past today by default. The end is user-draggable from here. */
+  futureDays: 90,
 };
 
 /**
- * Hard cap for lifeline spine/board pixel height.
- * Many GPUs clamp compositor layers around 8192px — a taller transformed
- * canvas paints as black except near the layer origin (spine tip), which is
- * exactly the "empty screen / tip at bottom" bug when centering on today.
+ * Hard cap for lifeline spine/board pixel height (mobile-safe default).
+ * Mobile WebViews clamp compositor layers around 8192px — a taller transformed
+ * canvas paints as black except near the layer origin, which is the
+ * "empty screen / tip at bottom" bug.
  */
 export const MAX_LIFELINE_SPINE_PX = 7200;
 
+/** Desktop (Electron/Chromium) tiles large layers, so the spine is NOT bound
+ * by the 16384px single-texture limit — the compositor splits it into tiles.
+ * The visible gap per day is (budget / dayCount), so a taller budget directly
+ * magnifies every day on the same fixed line (dates never move). Kept just
+ * under 32768px, the safe upper bound for a tiled compositor layer. */
+const DESKTOP_LIFELINE_SPINE_PX = 32000;
+
+/** Pixel budget for the whole spine on this device. */
+export function getLifelineSpineBudget() {
+  try {
+    return isMobilePlatform() ? MAX_LIFELINE_SPINE_PX : DESKTOP_LIFELINE_SPINE_PX;
+  } catch {
+    return MAX_LIFELINE_SPINE_PX;
+  }
+}
+
 /**
  * Lifeline zoom:
- * - CSS scale for zooming OUT (overview). Cap at 1 so the compositor stays sharp.
- * - Zoom-in past 100% raises dayHeight (day spacing). Date range is unchanged.
+ * - CSS scale only for zooming OUT (overview). Cap at 1 — never stretch the
+ *   canvas (that blurs labels).
+ * - Zoom-in raises `dayHeight` (the real gap between days). If the whole line
+ *   no longer fits the GPU budget, off-screen days are cropped so the days
+ *   under the cursor keep growing. Day View opens only at a large gap.
  */
 export const LIFELINE_ZOOM = {
   minScale: 0.15,
   maxScale: 1,
   dayHeightMin: 4,
-  /** Max px between day ticks before further zoom opens Day View. */
-  dayHeightMax: 96,
-  /** Day spacing (px) at which every calendar day gets a tick/label. */
-  everyDaySpacing: 18,
-  /**
-   * Further zoom-in at/above this dayHeight opens Day View (semantic zoom).
-   * Keep equal to dayHeightMax so spacing opens fully first.
-   */
-  dayViewEnterAt: 96,
+  /** Max px gap between day ticks before further zoom opens Day View. */
+  dayHeightMax: 200,
+  /** Day spacing (px) at which every calendar day gets its own tick. */
+  everyDaySpacing: 13,
+  /** Layout px per day required before zoom-in opens Day View. */
+  dayViewEnterAt: 140,
 };
 
 /** Semantic zoom levels for the Lifeline spine (overview → detail). */
@@ -74,12 +92,21 @@ export const LIFELINE_ZOOM_LEVEL_META = {
   },
 };
 
-/** Resolve semantic zoom level from effective day spacing and CSS scale. */
+/**
+ * True when the line already shows one tick per day. Day View only opens from
+ * zoom once the gap can't grow any more AND we're at this daily level, so the
+ * user never dives in from a weekly view.
+ */
+export function canEnterLifelineDayView(daySpacing) {
+  return (Number(daySpacing) || 0) >= LIFELINE_ZOOM.everyDaySpacing;
+}
+
+/** Resolve semantic zoom level from day spacing and CSS overview scale. */
 export function resolveLifelineZoomLevel(daySpacing, cssScale = 1) {
   const spacing = Number(daySpacing) || 0;
   const scale = Number(cssScale) || 1;
   if (scale < 0.42 || spacing < 5) return LIFELINE_ZOOM_LEVEL.life;
-  if (scale < 0.88 || spacing < 13) return LIFELINE_ZOOM_LEVEL.time;
+  if (scale < 0.7 || spacing < 9) return LIFELINE_ZOOM_LEVEL.time;
   if (spacing < LIFELINE_ZOOM.everyDaySpacing) return LIFELINE_ZOOM_LEVEL.month;
   return LIFELINE_ZOOM_LEVEL.week;
 }
@@ -140,86 +167,48 @@ export function nextLifelineDayHeight(mapTheme, extraDates = [], zoomIn) {
     current <= 8 ? 1
       : current <= 16 ? 2
         : current <= 40 ? 4
-          : 8;
+          : current <= 96 ? 8
+            : 16;
   const next = zoomIn
     ? Math.min(LIFELINE_ZOOM.dayHeightMax, current + step)
     : Math.max(LIFELINE_ZOOM.dayHeightMin, current - step);
   return next !== current ? next : null;
 }
 
-function clampDateToRange(dateStr, startStr, endStr) {
-  const date = toDateString(dateStr);
-  if (!date) return startStr;
-  if (signedDaysBetween(startStr, date) < 0) return startStr;
-  if (signedDaysBetween(date, endStr) < 0) return endStr;
-  return date;
-}
-
-/** Choose a contiguous day window that fits the spine pixel budget at dayHeight. */
-export function computeLifelineViewWindow(fullStart, fullEnd, focusDate, dayHeight) {
-  const height = clampLifelineDayHeight(dayHeight);
-  const fullCount = Math.max(1, daysBetween(fullStart, fullEnd) + 1);
-  const maxDays = Math.max(14, Math.floor(MAX_LIFELINE_SPINE_PX / height));
-  if (fullCount <= maxDays) {
-    return {
-      startDate: fullStart,
-      endDate: fullEnd,
-      dayCount: fullCount,
-      windowed: false,
-      viewCenterDate: null,
-    };
-  }
-
-  const focus = clampDateToRange(focusDate || toDateString(new Date()), fullStart, fullEnd);
-  const half = Math.floor(maxDays / 2);
-  let start = addDays(focus, -half);
-  if (signedDaysBetween(fullStart, start) < 0) start = fullStart;
-  let end = addDays(start, maxDays - 1);
-  if (signedDaysBetween(end, fullEnd) > 0) {
-    end = fullEnd;
-    start = addDays(end, -(maxDays - 1));
-    if (signedDaysBetween(fullStart, start) < 0) start = fullStart;
-  }
-  return {
-    startDate: start,
-    endDate: end,
-    dayCount: daysBetween(start, end) + 1,
-    windowed: true,
-    viewCenterDate: focus,
-  };
-}
-
 /**
- * Apply a dayHeight step and return synced theme + canvas Y for anchor date (pan preservation).
+ * Raise or lower the gap between days. The whole line (origin → end) always
+ * renders, so the dates never shift — only the spacing between them grows.
+ * Returns null when the gap can't grow any more (whole line already at the
+ * budget-fit cap), which the caller treats as "open Day View".
  */
 export function applyLifelineDayHeightZoom(mapTheme, extraDates, zoomIn, anchorDate) {
   const nextHeight = nextLifelineDayHeight(mapTheme, extraDates, zoomIn);
   if (nextHeight == null) return null;
 
-  const focus = toDateString(anchorDate) || toDateString(mapTheme?.lifeline?.viewCenterDate) || toDateString(new Date());
+  const before = getLifelineConfig(mapTheme, extraDates);
   const synced = syncLifelineMapTheme(
     {
       ...mapTheme,
       lifeline: {
         ...(mapTheme?.lifeline || {}),
         dayHeight: nextHeight,
-        viewCenterDate: focus,
       },
     },
     extraDates
   );
+  const after = getLifelineConfig(synced, extraDates);
+  // The whole line always fits — if the rendered gap didn't move, we're at the
+  // budget cap. Nothing to magnify → let the caller open Day View.
+  if (after.dayHeight === before.dayHeight) return null;
 
-  let anchorY = null;
-  if (focus) {
-    const config = getLifelineConfig(synced, extraDates);
-    const layout = synced.roadmap || mapTheme?.roadmap;
-    anchorY = getDayTickCanvasY(focus, config, layout, extraDates);
-  }
-
+  const focus =
+    toDateString(anchorDate) || toDateString(new Date()) || after.startDate;
+  const layout = synced.roadmap || mapTheme?.roadmap;
+  const anchorY = focus ? getDayTickCanvasY(focus, after, layout, extraDates) : null;
   return { mapTheme: synced, anchorY, dayHeight: nextHeight };
 }
 
-/** Reset day density + clear detail window (CSS scale handled separately). */
+/** Reset day density to default (CSS scale handled separately). */
 export function resetLifelineDayZoom(mapTheme, extraDates = []) {
   return syncLifelineMapTheme(
     {
@@ -227,7 +216,6 @@ export function resetLifelineDayZoom(mapTheme, extraDates = []) {
       lifeline: {
         ...(mapTheme?.lifeline || {}),
         dayHeight: DEFAULT_LIFELINE_CONFIG.dayHeight,
-        viewCenterDate: null,
       },
     },
     extraDates
@@ -241,13 +229,15 @@ export function getLifelineZoomPercent(mapTheme) {
   return Math.round((dayHeight / DEFAULT_LIFELINE_CONFIG.dayHeight) * 100);
 }
 
+/**
+ * Largest dayHeight that keeps the whole line within the GPU pixel budget.
+ * The whole range always renders; we lower density instead of cropping days.
+ */
 export function fitLifelineDayHeight(preferredDayHeight, dayCount) {
   const preferred = clampLifelineDayHeight(preferredDayHeight);
   const count = Math.max(1, Number(dayCount) || 1);
-  const maxByBudget = Math.floor(MAX_LIFELINE_SPINE_PX / count);
-  // Prefer keeping dayHeight; callers window the range when budget is tight.
-  if (maxByBudget >= preferred) return preferred;
-  return preferred;
+  const maxByBudget = Math.floor(getLifelineSpineBudget() / count);
+  return Math.max(LIFELINE_ZOOM.dayHeightMin, Math.min(preferred, maxByBudget));
 }
 
 function pad2(n) {
@@ -292,13 +282,17 @@ export function signedDaysBetween(startStr, endStr) {
   return Math.round((end.getTime() - start.getTime()) / 86400000);
 }
 
+/** Origin fallback = the first day the app is used (today) when nothing logged yet. */
 export function getDefaultLifelineStartDate() {
-  const d = new Date();
-  d.setFullYear(d.getFullYear() - 1);
-  return toDateString(d);
+  return toDateString(new Date());
 }
 
-const MIN_HEALTHY_LIFELINE_DAYS = 120;
+/** A stored origin this close to "one year ago" is the legacy default — ignore it. */
+function isLegacyDefaultStart(storedStart, today) {
+  if (!storedStart) return false;
+  const legacy = addDays(today, -365);
+  return Math.abs(signedDaysBetween(storedStart, legacy)) <= 2;
+}
 
 /** Every calendar date the spine must cover (plans, days, anchors). */
 export function collectLifelineBoundDates({
@@ -347,77 +341,74 @@ export function getLifelineConfig(mapTheme, extraDates = []) {
   const raw = mapTheme?.lifeline || {};
   const preferred = clampLifelineDayHeight(raw.dayHeight || DEFAULT_LIFELINE_CONFIG.dayHeight);
   const today = toDateString(new Date());
-  let originStartDate = toDateString(raw.startDate) || getDefaultLifelineStartDate();
+  // The legacy default was 365 days of empty future, which stretched the line
+  // and starved zoom-in. Treat it as "unset" so the line is short by default
+  // and the user grows the end by dragging.
+  const rawFutureDays =
+    Number(raw.futureDays) === 365 ? DEFAULT_LIFELINE_CONFIG.futureDays : Number(raw.futureDays);
   let fullFutureDays = Math.max(
-    30,
-    Math.min(3650, Number(raw.futureDays) || DEFAULT_LIFELINE_CONFIG.futureDays)
+    1,
+    Math.min(3650, rawFutureDays || DEFAULT_LIFELINE_CONFIG.futureDays)
   );
 
   const earliest = earliestLifelineBoundDate(extraDates);
   const latest = latestLifelineBoundDate(extraDates);
-  if (earliest && signedDaysBetween(earliest, originStartDate) > 0) {
-    originStartDate = earliest;
+
+  // Origin = the first day the app was used. That is the earliest logged data,
+  // or today when nothing has been logged yet. A stored origin is honored only
+  // when the user deliberately extended into the past (before their first data)
+  // — the legacy "one year ago" default is discarded so the line no longer
+  // starts in empty history.
+  const storedStart = toDateString(raw.startDate);
+  const firstUsed = earliest || today;
+  let originStartDate = firstUsed;
+  if (
+    storedStart
+    && !isLegacyDefaultStart(storedStart, today)
+    && signedDaysBetween(storedStart, firstUsed) > 0
+  ) {
+    // User pulled the origin earlier than their first data on purpose.
+    originStartDate = storedStart;
   }
+
+  // End = today + futureDays (the draggable value), never earlier than the last
+  // logged data so nothing is ever hidden below the tip.
   if (latest) {
     const need = signedDaysBetween(today, latest);
     if (need > fullFutureDays) {
-      fullFutureDays = Math.max(30, Math.min(3650, need));
+      fullFutureDays = Math.max(1, Math.min(3650, need));
     }
   }
 
-  const fullBase = {
-    startDate: originStartDate,
-    originStartDate,
-    dayHeight: preferred,
-    futureDays: fullFutureDays,
-    fullFutureDays,
-  };
-  const fullEnd = getLifelineFullEndDate(fullBase, extraDates);
-  const fullCount = Math.max(1, daysBetween(originStartDate, fullEnd) + 1);
-
-  if (fullCount < MIN_HEALTHY_LIFELINE_DAYS && !latest && !earliest) {
-    originStartDate = getDefaultLifelineStartDate();
-    fullFutureDays = DEFAULT_LIFELINE_CONFIG.futureDays;
-  }
-
-  const repairedEnd = getLifelineFullEndDate({
-    ...fullBase,
-    startDate: originStartDate,
-    originStartDate,
-    futureDays: fullFutureDays,
-    fullFutureDays,
-  }, extraDates);
-  const repairedCount = Math.max(1, daysBetween(originStartDate, repairedEnd) + 1);
-  const maxDaysAtPreferred = Math.max(14, Math.floor(MAX_LIFELINE_SPINE_PX / preferred));
-
-  if (repairedCount <= maxDaysAtPreferred) {
-    return {
+  const endDate = getLifelineFullEndDate(
+    {
       startDate: originStartDate,
-      endDate: repairedEnd,
+      originStartDate,
       dayHeight: preferred,
       futureDays: fullFutureDays,
-      originStartDate,
       fullFutureDays,
-      preferredDayHeight: preferred,
-      windowed: false,
-      viewCenterDate: null,
-    };
-  }
+    },
+    extraDates
+  );
+  const dayCount = Math.max(1, daysBetween(originStartDate, endDate) + 1);
+  // Whole line always renders: lower the gap (never crop days) to stay within
+  // the GPU budget. Zoom grows the gap on this same fixed line — dates never move.
+  const effectiveDayHeight = fitLifelineDayHeight(preferred, dayCount);
 
-  // High dayHeight / long range: window around the focus. Logical end still
-  // covers plans and milestones — only the visible slice shrinks.
-  const focus = toDateString(raw.viewCenterDate) || today;
-  const window = computeLifelineViewWindow(originStartDate, repairedEnd, focus, preferred);
   return {
-    startDate: window.startDate,
-    endDate: window.endDate,
-    dayHeight: preferred,
+    startDate: originStartDate,
+    endDate,
+    // `dayHeight` = the actual rendered gap, fitted to the budget so the whole
+    // line stays visible (dates never move — only the spacing grows). Stored
+    // back as the preferred height too, so zoom-out responds on the first click
+    // instead of first burning through an invisible over-cap range.
+    dayHeight: effectiveDayHeight,
     futureDays: fullFutureDays,
     originStartDate,
     fullFutureDays,
-    preferredDayHeight: preferred,
-    windowed: window.windowed,
-    viewCenterDate: window.viewCenterDate,
+    preferredDayHeight: effectiveDayHeight,
+    windowed: false,
+    viewCenterDate: null,
   };
 }
 
@@ -471,7 +462,7 @@ export function getLifelineDaySpacing(config, layout, extraDates = []) {
 /** Spine pixel height written by syncLifelineMapTheme (single source of truth). */
 export function expectedLifelineSpineHeight(config, extraDates = []) {
   const raw = computeLifelineSpineHeight(config, extraDates);
-  return Math.max(240, Math.min(MAX_LIFELINE_SPINE_PX, raw));
+  return Math.max(240, Math.min(getLifelineSpineBudget(), raw));
 }
 
 export function isLifelineSpineReady(config, layout, extraDates = []) {
@@ -522,22 +513,16 @@ export function getLifelineTodayScrollPoint(config, layout, lineMetrics, extraDa
 const MIN_LIFELINE_RANGE_DAYS = 14;
 
 function clampLifelineFutureDays(value) {
-  return Math.max(30, Math.min(3650, Number(value) || DEFAULT_LIFELINE_CONFIG.futureDays));
-}
-
-/** Focus date so a windowed spine ends on `desiredEnd` (tip = later date). */
-function focusDateForWindowEnd(desiredEnd, dayHeight) {
-  const maxDays = Math.max(
-    MIN_LIFELINE_RANGE_DAYS,
-    Math.floor(MAX_LIFELINE_SPINE_PX / clampLifelineDayHeight(dayHeight))
-  );
-  const half = Math.floor(maxDays / 2);
-  return addDays(desiredEnd, -(maxDays - 1 - half));
+  return Math.max(1, Math.min(3650, Number(value) || DEFAULT_LIFELINE_CONFIG.futureDays));
 }
 
 /**
- * Map a spine-handle drag onto the lifeline date range.
- * Time flows up: dragging the top handle upward increases the end date.
+ * Map a spine-handle drag onto the lifeline date range (no view window).
+ * Time flows up:
+ * - Top handle: drag up = extend the end further into the future (unbounded up
+ *   to 10 years); drag down = shrink the end, but never below the last logged
+ *   data (last milestone / plan / day).
+ * - Bottom handle: drag down = extend the origin further into the past.
  */
 export function applyLifelineSpineResize(mapTheme, extraDates, drag) {
   if (!mapTheme || !drag?.edge) return null;
@@ -547,66 +532,34 @@ export function applyLifelineSpineResize(mapTheme, extraDates, drag) {
   const originEnd = toDateString(drag.originEndDate);
   const originStart = toDateString(drag.originStartDate);
   const originOriginStart = toDateString(drag.originOriginStartDate) || originStart;
-  const originFutureDays = clampLifelineFutureDays(drag.originFutureDays);
   if (!originEnd || !originStart) return null;
 
   const today = toDateString(new Date());
-  const fullEnd = getLifelineFullEndDate(
-    {
-      originStartDate: originOriginStart,
-      startDate: originOriginStart,
-      fullFutureDays: originFutureDays,
-      futureDays: originFutureDays,
-    },
-    extraDates
-  );
-  const atFullTip = signedDaysBetween(originEnd, fullEnd) <= 0;
-  const atFullStart = signedDaysBetween(originOriginStart, originStart) <= 0;
 
   let nextStart = originOriginStart;
-  let nextFutureDays = originFutureDays;
-  let desiredEnd = originEnd;
-  let desiredWindowStart = originStart;
+  let nextFutureDays = clampLifelineFutureDays(drag.originFutureDays);
 
   if (drag.edge === 'top') {
     const deltaDays = Math.round((Number(drag.originTop) - Number(drag.top)) / spacing);
     if (!deltaDays) return null;
-    desiredEnd = addDays(originEnd, deltaDays);
+    let desiredEnd = addDays(originEnd, deltaDays);
+    // Never shrink the end below the last logged data.
     const contentEnd = latestLifelineBoundDate(extraDates);
     if (contentEnd && signedDaysBetween(desiredEnd, contentEnd) > 0) desiredEnd = contentEnd;
+    // Keep a minimum span above the origin.
     const minEnd = addDays(originStart, MIN_LIFELINE_RANGE_DAYS - 1);
     if (signedDaysBetween(desiredEnd, minEnd) > 0) desiredEnd = minEnd;
-    if (signedDaysBetween(fullEnd, desiredEnd) > 0) {
-      nextFutureDays = clampLifelineFutureDays(signedDaysBetween(today, desiredEnd));
-    } else if (atFullTip && signedDaysBetween(desiredEnd, originEnd) < 0) {
-      const shrunk = clampLifelineFutureDays(signedDaysBetween(today, desiredEnd));
-      const nextCount = daysBetween(originOriginStart, addDays(today, shrunk)) + 1;
-      if (nextCount >= MIN_HEALTHY_LIFELINE_DAYS) nextFutureDays = shrunk;
-    }
+    // Also never earlier than today (the tip lives at/after today).
+    if (signedDaysBetween(desiredEnd, today) > 0) desiredEnd = today;
+    nextFutureDays = clampLifelineFutureDays(signedDaysBetween(today, desiredEnd));
   } else {
     const deltaDays = Math.round((Number(drag.height) - Number(drag.originHeight)) / spacing);
     if (!deltaDays) return null;
-    desiredWindowStart = addDays(originStart, -deltaDays);
+    let desiredStart = addDays(originStart, -deltaDays);
     const maxStart = addDays(originEnd, -(MIN_LIFELINE_RANGE_DAYS - 1));
-    if (signedDaysBetween(maxStart, desiredWindowStart) > 0) desiredWindowStart = maxStart;
-    // Extend into the past only — never eat existing history (that collapsed the spine).
-    if (signedDaysBetween(desiredWindowStart, originOriginStart) < 0) {
-      const contentStart = earliestLifelineBoundDate(extraDates);
-      nextStart = contentStart && signedDaysBetween(desiredWindowStart, contentStart) > 0
-        ? contentStart
-        : desiredWindowStart;
-    }
+    if (signedDaysBetween(maxStart, desiredStart) > 0) desiredStart = maxStart;
+    nextStart = desiredStart;
   }
-
-  const dayHeight = clampLifelineDayHeight(
-    mapTheme?.lifeline?.dayHeight || DEFAULT_LIFELINE_CONFIG.dayHeight
-  );
-  const nextFocus = drag.edge === 'top'
-    ? focusDateForWindowEnd(desiredEnd, dayHeight)
-    : focusDateForWindowEnd(addDays(desiredWindowStart, Math.max(
-        MIN_LIFELINE_RANGE_DAYS,
-        Math.floor(MAX_LIFELINE_SPINE_PX / dayHeight)
-      ) - 1), dayHeight);
 
   const nextTheme = {
     ...mapTheme,
@@ -614,7 +567,9 @@ export function applyLifelineSpineResize(mapTheme, extraDates, drag) {
       ...(mapTheme.lifeline || {}),
       startDate: nextStart,
       futureDays: nextFutureDays,
-      viewCenterDate: nextFocus,
+      viewCenterDate: null,
+      viewStartDate: null,
+      viewEndDate: null,
     },
     roadmap: {
       ...(mapTheme.roadmap || {}),
@@ -626,8 +581,8 @@ export function applyLifelineSpineResize(mapTheme, extraDates, drag) {
   const height = synced.roadmap.height;
   const originBottom = Number(drag.originTop) + Number(drag.originHeight);
   const grew = Math.abs(height - Number(drag.originHeight)) >= 2;
-  // Keep the spine pinned in canvas space. Sliding the date window must not
-  // drag `top` off-screen (that is the "lifeline vanished" bug).
+  // Keep the spine pinned in canvas space. Extending the end (top handle) grows
+  // the spine upward from the same bottom, so pin the bottom edge.
   const top = drag.edge === 'top' && grew
     ? originBottom - height
     : Number(drag.originTop);
@@ -659,7 +614,9 @@ export function syncLifelineMapTheme(mapTheme, extraDates = []) {
       futureDays: config.fullFutureDays ?? config.futureDays,
       dayHeight: config.preferredDayHeight
         ?? clampLifelineDayHeight(mapTheme?.lifeline?.dayHeight || DEFAULT_LIFELINE_CONFIG.dayHeight),
-      viewCenterDate: config.windowed ? config.viewCenterDate : null,
+      viewCenterDate: null,
+      viewStartDate: null,
+      viewEndDate: null,
     },
     roadmap: {
       ...roadmap,
@@ -686,8 +643,10 @@ export function timelineYToDate(y, config, lineMetrics, layout = null) {
     ? getLifelineDaySpacing(config, layout)
     : config.dayHeight;
   if (!spacing) return null;
+  const dayCount = Math.max(1, computeLifelineDayCount(config));
   const idx = Math.round((bottomY - y) / spacing);
-  return addDays(config.startDate, Math.max(0, idx));
+  const clamped = Math.max(0, Math.min(dayCount - 1, idx));
+  return addDays(config.startDate, clamped);
 }
 
 /** Map canvas Y to the calendar date whose day-end is nearest (for plan milestones). */

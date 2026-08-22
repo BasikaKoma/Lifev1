@@ -216,6 +216,8 @@ export function QuickNoteOrb({
         itemId: saved?.itemId,
         type: saved?.type || preview.type,
         stageId: saved?.stageId || preview.stageId || null,
+        date: saved?.date || null,
+        previousNotes: saved?.previousNotes,
       });
     } catch (err) {
       setError(err.message || 'Δεν αποθηκεύτηκε.');

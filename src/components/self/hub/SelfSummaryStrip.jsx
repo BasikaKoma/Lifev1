@@ -5,7 +5,7 @@ const STRIP_ICONS = {
   Sleep: 'moon',
   HRV: 'pulse',
   'Resting HR': 'heart',
-  Temp: 'energy',
+  Temp: 'thermometer',
 };
 
 /** @param {{ metrics: import('../../../utils/selfHubSchema').SelfHubMetric[], onOpenDayDetails?: () => void }} props */

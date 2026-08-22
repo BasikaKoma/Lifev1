@@ -50,7 +50,7 @@
 .lifeline-day-view--expanded .lifeline-day-view__surface {
   opacity: 1;
   transform: translateY(0);
-  overflow: auto;
+  overflow: hidden;
 }
 
 .lifeline-day-view--returning .lifeline-day-view__surface {
@@ -160,6 +160,7 @@
   padding: 0.5rem 1.25rem 1.25rem;
   min-height: 0;
   align-items: start;
+  overflow: auto;
 }
 
 .day-lab__column {
@@ -171,6 +172,22 @@
 
 .day-lab__column--center {
   gap: 0.75rem;
+}
+
+.day-lab__timeline {
+  flex-shrink: 0;
+  position: relative;
+  z-index: 2;
+  padding: 0.65rem 1.25rem 0.9rem;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.55) 0%, #000000 18%),
+    #000000;
+  border-top: 1px solid var(--self-glass-border);
+  box-shadow: 0 -18px 28px rgba(0, 0, 0, 0.45);
+}
+
+.day-lab__timeline .self-day-progress__track-wrap {
+  padding-top: 5.15rem;
 }
 
 .day-lab__preview-tag {
@@ -342,6 +359,10 @@
   box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.15);
 }
 
+.day-lab__captured-notes {
+  margin-top: 12px;
+}
+
 .day-lab__empty {
   margin: 0;
   font-size: 0.8125rem;
@@ -377,9 +398,35 @@
   letter-spacing: 0.04em;
 }
 
+.day-lab__kind--milestone {
+  color: #fde68a;
+  background: rgba(202, 138, 4, 0.28);
+}
+
 .day-lab__kind--checkpoint {
   color: #bbf7d0;
   background: rgba(16, 185, 129, 0.18);
+}
+
+.day-lab__kind--sticky,
+.day-lab__kind--image {
+  color: #bae6fd;
+  background: rgba(14, 165, 233, 0.2);
+}
+
+.day-lab__kind--obstacle {
+  color: #fecdd3;
+  background: rgba(244, 63, 94, 0.2);
+}
+
+.day-lab__kind--resource {
+  color: #ddd6fe;
+  background: rgba(124, 58, 237, 0.22);
+}
+
+.day-lab__kind--idea {
+  color: #ddd6fe;
+  background: rgba(139, 92, 246, 0.22);
 }
 
 .day-lab__kind--task {

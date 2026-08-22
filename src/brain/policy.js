@@ -4,6 +4,7 @@ export const DEFAULT_BRAIN_POLICY = {
   appScopes: {
     self: true,
     lifeline: true,
+    brand: true,
     projects: true,
     notes: true,
   },
@@ -38,6 +39,7 @@ export function normalizeBrainPolicy(raw) {
     appScopes: {
       self: asBool(scopes.self, true),
       lifeline: asBool(scopes.lifeline, true),
+      brand: asBool(scopes.brand, true),
       projects: asBool(scopes.projects, true),
       notes: asBool(scopes.notes, true),
     },
@@ -54,6 +56,7 @@ export function normalizeBrainPolicy(raw) {
 
 const APP_ACCESS_MIGRATION = 'lifev1-brain-app-access-v1';
 const LOCAL_FILES_MIGRATION = 'lifev1-brain-local-files-v1';
+const ADVISOR_SCOPES_MIGRATION = 'lifev1-brain-advisor-scopes-v1';
 
 export function loadBrainPolicy() {
   try {
@@ -63,6 +66,21 @@ export function loadBrainPolicy() {
       policy = { ...policy, cloudMaySeeAppData: true };
       localStorage.setItem(POLICY_KEY, JSON.stringify(policy));
       localStorage.setItem(APP_ACCESS_MIGRATION, '1');
+    }
+    if (!localStorage.getItem(ADVISOR_SCOPES_MIGRATION)) {
+      policy = {
+        ...policy,
+        cloudMaySeeAppData: true,
+        appScopes: {
+          self: true,
+          lifeline: true,
+          brand: true,
+          projects: true,
+          notes: true,
+        },
+      };
+      localStorage.setItem(POLICY_KEY, JSON.stringify(policy));
+      localStorage.setItem(ADVISOR_SCOPES_MIGRATION, '1');
     }
     if (!localStorage.getItem(LOCAL_FILES_MIGRATION) && (policy.roots || []).length > 0) {
       policy = { ...policy, cloudMaySeeLocalFiles: true };

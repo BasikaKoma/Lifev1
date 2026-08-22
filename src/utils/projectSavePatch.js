@@ -43,7 +43,7 @@ export function capturePersistable(state) {
 function stripViewportMapTheme(theme) {
   if (!theme || typeof theme !== 'object') return theme;
   const lifeline = theme.lifeline
-    ? { ...theme.lifeline, viewCenterDate: undefined }
+    ? { ...theme.lifeline, viewCenterDate: undefined, viewStartDate: undefined, viewEndDate: undefined }
     : theme.lifeline;
   const roadmap = theme.roadmap
     ? {

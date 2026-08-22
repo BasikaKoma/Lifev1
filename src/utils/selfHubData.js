@@ -13,8 +13,12 @@ import { parseOuraPayload } from './heartRateMetric';
 import { extractOuraSummary } from './ouraInfo';
 import {
   collectCompletedItemsForDate,
+  collectCompletedCheckpointsFromStages,
   collectNotesCreatedForDate,
+  collectJournalNotesForDate,
   collectScheduledItemsForDate,
+  getDayEntry,
+  mergeCompletedItems,
 } from './lifelineDays';
 import { getSelfHubDayEntry } from './selfHubDays';
 
@@ -37,6 +41,21 @@ function numericValue(metric) {
 
 function numericCalories(value) {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function resolveSelfHubWorkStages(stages, projectActivity, isLifeline) {
+  const out = [];
+  const seen = new Set();
+  const add = (list) => {
+    for (const stage of list || []) {
+      if (!stage?.id || seen.has(stage.id)) continue;
+      seen.add(stage.id);
+      out.push(stage);
+    }
+  };
+  if (!isLifeline) add(stages);
+  for (const project of projectActivity || []) add(project.stages);
+  return out;
 }
 
 function buildTodayThreeFromRoadmap(stages) {
@@ -69,22 +88,34 @@ function buildTodayThreeFromRoadmap(stages) {
   };
 }
 
-function buildProjectDayActivity(projectActivity, selfHubDays) {
+function resolveDayJournalText(selfHubDays, lifelineDays, date) {
+  const stored = getSelfHubDayEntry(selfHubDays, date);
+  const life = lifelineDays ? getDayEntry(lifelineDays, date) : { notes: '' };
+  return stored.journal?.notes || life.notes || '';
+}
+
+function buildProjectDayActivity(projectActivity, selfHubDays, stages, lifelineDays) {
   const today = localTodayIsoDate();
   const stored = getSelfHubDayEntry(selfHubDays, today);
-  if (stored.projects) {
-    return {
-      source: 'selfHub',
-      completed: stored.projects.completed || [],
-      notes: stored.projects.notes || [],
-      scheduled: stored.projects.scheduled || [],
-    };
-  }
+  const completed = mergeCompletedItems(
+    stored.projects?.completed,
+    collectCompletedItemsForDate(projectActivity, today),
+    collectCompletedCheckpointsFromStages(stages, today),
+  );
+  const notes = mergeCompletedItems(
+    stored.projects?.notes,
+    collectNotesCreatedForDate(projectActivity, today),
+    collectJournalNotesForDate(resolveDayJournalText(selfHubDays, lifelineDays, today), today),
+  );
+  const scheduled = mergeCompletedItems(
+    stored.projects?.scheduled,
+    collectScheduledItemsForDate(projectActivity, today),
+  );
   return {
-    source: projectActivity?.length ? 'computed' : 'none',
-    completed: collectCompletedItemsForDate(projectActivity, today),
-    notes: collectNotesCreatedForDate(projectActivity, today),
-    scheduled: collectScheduledItemsForDate(projectActivity, today),
+    source: stored.projects ? 'merged' : projectActivity?.length || stages?.length ? 'computed' : 'none',
+    completed,
+    notes,
+    scheduled,
   };
 }
 
@@ -119,7 +150,36 @@ function deriveMovementMetric(activityScore, steps, targetSteps = 10000) {
   return createEmptyMetric({ label: 'Movement' });
 }
 
+function formatTempDeviationC(tempDev) {
+  if (tempDev == null || !Number.isFinite(tempDev)) return null;
+  const rounded = Math.round(tempDev * 10) / 10;
+  const sign = rounded > 0 ? '+' : '';
+  return `${sign}${rounded.toFixed(1)}`;
+}
+
+function tempDeviationStatus(tempDev) {
+  if (tempDev == null || !Number.isFinite(tempDev)) return NO_DATA;
+  if (tempDev > 0.4) return 'High';
+  if (tempDev < -0.4) return 'Low';
+  if (Math.abs(tempDev) <= 0.2) return 'Stable';
+  return 'Normal';
+}
+
+function extractOuraTempDeviationC(payload) {
+  const readiness = payload?.readiness ?? {};
+  const candidates = [
+    readiness.temperature_deviation,
+    readiness.temperature_trend_deviation,
+    payload?.sleep_sessions?.[0]?.readiness?.temperature_deviation,
+  ];
+  for (const value of candidates) {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+  }
+  return null;
+}
+
 function buildSummaryStrip({ sleep, restingHr, hrvMs, tempDev, updatedAt }) {
+  const tempLabel = formatTempDeviationC(tempDev);
   return [
     createEmptyMetric({
       label: 'Sleep',
@@ -153,9 +213,9 @@ function buildSummaryStrip({ sleep, restingHr, hrvMs, tempDev, updatedAt }) {
     }),
     createEmptyMetric({
       label: 'Temp',
-      value: tempDev,
-      unit: undefined,
-      status: tempDev != null ? (tempDev >= 70 ? 'Stable' : tempDev >= 50 ? 'Normal' : 'Low') : NO_DATA,
+      value: tempLabel,
+      unit: tempLabel != null ? '°C' : undefined,
+      status: tempDeviationStatus(tempDev),
       source: tempDev != null ? 'oura' : 'none',
       updatedAt,
       confidence: tempDev != null ? 'medium' : 'none',
@@ -164,7 +224,7 @@ function buildSummaryStrip({ sleep, restingHr, hrvMs, tempDev, updatedAt }) {
   ];
 }
 
-function buildFromSelfData(selfData, { displayName, stages, ouraRow, projectActivity, selfHubDays }) {
+function buildFromSelfData(selfData, { displayName, stages, ouraRow, projectActivity, selfHubDays, isLifeline, lifelineDays }) {
   const { metrics, systemStatus, source, updatedAt, dataDay } = selfData;
   const referenceTime = updatedAt ?? selfData.timeline?.referenceTime ?? null;
   const payload = ouraRow ? parseOuraPayload(ouraRow.payload) : {};
@@ -204,14 +264,15 @@ function buildFromSelfData(selfData, { displayName, stages, ouraRow, projectActi
     payload.readiness?.contributors?.average_hrv ??
     null;
 
-  const tempDev = payload.readiness?.contributors?.body_temperature ?? null;
+  const tempDev = extractOuraTempDeviationC(payload);
 
   const restingHr = metrics.heartRate?.resting ?? summary?.restingHeartRate ?? null;
 
   const movement = deriveMovementMetric(activityScore, summary?.steps);
 
-  const nextMove = getNextBestMove(stages || []);
-  const todayThree = buildTodayThreeFromRoadmap(stages);
+  const workStages = resolveSelfHubWorkStages(stages, projectActivity, isLifeline);
+  const nextMove = getNextBestMove(workStages);
+  const todayThree = buildTodayThreeFromRoadmap(workStages);
 
   const hasData =
     source !== 'empty' &&
@@ -323,7 +384,7 @@ function buildFromSelfData(selfData, { displayName, stages, ouraRow, projectActi
       confidence: capacityResult.confidence,
     }),
     dayProgress: {
-      ...buildTimelineFromReference(referenceTime),
+      ...buildTimelineFromReference(new Date().toISOString()),
       markers: ['12AM', '6AM', '12PM', '6PM', '12AM'],
     },
     deepWork: {
@@ -345,14 +406,17 @@ function buildFromSelfData(selfData, { displayName, stages, ouraRow, projectActi
       tempDev,
       updatedAt: referenceTime,
     }),
-    projectDay: buildProjectDayActivity(projectActivity, selfHubDays),
+    projectDay: buildProjectDayActivity(projectActivity, selfHubDays, stages, lifelineDays),
   };
 }
 
-function buildEmptyView({ displayName, ouraStatus, scaleConnected, projectActivity, selfHubDays }) {
+function buildEmptyView({ displayName, ouraStatus, scaleConnected, projectActivity, selfHubDays, stages, isLifeline, lifelineDays }) {
   const referenceTime = null;
   const usingOura = ouraStatus?.connected;
   const usingScale = scaleConnected;
+  const workStages = resolveSelfHubWorkStages(stages, projectActivity, isLifeline);
+  const todayThree = buildTodayThreeFromRoadmap(workStages);
+  const nextMove = getNextBestMove(workStages);
 
   const emptyMetric = (label) => createEmptyMetric({ label });
 
@@ -388,12 +452,12 @@ function buildEmptyView({ displayName, ouraStatus, scaleConnected, projectActivi
       message: usingOura ? 'Connect and sync Oura to see today\'s mode' : 'Connect Oura or Scale',
       source: 'none',
     },
-    todayThree: { source: 'none', items: [] },
+    todayThree,
     nextAction: {
       title: 'NEXT BEST ACTION',
-      message: 'Add roadmap checkpoints for daily actions',
+      message: nextMove?.action ?? 'Add roadmap checkpoints for daily actions',
       buttonLabel: 'Start Focus',
-      source: 'none',
+      source: nextMove?.type ? 'computed' : 'none',
     },
     summaryStrip: buildSummaryStrip({
       sleep: null,
@@ -402,7 +466,7 @@ function buildEmptyView({ displayName, ouraStatus, scaleConnected, projectActivi
       tempDev: null,
       updatedAt: referenceTime,
     }),
-    projectDay: buildProjectDayActivity(projectActivity, selfHubDays),
+    projectDay: buildProjectDayActivity(projectActivity, selfHubDays, stages, lifelineDays),
   };
 }
 
@@ -416,6 +480,7 @@ function buildEmptyView({ displayName, ouraStatus, scaleConnected, projectActivi
  * @param {Object|null} [params.ouraRow]
  * @param {Array} [params.projectActivity]
  * @param {Object} [params.selfHubDays]
+ * @param {boolean} [params.isLifeline]
  */
 export function buildSelfHubView({
   selfData,
@@ -426,12 +491,14 @@ export function buildSelfHubView({
   ouraRow,
   projectActivity,
   selfHubDays,
+  isLifeline,
+  lifelineDays,
 }) {
   if (!selfData || selfData.source === 'empty' || selfData.source === 'oura-empty') {
-    return buildEmptyView({ displayName, ouraStatus, scaleConnected, projectActivity, selfHubDays });
+    return buildEmptyView({ displayName, ouraStatus, scaleConnected, projectActivity, selfHubDays, stages, isLifeline, lifelineDays });
   }
 
-  return buildFromSelfData(selfData, { displayName, stages, ouraRow, projectActivity, selfHubDays });
+  return buildFromSelfData(selfData, { displayName, stages, ouraRow, projectActivity, selfHubDays, isLifeline, lifelineDays });
 }
 
 function mergeWeightMetric(baseWeight, hubWeight) {
