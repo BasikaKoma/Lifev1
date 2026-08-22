@@ -8,6 +8,7 @@ export { SelfTodayThreeCard } from './SelfTodayThreeCard';
 export { SelfNextBestActionCard } from './SelfNextBestActionCard';
 export { SelfSummaryStrip } from './SelfSummaryStrip';
 export { SelfProjectDayCard } from './SelfProjectDayCard';
+export { SelfRoutinesCard } from './SelfRoutinesCard';
 export { SelfHubMenu } from './SelfHubMenu';
 export { SelfDesktopHeader } from './SelfDesktopHeader';
 export { SelfDesktopDashboard } from './SelfDesktopDashboard';

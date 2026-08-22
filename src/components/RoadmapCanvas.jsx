@@ -84,22 +84,23 @@ import {
   syncLifelineMapTheme,
   isLifelineSpineReady,
   getLifelineTodayScrollPoint,
+  getLifelineZoomLevelMeta,
+  resolveLifelineZoomLevel,
+  getDayTickCanvasY,
+  collectLifelineBoundDates,
   applyLifelineDayHeightZoom,
   resetLifelineDayZoom,
   getLifelineZoomPercent,
-  getLifelineZoomLevelMeta,
-  resolveLifelineZoomLevel,
-  timelineYToDate,
   getLifelineSpineMetrics,
-  getDayTickCanvasY,
+  timelineYToDate,
   LIFELINE_ZOOM,
   DEFAULT_LIFELINE_CONFIG,
 } from '../utils/lifeline';
 import { generatePlanDayTicks, buildLifelinePlanContext, collectLifelinePlanDateLabels } from '../utils/planMode';
 import { platform } from '../platform';
 import { collectLifelineActivityDates } from '../utils/lifelineDays';
-import { getCurrentStage, getNextIncompleteCheckpoint, isCheckpointDone } from '../utils/logic';
 import { viewportClientPoint } from '../utils/inkStrokes';
+import { getCurrentStage, getNextIncompleteCheckpoint, isCheckpointDone } from '../utils/logic';
 import { CheckpointPlanPanel } from './CheckpointPlanPanel';
 import { useLifelineDayView, DAY_VIEW_PHASE } from '../hooks/useLifelineDayView';
 import {
@@ -289,6 +290,7 @@ function RoadmapCenterLine({
   planProgressSegments = [],
   planCheckpoints = [],
   lifelineDaySpacing = null,
+  lifelineConfig = null,
 }) {
   const { scale } = useZoomTransform();
   const drag = useRef(null);
@@ -324,6 +326,11 @@ function RoadmapCenterLine({
       y: e.clientY,
       top: lineMetrics.configured?.top ?? lineMetrics.top,
       height: lineMetrics.configured?.height ?? lineMetrics.height,
+      originStartDate: lifelineConfig?.startDate || null,
+      originEndDate: lifelineConfig?.endDate || null,
+      originOriginStartDate: lifelineConfig?.originStartDate || lifelineConfig?.startDate || null,
+      originFutureDays: lifelineConfig?.fullFutureDays ?? lifelineConfig?.futureDays ?? null,
+      spacing: lifelineDaySpacing || lifelineConfig?.dayHeight || null,
     };
     e.currentTarget.setPointerCapture(e.pointerId);
   };
@@ -344,10 +351,22 @@ function RoadmapCenterLine({
       return;
     }
     const dy = (e.clientY - d.y) / scale;
+    const meta = d.originEndDate
+      ? {
+          edge: d.mode,
+          originTop: d.top,
+          originHeight: d.height,
+          originStartDate: d.originStartDate,
+          originEndDate: d.originEndDate,
+          originOriginStartDate: d.originOriginStartDate,
+          originFutureDays: d.originFutureDays,
+          spacing: d.spacing,
+        }
+      : undefined;
     if (d.mode === 'top') {
-      onResizeSpine?.(d.top + dy, Math.max(240, d.height - dy));
+      onResizeSpine?.(d.top + dy, Math.max(240, d.height - dy), meta);
     } else if (d.mode === 'bottom') {
-      onResizeSpine?.(d.top, Math.max(240, d.height + dy));
+      onResizeSpine?.(d.top, Math.max(240, d.height + dy), meta);
     }
   };
 
@@ -431,15 +450,15 @@ function RoadmapCenterLine({
         type="button"
         className="roadmap-center-line__handle roadmap-center-line__handle--top"
         onPointerDown={startResize('top')}
-        title="Μεγέθυνση από πάνω"
-        aria-label="Resize roadmap from top"
+        title={lifelineConfig ? 'Τράβηξε πάνω για πιο μετά' : 'Μεγέθυνση από πάνω'}
+        aria-label={lifelineConfig ? 'Επέκταση Lifeline προς το μέλλον' : 'Resize roadmap from top'}
       />
       <button
         type="button"
         className="roadmap-center-line__handle roadmap-center-line__handle--bottom"
         onPointerDown={startResize('bottom')}
-        title="Μεγέθυνση από κάτω"
-        aria-label="Resize roadmap from bottom"
+        title={lifelineConfig ? 'Τράβηξε κάτω για πιο πριν' : 'Μεγέθυνση από κάτω'}
+        aria-label={lifelineConfig ? 'Επέκταση Lifeline προς το παρελθόν' : 'Resize roadmap from bottom'}
       />
       {(lineMetrics.nodes || []).map((node) => (
         <RoadmapTimelineDot
@@ -603,6 +622,7 @@ function CanvasBoard({
   lifelineDayBands = null,
   selectedDayDate = null,
   dayViewPhase = DAY_VIEW_PHASE.timeline,
+  routineTemplates = [],
 }) {
   const layoutWithOrigin =
     roadmapLayout?.direction === 'vertical' && typeof lineMetrics?.bottomY === 'number'
@@ -660,6 +680,7 @@ function CanvasBoard({
           onSelectNode={onSelectMilestone}
           onApplySpineMove={onApplySpineMove}
           onResizeSpine={onResizeSpine}
+          lifelineConfig={isLifeline ? lifelineConfig : null}
           lifelineDayTicks={
             isLifeline && lifelineDayTicks ? (
               <LifelineDayTicks
@@ -676,6 +697,7 @@ function CanvasBoard({
                 layout={roadmapLayout}
                 hiddenTickRanges={lifelineHiddenTickRanges}
                 selectedDate={selectedDayDate}
+                routineTemplates={routineTemplates}
               />
             ) : null
           }
@@ -1204,19 +1226,31 @@ export function RoadmapCanvas({
     () => lifelineAnchors.map((p) => p.lifelineAnchorDate).filter(Boolean),
     [lifelineAnchors]
   );
+  const lifelineBoundDates = useMemo(
+    () =>
+      collectLifelineBoundDates({
+        stages,
+        lifelineDays,
+        extraDates: [
+          ...lifelineAnchorDates,
+          ...collectLifelineActivityDates(projectActivity),
+        ],
+      }),
+    [stages, lifelineDays, lifelineAnchorDates, projectActivity]
+  );
   const activeTheme = useMemo(() => {
     const base = mapTheme || DEFAULT_MAP_THEME;
     if (!isLifeline) {
       lifelineSyncedThemeRef.current = null;
       return base;
     }
-    const config = getLifelineConfig(base, lifelineAnchorDates);
+    const config = getLifelineConfig(base, lifelineBoundDates);
     const layout = getRoadmapLayout(base);
-    if (isLifelineSpineReady(config, layout, lifelineAnchorDates)) {
+    if (isLifelineSpineReady(config, layout, lifelineBoundDates)) {
       lifelineSyncedThemeRef.current = null;
       return base;
     }
-    const synced = syncLifelineMapTheme(base, lifelineAnchorDates);
+    const synced = syncLifelineMapTheme(base, lifelineBoundDates);
     const cacheKey = [
       synced.roadmap?.height,
       synced.roadmap?.top,
@@ -1229,14 +1263,14 @@ export function RoadmapCanvas({
     }
     lifelineSyncedThemeRef.current = { key: cacheKey, theme: synced };
     return synced;
-  }, [mapTheme, isLifeline, lifelineAnchorDates]);
+  }, [mapTheme, isLifeline, lifelineBoundDates]);
   useEffect(() => {
     if (!isLifeline || !onMapThemeChange) return;
     const base = mapTheme || DEFAULT_MAP_THEME;
-    const config = getLifelineConfig(base, lifelineAnchorDates);
+    const config = getLifelineConfig(base, lifelineBoundDates);
     const layout = getRoadmapLayout(base);
-    if (isLifelineSpineReady(config, layout, lifelineAnchorDates)) return;
-    const synced = syncLifelineMapTheme(base, lifelineAnchorDates);
+    if (isLifelineSpineReady(config, layout, lifelineBoundDates)) return;
+    const synced = syncLifelineMapTheme(base, lifelineBoundDates);
     // Bail if sync wouldn't change persisted viewport — prevents save/render loops.
     if (
       synced.roadmap?.height === layout.height
@@ -1247,19 +1281,19 @@ export function RoadmapCanvas({
       return;
     }
     onMapThemeChange({ lifeline: synced.lifeline, roadmap: synced.roadmap });
-  }, [isLifeline, mapTheme, lifelineAnchorDates, onMapThemeChange]);
+  }, [isLifeline, mapTheme, lifelineBoundDates, onMapThemeChange]);
   const roadmapLayout = useMemo(() => getRoadmapLayout(activeTheme), [activeTheme]);
   const roadmapOrigin = useMemo(() => getRoadmapOrigin(activeTheme), [activeTheme]);
   const lifelineConfig = useMemo(
-    () => (isLifeline ? getLifelineConfig(activeTheme, lifelineAnchorDates) : null),
-    [isLifeline, activeTheme, lifelineAnchorDates]
+    () => (isLifeline ? getLifelineConfig(activeTheme, lifelineBoundDates) : null),
+    [isLifeline, activeTheme, lifelineBoundDates]
   );
   const lifelinePlanContext = useMemo(
     () =>
       lifelineConfig
-        ? buildLifelinePlanContext(lifelineConfig, roadmapLayout, lifelineAnchorDates)
+        ? buildLifelinePlanContext(lifelineConfig, roadmapLayout, lifelineBoundDates)
         : null,
-    [lifelineConfig, roadmapLayout, lifelineAnchorDates]
+    [lifelineConfig, roadmapLayout, lifelineBoundDates]
   );
   const lifelineZoomLevel = useMemo(() => {
     if (!isLifeline || !lifelinePlanContext) return null;
@@ -1346,7 +1380,7 @@ export function RoadmapCanvas({
         height: r.height,
       };
     } else if (viewportEl && lifelineConfig) {
-      const dayY = getDayTickCanvasY(date, lifelineConfig, roadmapLayout, lifelineAnchorDates);
+      const dayY = getDayTickCanvasY(date, lifelineConfig, roadmapLayout, lifelineBoundDates);
       const centerX = roadmapLayout?.centerX ?? 480;
       if (dayY != null) {
         const vr = viewportEl.getBoundingClientRect();
@@ -1378,7 +1412,7 @@ export function RoadmapCanvas({
     // Soft pan to center the day, then Premium Day Lab fades in (no exaggerated dive).
     let targetPan = pan;
     if (viewportEl && lifelineConfig) {
-      const dayY = getDayTickCanvasY(date, lifelineConfig, roadmapLayout, lifelineAnchorDates);
+      const dayY = getDayTickCanvasY(date, lifelineConfig, roadmapLayout, lifelineBoundDates);
       const centerX = roadmapLayout?.centerX ?? 480;
       if (dayY != null) {
         const w = viewportEl.clientWidth;
@@ -1403,7 +1437,7 @@ export function RoadmapCanvas({
     onRefreshProjectActivity,
     lifelineConfig,
     roadmapLayout,
-    lifelineAnchorDates,
+    lifelineBoundDates,
     activeTheme,
     openDayView,
   ]);
@@ -1420,7 +1454,7 @@ export function RoadmapCanvas({
     const todayTick = lifelineDayTicks?.find((tick) => tick.isToday);
     const point = todayTick
       ? { x: lineMetrics.centerX, y: todayTick.top }
-      : getLifelineTodayScrollPoint(lifelineConfig, roadmapLayout, lineMetrics, lifelineAnchorDates);
+      : getLifelineTodayScrollPoint(lifelineConfig, roadmapLayout, lineMetrics, lifelineBoundDates);
     if (!point || typeof point.y !== 'number' || Number.isNaN(point.y)) return null;
     // Trigger ONLY on focus/open — never on dayHeight zoom (height/y change),
     // or zoom would yank the viewport back to "today".
@@ -1436,12 +1470,12 @@ export function RoadmapCanvas({
     lifelineDayTicks,
     roadmapLayout,
     lineMetrics,
-    lifelineAnchorDates,
+    lifelineBoundDates,
   ]);
   const lifelineDefaultPan = useMemo(() => {
     const target = lifelineScrollTarget || (
       lifelineConfig
-        ? getLifelineTodayScrollPoint(lifelineConfig, roadmapLayout, lineMetrics, lifelineAnchorDates)
+        ? getLifelineTodayScrollPoint(lifelineConfig, roadmapLayout, lineMetrics, lifelineBoundDates)
         : null
     );
     if (!target) {
@@ -1455,7 +1489,7 @@ export function RoadmapCanvas({
       x: 480 - target.x * s,
       y: 360 - target.y * s,
     };
-  }, [lifelineScrollTarget, lifelineConfig, roadmapLayout, lineMetrics, lifelineAnchorDates]);
+  }, [lifelineScrollTarget, lifelineConfig, roadmapLayout, lineMetrics, lifelineBoundDates]);
   const roadmapCheckpoints = useMemo(
     () => collectRoadmapCheckpoints(stages, roadmapLayout, lifelinePlanContext),
     [stages, roadmapLayout, lifelinePlanContext]
@@ -1608,9 +1642,6 @@ export function RoadmapCanvas({
       roadmapLayout,
     ]
   );
-
-  const lifelineDayHeight =
-    activeTheme?.lifeline?.dayHeight ?? DEFAULT_LIFELINE_CONFIG.dayHeight;
 
   const handleOpenCheckpointModal = useCallback((stageId) => {
     const stage = stages.find((s) => s.id === stageId);
@@ -2396,13 +2427,15 @@ export function RoadmapCanvas({
     onMapThemeChange?.(updates);
   }, [onMapThemeChange]);
 
+  const lifelineDayHeight =
+    activeTheme?.lifeline?.dayHeight ?? DEFAULT_LIFELINE_CONFIG.dayHeight;
+
   const handleTransformChange = useCallback((transform) => {
     transformRef.current = transform;
     const scale = transform?.scale || 1;
     if (isLifeline) {
       setLifelineCssScale((prev) => (prev === scale ? prev : scale));
       const dayPercent = getLifelineZoomPercent({ lifeline: { dayHeight: lifelineDayHeight } });
-      // Below 100% CSS scale → show scale %. At/above 100% → show dayHeight zoom %.
       const nextPercent = scale < 0.995 ? Math.round(scale * 100) : dayPercent;
       setZoomPercent((prev) => (prev === nextPercent ? prev : nextPercent));
       return;
@@ -2443,7 +2476,7 @@ export function RoadmapCanvas({
       return {
         date: timelineYToDate(
           canvasY,
-          getLifelineConfig(base, lifelineAnchorDates),
+          getLifelineConfig(base, lifelineBoundDates),
           metrics,
           roadmapLayout
         ),
@@ -2451,7 +2484,7 @@ export function RoadmapCanvas({
         canvasY,
       };
     },
-    [activeTheme, lifelineAnchorDates, roadmapLayout]
+    [activeTheme, lifelineBoundDates, roadmapLayout]
   );
 
   const applyLifelineDensityZoom = useCallback(
@@ -2465,7 +2498,7 @@ export function RoadmapCanvas({
       if (!resolved) return false;
       const { date: anchorDate, pointY } = resolved;
 
-      const result = applyLifelineDayHeightZoom(base, lifelineAnchorDates, zoomIn, anchorDate);
+      const result = applyLifelineDayHeightZoom(base, lifelineBoundDates, zoomIn, anchorDate);
       if (!result) return false;
 
       onMapThemeChange?.({
@@ -2482,7 +2515,7 @@ export function RoadmapCanvas({
       }
       return true;
     },
-    [activeTheme, lifelineAnchorDates, onMapThemeChange, resolveLifelineDateAtClientPoint]
+    [activeTheme, lifelineBoundDates, onMapThemeChange, resolveLifelineDateAtClientPoint]
   );
 
   const enterDayViewFromZoom = useCallback(
@@ -2491,7 +2524,6 @@ export function RoadmapCanvas({
       const resolved = resolveLifelineDateAtClientPoint(clientX, clientY);
       const date = resolved?.date;
       if (!date) return false;
-      // Prefer the rendered tick under the cursor for a clean morph origin.
       const tickEl =
         typeof document !== 'undefined'
           ? document.querySelector(`.lifeline-day-tick[data-date="${date}"]`)
@@ -2510,23 +2542,19 @@ export function RoadmapCanvas({
       const scale = ctx.scale || 1;
       const dayHeight = activeTheme?.lifeline?.dayHeight ?? DEFAULT_LIFELINE_CONFIG.dayHeight;
 
-      // Day View open: zoom-out closes it; zoom-in is consumed (already inside the day).
       if (dayView.isActive) {
         if (!zoomIn) handleCloseLifelineDay();
         return true;
       }
 
-      // Zoom in past 100% CSS → increase day density (sharp, per-day).
       if (zoomIn && scale >= 0.995) {
         const stepped = applyLifelineDensityZoom(true, e.clientX, e.clientY, ctx.setPan);
         if (stepped) return true;
-        // Already at max density — continue zoom opens Day View for the day under cursor.
         if (dayHeight >= LIFELINE_ZOOM.dayViewEnterAt) {
           return enterDayViewFromZoom(e.clientX, e.clientY);
         }
         return true;
       }
-      // Zoom out: shrink day density first, then allow CSS scale overview.
       if (!zoomIn && dayHeight > DEFAULT_LIFELINE_CONFIG.dayHeight) {
         return applyLifelineDensityZoom(false, e.clientX, e.clientY, ctx.setPan);
       }
@@ -2580,11 +2608,11 @@ export function RoadmapCanvas({
 
   const handleResetZoom = useCallback(() => {
     if (isLifeline) {
-      const synced = resetLifelineDayZoom(activeTheme || DEFAULT_MAP_THEME, lifelineAnchorDates);
+      const synced = resetLifelineDayZoom(activeTheme || DEFAULT_MAP_THEME, lifelineBoundDates);
       onMapThemeChange?.({ lifeline: synced.lifeline, roadmap: synced.roadmap });
     }
     zoomCanvasRef.current?.resetZoomTo100();
-  }, [isLifeline, activeTheme, lifelineAnchorDates, onMapThemeChange]);
+  }, [isLifeline, activeTheme, lifelineBoundDates, onMapThemeChange]);
 
   const isEmptyBoard =
     canvasStages.length === 0 && canvasIdeas.length === 0 && canvasStickiesOnBoard.length === 0;
@@ -2775,7 +2803,7 @@ export function RoadmapCanvas({
           )}
           <ZoomCanvas
             ref={zoomCanvasRef}
-            key={isLifeline ? 'lifeline' : 'roadmap'}
+            key={isLifeline ? 'lifeline-v4' : 'roadmap'}
             className="roadmap-canvas zoom-canvas--no-toolbar"
             defaultScale={isLifeline ? 0.9 : ROADMAP_OPEN_SCALE}
             defaultPan={isLifeline ? lifelineDefaultPan : roadmapDefaultPan}
@@ -2915,6 +2943,7 @@ export function RoadmapCanvas({
             lifelineDayBands={lifelineDayBands}
             selectedDayDate={dayView.date}
             dayViewPhase={dayView.phase}
+            routineTemplates={(mapTheme || activeTheme)?.lifeline?.routineTemplates ?? []}
           />
           </ZoomCanvas>
 

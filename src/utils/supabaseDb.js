@@ -23,7 +23,7 @@ import {
   createLifelineProject,
   syncLifelineMapTheme,
 } from './lifeline';
-import { normalizeLifelineDays } from './lifelineDays';
+import { mergeLifelineDaysMaps, normalizeLifelineDays } from './lifelineDays';
 import { normalizeSelfHubDays } from './selfHubDays';
 import { normalizeProjectBrief } from './projectBrief';
 import {
@@ -1317,15 +1317,16 @@ export async function patchLifelineProjectBundle(lifelineProjectId, { selfHubDay
   const loaded = await loadProjectById(lifelineProjectId);
   const incomingDays =
     lifelineDays != null ? normalizeLifelineDays(lifelineDays) : normalizeLifelineDays(loaded.lifelineDays);
-  const mergedDays = {
-    ...normalizeLifelineDays(loaded.lifelineDays),
-    ...incomingDays,
+  const mergedDays = mergeLifelineDaysMaps(loaded.lifelineDays, incomingDays);
+  const mergedHubDays = {
+    ...normalizeSelfHubDays(loaded.mapTheme?.lifeline?.selfHubDays),
+    ...normalizeSelfHubDays(selfHubDays ?? loaded.mapTheme?.lifeline?.selfHubDays),
   };
 
   const mapTheme = mergeMapTheme(loaded.mapTheme, {
     lifeline: {
       ...(loaded.mapTheme?.lifeline || {}),
-      selfHubDays: normalizeSelfHubDays(selfHubDays ?? loaded.mapTheme?.lifeline?.selfHubDays),
+      selfHubDays: mergedHubDays,
     },
   });
 
@@ -1339,10 +1340,7 @@ export async function patchLifelineProjectBundle(lifelineProjectId, { selfHubDay
 
   if (first.conflict) {
     const reloaded = await loadProjectById(lifelineProjectId);
-    const retryDays = {
-      ...normalizeLifelineDays(reloaded.lifelineDays),
-      ...incomingDays,
-    };
+    const retryDays = mergeLifelineDaysMaps(reloaded.lifelineDays, incomingDays);
     const retryRow = sanitizeForDb({
       lifeline_days: retryDays,
       map_theme: mapTheme,

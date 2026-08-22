@@ -27,8 +27,14 @@ export async function startScaleBackground(device = readScaleDevice()) {
   return true;
 }
 
-export async function stopScaleBackground() {
+export async function stopScaleBackground({ unpair = false } = {}) {
   if (!canUseScaleBackground()) return;
+  if (unpair) {
+    await ScaleBackground.unpair().catch(async () => {
+      await ScaleBackground.stop().catch(() => {});
+    });
+    return;
+  }
   await ScaleBackground.stop().catch(() => {});
 }
 

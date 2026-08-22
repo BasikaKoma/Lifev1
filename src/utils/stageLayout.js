@@ -948,9 +948,17 @@ export function getCenterLineMetrics(stages, layout = DEFAULT_ROADMAP_LAYOUT, ex
   const minContent = contentTops.length ? Math.min(...contentTops) : spineTop + pad;
   const maxContent = contentTops.length ? Math.max(...contentTops) : spineBottom - pad;
 
-  const top = Math.min(spineTop, minContent - pad, 8);
-  const bottom = Math.max(spineBottom, maxContent + pad, baseY + pad);
-  const height = Math.max(bottom - top, spineHeight, 320);
+  // Lifeline spine is date-sized. Do not expand it to off-grid nodes — that
+  // blows past the GPU layer cap and the line paints blank.
+  const top = lifelineContext
+    ? spineTop
+    : Math.min(spineTop, minContent - pad, 8);
+  const bottom = lifelineContext
+    ? spineBottom
+    : Math.max(spineBottom, maxContent + pad, baseY + pad);
+  const height = lifelineContext
+    ? spineHeight
+    : Math.max(bottom - top, spineHeight, 320);
   const bottomY = top + height;
 
   return {

@@ -48,6 +48,14 @@ public class ScaleBackgroundPlugin extends Plugin {
     @PluginMethod
     public void stop(PluginCall call) {
         getContext().stopService(new Intent(getContext(), ScaleForegroundService.class));
+        JSObject result = new JSObject();
+        result.put("running", false);
+        call.resolve(result);
+    }
+
+    @PluginMethod
+    public void unpair(PluginCall call) {
+        getContext().stopService(new Intent(getContext(), ScaleForegroundService.class));
         ScaleForegroundService.clearPrefs(getContext());
         JSObject result = new JSObject();
         result.put("running", false);

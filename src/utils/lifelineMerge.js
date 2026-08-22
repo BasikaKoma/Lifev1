@@ -3,6 +3,8 @@
  * Prevents data loss when duplicate lifeline records exist.
  */
 
+import { mergeLifelineDaysMaps } from './lifelineDays';
+
 function arrayLength(value) {
   return Array.isArray(value) ? value.length : 0;
 }
@@ -140,7 +142,7 @@ export function mergeLifelineRowData(canonical = {}, incoming = {}) {
   merged.canvas_tasks = mergeJsonArrays(canonical.canvas_tasks, incoming.canvas_tasks);
   merged.canvas_ink = mergeJsonArrays(canonical.canvas_ink, incoming.canvas_ink);
   merged.whiteboard_strokes = mergeJsonArrays(canonical.whiteboard_strokes, incoming.whiteboard_strokes);
-  merged.lifeline_days = mergeJsonObjects(incoming.lifeline_days, canonical.lifeline_days);
+  merged.lifeline_days = mergeLifelineDaysMaps(incoming.lifeline_days, canonical.lifeline_days);
   merged.map_theme = mergeMapTheme(canonical.map_theme, incoming.map_theme);
 
   return merged;
@@ -178,14 +180,12 @@ export function protectLifelineDataFromAccidentalWipe(newRow = {}, cloudRow = {}
   }
 
   if ('lifeline_days' in newRow) {
+    const mergedDays = mergeLifelineDaysMaps(cloudRow.lifeline_days, newRow.lifeline_days);
+    const mergedCount = objectKeyCount(mergedDays);
     const newDayCount = objectKeyCount(newRow.lifeline_days);
-    const cloudDayCount = objectKeyCount(cloudRow.lifeline_days);
-    if (newDayCount < cloudDayCount && cloudDayCount > 0) {
-      protectedRow.lifeline_days = {
-        ...(cloudRow.lifeline_days || {}),
-        ...(newRow.lifeline_days || {}),
-      };
-      reconcile.lifeline_days = protectedRow.lifeline_days;
+    protectedRow.lifeline_days = mergedDays;
+    if (mergedCount > newDayCount) {
+      reconcile.lifeline_days = mergedDays;
     }
   }
 

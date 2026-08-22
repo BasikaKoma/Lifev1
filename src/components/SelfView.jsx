@@ -12,8 +12,17 @@ import {
   SelfNextBestActionCard,
   SelfSummaryStrip,
   SelfProjectDayCard,
+  SelfRoutinesCard,
   SelfHubMenu,
 } from './self/hub';
+import {
+  getDayEntry,
+  mergeDayRoutines,
+  normalizeRoutineTemplates,
+  toggleRoutineDone,
+  getRoutineWeekScore,
+} from '../utils/lifelineDays';
+import { getSelfHubDayEntry } from '../utils/selfHubDays';
 import './SelfView.css';
 import './selfHub.css';
 
@@ -110,6 +119,33 @@ export function SelfView({
     [mapTheme, onMapThemeChange],
   );
 
+  const today = localTodayIsoDate();
+  const routineTemplates = normalizeRoutineTemplates(mapTheme?.lifeline?.routineTemplates);
+  const todayRoutineLog = useMemo(() => {
+    const lifelineEntry = getDayEntry(lifelineDays, today);
+    const hubEntry = getSelfHubDayEntry(selfHubDays, today);
+    return hubEntry.journal?.routines && Object.keys(hubEntry.journal.routines).length
+      ? hubEntry.journal.routines
+      : lifelineEntry.routines;
+  }, [lifelineDays, selfHubDays, today]);
+  const todayRoutines = useMemo(
+    () => mergeDayRoutines(routineTemplates, todayRoutineLog),
+    [routineTemplates, todayRoutineLog]
+  );
+  const routineWeek = useMemo(
+    () => getRoutineWeekScore(lifelineDays, routineTemplates, today, (date) => getDayEntry(lifelineDays, date)),
+    [lifelineDays, routineTemplates, today]
+  );
+
+  const handleToggleTodayRoutine = useCallback(
+    (routine) => {
+      onUpdateLifelineDay?.(today, {
+        routines: toggleRoutineDone(todayRoutineLog, routine, !routine.done),
+      });
+    },
+    [onUpdateLifelineDay, today, todayRoutineLog],
+  );
+
   return (
     <div
       className={`self-view self-view--hub${dayViewActive ? ' self-view--day-open' : ''}`}
@@ -161,6 +197,13 @@ export function SelfView({
 
           <SelfSummaryStrip
             metrics={hubView.summaryStrip}
+            onOpenDayDetails={handleOpenDayDetails}
+          />
+
+          <SelfRoutinesCard
+            dayRoutines={todayRoutines}
+            weekLabel={routineWeek.label}
+            onToggle={handleToggleTodayRoutine}
             onOpenDayDetails={handleOpenDayDetails}
           />
 

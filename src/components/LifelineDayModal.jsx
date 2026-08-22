@@ -4,14 +4,21 @@ import {
   createRoutineTemplate,
   formatFullDayLabel,
   getDayEntry,
+  getRoutineDayScore,
+  getRoutineWeekScore,
+  groupRoutinesByStack,
   kindLabel,
   mergeDayRoutines,
   normalizeRoutineTemplates,
+  ROUTINE_STACK_ORDER,
+  ROUTINE_STACKS,
+  toggleRoutineDone,
 } from '../utils/lifelineDays';
 import { getSelfHubDayEntry } from '../utils/selfHubDays';
 import { resolveProjectDayForView } from '../utils/selfHubSync';
 import { localTodayIsoDate } from '../utils/selfDateUtils';
 import { getDayLabView } from '../utils/lifelineSelfMetrics';
+import { healthMetricsToLifelinePatch } from '../lib/health/healthToLifeline';
 import { getSelfMetricVariant } from '../utils/selfMetricVariant';
 import { fetchOuraMetricsForDay } from '../lib/oura';
 import { fetchMetricsForDay } from '../lib/health/healthMetrics';
@@ -63,6 +70,7 @@ export function LifelineDayModal({
   const [newTodo, setNewTodo] = useState('');
   const [newRoutineLabel, setNewRoutineLabel] = useState('');
   const [newRoutineTime, setNewRoutineTime] = useState('');
+  const [newRoutineStack, setNewRoutineStack] = useState('morning');
   const closeBtnRef = useRef(null);
   const [arrived, setArrived] = useState(false);
   const [ouraRowForDay, setOuraRowForDay] = useState(null);
@@ -76,6 +84,18 @@ export function LifelineDayModal({
   const dayRoutines = useMemo(
     () => mergeDayRoutines(templates, entry.routines),
     [templates, entry.routines]
+  );
+  const routineStacks = useMemo(
+    () => groupRoutinesByStack(dayRoutines, { includeEmpty: true }),
+    [dayRoutines]
+  );
+  const routineScore = useMemo(
+    () => getRoutineDayScore(templates, entry.routines),
+    [templates, entry.routines]
+  );
+  const routineWeek = useMemo(
+    () => getRoutineWeekScore(lifelineDays, templates, date, (day) => getDayEntry(lifelineDays, day)),
+    [lifelineDays, templates, date]
   );
 
   const completed = useMemo(
@@ -115,8 +135,11 @@ export function LifelineDayModal({
   }, [visible, date]);
 
   const dayLab = useMemo(() => {
+    const fromHealth = !entry.metrics && healthMetricsForDay.length
+      ? healthMetricsToLifelinePatch(date, healthMetricsForDay)
+      : null;
     const view = getDayLabView({
-      entryMetrics: entry.metrics,
+      entryMetrics: entry.metrics || fromHealth,
       date,
       ouraRow: ouraRowForDay,
     });
@@ -198,13 +221,19 @@ export function LifelineDayModal({
   };
 
   const patchRoutineLog = useCallback(
-    (templateId, patch) => {
+    (template, patch) => {
       if (!date) return;
-      const current = entry.routines[templateId] || { done: false, time: '' };
+      if (patch.done !== undefined && patch.time === undefined) {
+        onUpdateDay?.(date, {
+          routines: toggleRoutineDone(entry.routines, template, patch.done),
+        });
+        return;
+      }
+      const current = entry.routines[template.id] || { done: false, time: '' };
       onUpdateDay?.(date, {
         routines: {
           ...entry.routines,
-          [templateId]: {
+          [template.id]: {
             done: patch.done ?? current.done,
             time: patch.time ?? current.time,
           },
@@ -218,7 +247,10 @@ export function LifelineDayModal({
     e.preventDefault();
     const label = newRoutineLabel.trim();
     if (!label) return;
-    const next = [...templates, createRoutineTemplate(label, newRoutineTime)];
+    const next = [
+      ...templates,
+      createRoutineTemplate(label, { defaultTime: newRoutineTime, stack: newRoutineStack }),
+    ];
     onUpdateRoutineTemplates?.(next);
     setNewRoutineLabel('');
     setNewRoutineTime('');
@@ -311,54 +343,73 @@ export function LifelineDayModal({
 
           <main className="day-lab__column day-lab__column--center">
             <section className="day-lab__panel day-lab__panel--routines">
-              <h3 className="day-lab__panel-title">Ρουτίνες ημέρας</h3>
+              <h3 className="day-lab__panel-title">
+                Ρουτίνες
+                {routineScore.label ? ` · ${routineScore.label}` : ''}
+                {routineWeek.label ? ` · ${routineWeek.label}` : ''}
+              </h3>
               <p className="day-lab__panel-hint">
-                Σταθερές πράξεις που επαναλαμβάνεις — ξύπνημα, πρωινή ρουτίνα κ.λπ.
+                Ορίζεις τις πράξεις μία φορά. Κάθε μέρα κάνεις μόνο check — η ώρα γράφεται μόνη της.
               </p>
 
-              {dayRoutines.length === 0 ? (
-                <p className="day-lab__empty">Πρόσθεσε την πρώτη σου ρουτίνα παρακάτω.</p>
-              ) : (
-                <ul className="day-lab__routine-list">
-                  {dayRoutines.map((routine) => (
-                    <li
-                      key={routine.id}
-                      className={`day-lab__routine-item${routine.done ? ' day-lab__routine-item--done' : ''}`}
-                    >
-                      <label className="day-lab__routine-check">
-                        <input
-                          type="checkbox"
-                          checked={routine.done}
-                          onChange={() => patchRoutineLog(routine.id, { done: !routine.done })}
-                        />
-                        <span className="day-lab__routine-label">{routine.label}</span>
-                      </label>
-                      <input
-                        type="time"
-                        className="day-lab__routine-time input"
-                        value={routine.time}
-                        onChange={(e) => patchRoutineLog(routine.id, { time: e.target.value })}
-                        aria-label={`Ώρα για ${routine.label}`}
-                      />
-                      <button
-                        type="button"
-                        className="day-lab__routine-remove"
-                        onClick={() => handleRemoveRoutineTemplate(routine.id)}
-                        aria-label={`Αφαίρεση ρουτίνας ${routine.label}`}
-                        title="Αφαίρεση από όλες τις ημέρες"
-                      >
-                        ×
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              {routineStacks.map((stack) => (
+                <div key={stack.id} className="day-lab__routine-stack">
+                  <p className="day-lab__routine-stack-label">{stack.label}</p>
+                  {stack.items.length === 0 ? (
+                    <p className="day-lab__empty">Τίποτα ακόμα σε αυτό το μπλοκ.</p>
+                  ) : (
+                    <ul className="day-lab__routine-list">
+                      {stack.items.map((routine) => (
+                        <li
+                          key={routine.id}
+                          className={`day-lab__routine-item${routine.done ? ' day-lab__routine-item--done' : ''}`}
+                        >
+                          <label className="day-lab__routine-check">
+                            <input
+                              type="checkbox"
+                              checked={routine.done}
+                              onChange={() => patchRoutineLog(routine, { done: !routine.done })}
+                            />
+                            <span className="day-lab__routine-label">{routine.label}</span>
+                          </label>
+                          <input
+                            type="time"
+                            className="day-lab__routine-time input"
+                            value={routine.time}
+                            onChange={(e) => patchRoutineLog(routine, { time: e.target.value })}
+                            aria-label={`Ώρα για ${routine.label}`}
+                          />
+                          <button
+                            type="button"
+                            className="day-lab__routine-remove"
+                            onClick={() => handleRemoveRoutineTemplate(routine.id)}
+                            aria-label={`Αφαίρεση ρουτίνας ${routine.label}`}
+                            title="Αφαίρεση από όλες τις ημέρες"
+                          >
+                            ×
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ))}
 
               <form className="day-lab__routine-form" onSubmit={handleAddRoutineTemplate}>
+                <select
+                  className="input day-lab__routine-form-stack"
+                  value={newRoutineStack}
+                  onChange={(e) => setNewRoutineStack(e.target.value)}
+                  aria-label="Στοίβα ρουτίνας"
+                >
+                  {ROUTINE_STACK_ORDER.map((id) => (
+                    <option key={id} value={id}>{ROUTINE_STACKS[id].label}</option>
+                  ))}
+                </select>
                 <input
                   type="text"
                   className="input"
-                  placeholder="π.χ. Ξύπνημα, Πρωινή ρουτίνα…"
+                  placeholder="π.χ. Ξύπνημα, Φως, Χωρίς οθόνη…"
                   value={newRoutineLabel}
                   onChange={(e) => setNewRoutineLabel(e.target.value)}
                 />
@@ -367,7 +418,7 @@ export function LifelineDayModal({
                   className="input day-lab__routine-form-time"
                   value={newRoutineTime}
                   onChange={(e) => setNewRoutineTime(e.target.value)}
-                  aria-label="Προεπιλεγμένη ώρα"
+                  aria-label="Προεπιλεγμένη ώρα (προαιρετικά)"
                 />
                 <button type="submit" className="btn btn--primary btn--sm">
                   + Ρουτίνα

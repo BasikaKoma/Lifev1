@@ -7,6 +7,7 @@ import {
   LIFELINE_ZOOM_LEVEL,
 } from '../utils/lifeline';
 import { isLifelineTickLabelHidden } from '../utils/stageLayout';
+import { getDayEntry, getRoutineDayScore, normalizeRoutineTemplates } from '../utils/lifelineDays';
 
 const PLAN_LABEL_MIN_SPACING = 7;
 
@@ -30,10 +31,12 @@ export function LifelineDayTicks({
   layout = null,
   hiddenTickRanges = [],
   selectedDate = null,
+  routineTemplates = [],
 }) {
   if (!ticks?.length && !daySpacing && !dayBands?.length) return null;
 
   const detailZoom = daySpacing >= LIFELINE_ZOOM.everyDaySpacing;
+  const templates = normalizeRoutineTemplates(routineTemplates);
 
   const handleGridClick = (e) => {
     if (e.button !== 0) return;
@@ -89,6 +92,10 @@ export function LifelineDayTicks({
         const showPlanLabel = Boolean(planLabel && daySpacing >= PLAN_LABEL_MIN_SPACING);
         const hideDayLabel = isLifelineTickLabelHidden(tick.top, hiddenTickRanges);
         const isSelected = selectedDate === tick.date;
+        const routineScore = templates.length
+          ? getRoutineDayScore(templates, getDayEntry(lifelineDays, tick.date).routines)
+          : { total: 0, label: '' };
+        const showRoutineScore = routineScore.total > 0 && (detailZoom || tick.isToday || hasContent);
 
         return (
           <button
@@ -117,8 +124,8 @@ export function LifelineDayTicks({
               e.preventDefault();
               onDayClick?.(tick.date, e.currentTarget);
             }}
-            title={`Άνοιγμα ημέρας — ${formatDayLabel(tick.date)}`}
-            aria-label={`Ημέρα ${formatDayLabel(tick.date)}`}
+            title={`Άνοιγμα ημέρας — ${formatDayLabel(tick.date)}${showRoutineScore ? ` · ${routineScore.label}` : ''}`}
+            aria-label={`Ημέρα ${formatDayLabel(tick.date)}${showRoutineScore ? `, ρουτίνες ${routineScore.label}` : ''}`}
             aria-current={isSelected ? 'date' : undefined}
           >
             <span className="lifeline-day-tick__line" />
@@ -131,6 +138,9 @@ export function LifelineDayTicks({
                 </span>
               )
             )}
+            {showRoutineScore ? (
+              <span className="lifeline-day-tick__score">{routineScore.label}</span>
+            ) : null}
           </button>
         );
       })}

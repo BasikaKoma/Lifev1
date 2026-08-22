@@ -90,6 +90,11 @@ export function isScaleLinked(cloudRecord) {
   return Boolean(readScaleDevice()?.id);
 }
 
+/** Phone owns always-on BLE capture; desktop should read cloud data instead. */
+export function hasPhoneScaleCapture(cloudRecord) {
+  return Boolean(normalizeCloudRecord(cloudRecord)?.platforms?.capacitor?.id);
+}
+
 export async function fetchScaleDeviceFromCloud() {
   const supabase = getSupabaseClient();
   if (!supabase) return null;

@@ -23,6 +23,7 @@ import { APP_NAME } from './constants/branding';
 import { useOura, useOuraOAuthReturn } from './hooks/useOura';
 import { useProfile } from './hooks/useProfile';
 import { useHealthSelfHubSync } from './hooks/useHealthSelfHubSync';
+import { useHealthLifelineSync } from './hooks/useHealthLifelineSync';
 import { useSelfHubLiveCapture } from './hooks/useSelfHubLiveCapture';
 import { buildSelfHubView } from './utils/selfHubData';
 import { useHealthData } from './hooks/useHealthData';
@@ -214,6 +215,13 @@ function MainApp({ user, onSignOut }) {
     connected: Boolean(ouraStatus?.connected),
     lastSyncedAt: ouraStatus?.last_synced_at,
     onCaptureHealth: captureSelfHubLiveDay,
+  });
+
+  useHealthLifelineSync({
+    enabled: Boolean(user && lifelineProjectId),
+    connected: Boolean(ouraStatus?.connected),
+    lastSyncedAt: ouraStatus?.last_synced_at,
+    updateLifelineDaysBatch,
   });
 
   const {
@@ -779,6 +787,7 @@ function MainApp({ user, onSignOut }) {
         isMobile={platform.isMobile}
         isWeb={platform.isWeb}
         backgroundCapture={scale.backgroundCapture}
+        phoneCapture={scale.phoneCapture}
         debug={scale.debug}
       />
     </div>

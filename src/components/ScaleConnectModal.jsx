@@ -24,6 +24,7 @@ export function ScaleConnectModal({
   isMobile = false,
   isWeb = false,
   backgroundCapture = false,
+  phoneCapture = false,
   debug = null,
 }) {
   const [heightCm, setHeightCm] = useState(profile?.heightCm ?? 170);
@@ -92,7 +93,14 @@ export function ScaleConnectModal({
           </span>
         </header>
 
-        {connected && !bleConnected && isWeb && (
+        {connected && !bleConnected && isWeb && phoneCapture && (
+          <p className="oura-modal__hint">
+            Το κινητό τραβάει τις μετρήσεις στο παρασκήνιο. Τα κιλά εμφανίζονται εδώ από τον λογαριασμό.
+            Μην συνδέσεις τη ζυγαριά από τον υπολογιστή — η ζυγαριά δέχεται μόνο μία σύνδεση και το κινητό θα σταματήσει να γράφει.
+          </p>
+        )}
+
+        {connected && !bleConnected && isWeb && !phoneCapture && (
           <p className="oura-modal__hint">
             Η ζυγαριά είναι συνδεδεμένη στον λογαριασμό σου. Για live μετρήσεις σε αυτό το browser, πάτα «Σύνδεση QN-Scale» μία φορά.
           </p>

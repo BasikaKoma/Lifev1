@@ -74,6 +74,14 @@ export const ZoomCanvas = forwardRef(function ZoomCanvas({
     transformRef.current = { scale, pan };
   }
 
+  useEffect(() => {
+    const current = transformRef.current.scale;
+    const next = clampScale(current, minScale, maxScale);
+    if (next === current) return;
+    transformRef.current = { ...transformRef.current, scale: next };
+    setScale(next);
+  }, [minScale, maxScale]);
+
   const applyScaleAtViewportPoint = useCallback((newScale, pointX, pointY) => {
     const currentScale = transformRef.current.scale;
     const currentPan = transformRef.current.pan;

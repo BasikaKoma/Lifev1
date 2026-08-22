@@ -46,7 +46,7 @@ import {
   clearPendingInviteToken,
 } from '../utils/inviteSession';
 import { setStoredProjectId } from '../utils/projectSession';
-import { syncLifelineMapTheme, toDateString, addDays, daysBetween, getLifelineConfig, timelineYToDate, getDayTickCanvasY, clampLifelineDayHeight, DEFAULT_LIFELINE_CONFIG } from '../utils/lifeline';
+import { syncLifelineMapTheme, applyLifelineSpineResize, toDateString, addDays, daysBetween, getLifelineConfig, timelineYToDate, getDayTickCanvasY, clampLifelineDayHeight, DEFAULT_LIFELINE_CONFIG, collectLifelineBoundDates } from '../utils/lifeline';
 import { scaleInkStrokesForLifelineZoom } from '../utils/inkStrokes';
 import {
   buildPlanStartUpdates,
@@ -58,7 +58,8 @@ import {
   buildLifelinePlanContext,
   resolvePlanDayHeight,
 } from '../utils/planMode';
-import { patchDayEntry, normalizeLifelineDays, routineTemplatesEqual, patchMultipleDayEntries, getDayEntry } from '../utils/lifelineDays';
+import { patchDayEntry, normalizeLifelineDays, mergeLifelineDaysMaps, routineTemplatesEqual, patchMultipleDayEntries, getDayEntry } from '../utils/lifelineDays';
+import { mapLifelineReconcileToState } from '../utils/lifelineMerge';
 import { normalizeSelfHubDays } from '../utils/selfHubDays';
 import { captureSelfHubLiveDay as mergeSelfHubCapture } from '../utils/selfHubSync';
 import { useAppHistory } from './useAppHistory';
@@ -77,6 +78,14 @@ const LOAD_PROJECT_TIMEOUT_MS = 25000;
 
 function normalizeInk(strokes) {
   return ensureInkGroups(strokes || []);
+}
+
+function lifelineBoundDatesFromState(prev, anchors) {
+  return collectLifelineBoundDates({
+    stages: prev?.stages,
+    lifelineDays: prev?.lifelineDays,
+    extraDates: (anchors || []).map((p) => p.lifelineAnchorDate).filter(Boolean),
+  });
 }
 
 function reindexStages(stages) {
@@ -232,10 +241,14 @@ export function useAppState(userId) {
   const hydrateLifelineHubFromState = useCallback((next) => {
     if (!next?.isLifeline) return;
     const hub = normalizeSelfHubDays(next.mapTheme?.lifeline?.selfHubDays);
-    const days = normalizeLifelineDays(next.lifelineDays);
-    selfHubDaysRef.current = hub;
+    const days = mergeLifelineDaysMaps(lifelineDaysRef.current, next.lifelineDays);
+    selfHubDaysRef.current = {
+      ...selfHubDaysRef.current,
+      ...hub,
+    };
     lifelineDaysRef.current = days;
-    setSelfHubDays(hub);
+    setSelfHubDays(selfHubDaysRef.current);
+    setLifelineArchiveDays(days);
   }, []);
 
   const markOwnCloudWrite = useCallback(() => {
@@ -310,10 +323,16 @@ export function useAppState(userId) {
   useEffect(() => {
     stateRef.current = state;
     if (state?.isLifeline) {
-      lifelineDaysRef.current = state.lifelineDays || {};
+      lifelineDaysRef.current = mergeLifelineDaysMaps(
+        lifelineDaysRef.current,
+        state.lifelineDays || {}
+      );
       const fromTheme = normalizeSelfHubDays(state.mapTheme?.lifeline?.selfHubDays);
       if (Object.keys(fromTheme).length) {
-        selfHubDaysRef.current = fromTheme;
+        selfHubDaysRef.current = {
+          ...selfHubDaysRef.current,
+          ...fromTheme,
+        };
       }
     }
   }, [state]);
@@ -565,11 +584,20 @@ export function useAppState(userId) {
         if (cancelled) return;
         const hubDays = normalizeSelfHubDays(data.mapTheme?.lifeline?.selfHubDays);
         const days = normalizeLifelineDays(data.lifelineDays);
-        if (!pendingLifelineBundleRef.current) {
-          selfHubDaysRef.current = hubDays;
-          lifelineDaysRef.current = days;
-          setSelfHubDays(hubDays);
-          setLifelineArchiveDays(days);
+        const mergedDays = mergeLifelineDaysMaps(days, lifelineDaysRef.current);
+        const mergedHub = {
+          ...hubDays,
+          ...selfHubDaysRef.current,
+        };
+        selfHubDaysRef.current = mergedHub;
+        lifelineDaysRef.current = mergedDays;
+        setSelfHubDays(mergedHub);
+        setLifelineArchiveDays(mergedDays);
+        if (stateRef.current?.isLifeline && stateRef.current?.projectId === lifelineProjectId) {
+          applyLifelineBundleLocally({
+            lifelineDays: mergedDays,
+            selfHubDays: mergedHub,
+          }, { fromRemote: !pendingLifelineBundleRef.current });
         }
         if (stateRef.current?.projectId === lifelineProjectId) return;
         const existing = sessionProjectsRef.current.get(lifelineProjectId);
@@ -589,7 +617,7 @@ export function useAppState(userId) {
     return () => {
       cancelled = true;
     };
-  }, [lifelineProjectId]);
+  }, [lifelineProjectId, applyLifelineBundleLocally]);
 
   const markLifelineBundlePending = useCallback(() => {
     if (!lifelineProjectId || !isSupabaseConfigured()) return;
@@ -599,9 +627,10 @@ export function useAppState(userId) {
 
   const captureSelfHubLiveDay = useCallback((date, patch) => {
     const current = stateRef.current;
-    const lifelineDaysSource = current?.isLifeline
-      ? current.lifelineDays
-      : lifelineDaysRef.current;
+    const lifelineDaysSource = mergeLifelineDaysMaps(
+      lifelineDaysRef.current,
+      current?.isLifeline ? current.lifelineDays : {}
+    );
 
     const merged = mergeSelfHubCapture({
       selfHubDays: selfHubDaysRef.current,
@@ -695,6 +724,12 @@ export function useAppState(userId) {
       setSyncConflict(false);
       setSyncError(result?.warning || null);
       markOwnCloudWrite();
+      if (result?.reconcile) {
+        const patch = mapLifelineReconcileToState(result.reconcile);
+        if (patch?.lifelineDays) {
+          applyLifelineBundleLocally({ lifelineDays: patch.lifelineDays }, { fromRemote: true });
+        }
+      }
       if (result?.cloudUpdatedAt) {
         if (stateRef.current) {
           stateRef.current = {
@@ -713,7 +748,7 @@ export function useAppState(userId) {
     if (result?.warning) {
       setSyncError(result.warning);
     }
-  }, [markOwnCloudWrite, sessionHasUnsavedWork]);
+  }, [markOwnCloudWrite, sessionHasUnsavedWork, applyLifelineBundleLocally]);
 
   const runSave = useCallback(async (columnsWanted) => {
     if (syncConflict) return savePromiseRef.current;
@@ -959,9 +994,7 @@ export function useAppState(userId) {
       let stages = prev.stages;
       let canvasInk = prev.canvasInk;
       if (prev.isLifeline) {
-        const anchorDates = (lifelineAnchors || [])
-          .map((p) => p.lifelineAnchorDate)
-          .filter(Boolean);
+        const anchorDates = lifelineBoundDatesFromState(prev, lifelineAnchors);
         const oldSynced = syncLifelineMapTheme(prev.mapTheme, anchorDates);
         const oldDayHeight = clampLifelineDayHeight(
           oldSynced.lifeline?.dayHeight ?? DEFAULT_LIFELINE_CONFIG.dayHeight
@@ -1190,7 +1223,7 @@ export function useAppState(userId) {
         ? buildLifelinePlanContext(
             getLifelineConfig(
               prev.mapTheme,
-              (lifelineAnchors || []).map((p) => p.lifelineAnchorDate).filter(Boolean)
+              lifelineBoundDatesFromState(prev, lifelineAnchors)
             ),
             layout
           )
@@ -1256,7 +1289,7 @@ export function useAppState(userId) {
         ? buildLifelinePlanContext(
             getLifelineConfig(
               prev.mapTheme,
-              (lifelineAnchors || []).map((p) => p.lifelineAnchorDate).filter(Boolean)
+              lifelineBoundDatesFromState(prev, lifelineAnchors)
             ),
             layout
           )
@@ -1285,7 +1318,7 @@ export function useAppState(userId) {
         ? buildLifelinePlanContext(
             getLifelineConfig(
               prev.mapTheme,
-              (lifelineAnchors || []).map((p) => p.lifelineAnchorDate).filter(Boolean)
+              lifelineBoundDatesFromState(prev, lifelineAnchors)
             ),
             layout
           )
@@ -1316,7 +1349,7 @@ export function useAppState(userId) {
           if (s.id !== node.refId || !isPlanMode(s)) return s;
           const layout = getRoadmapLayout(prev.mapTheme);
           const lifelineCtx = prev.isLifeline
-            ? buildLifelinePlanContext(getLifelineConfig(prev.mapTheme), layout)
+            ? buildLifelinePlanContext(getLifelineConfig(prev.mapTheme, lifelineBoundDatesFromState(prev, lifelineAnchors)), layout, lifelineBoundDatesFromState(prev, lifelineAnchors))
             : null;
           if (lifelineCtx) {
             const newStartDate = timelineYToDate(
@@ -1488,7 +1521,7 @@ export function useAppState(userId) {
         ? buildLifelinePlanContext(
             getLifelineConfig(
               prev.mapTheme,
-              (lifelineAnchors || []).map((p) => p.lifelineAnchorDate).filter(Boolean)
+              lifelineBoundDatesFromState(prev, lifelineAnchors)
             ),
             layout
           )
@@ -1713,7 +1746,7 @@ export function useAppState(userId) {
     patchState((prev) => {
       const layout = getRoadmapLayout(prev.mapTheme);
       const lifelineCtx = prev.isLifeline
-        ? buildLifelinePlanContext(getLifelineConfig(prev.mapTheme), layout)
+        ? buildLifelinePlanContext(getLifelineConfig(prev.mapTheme, lifelineBoundDatesFromState(prev, lifelineAnchors)), layout, lifelineBoundDatesFromState(prev, lifelineAnchors))
         : null;
       return {
         ...prev,
@@ -1887,8 +1920,31 @@ export function useAppState(userId) {
 
   const shiftRoadmapSpine = applyRoadmapSpineMove;
 
-  const resizeRoadmapSpine = useCallback((top, height) => {
+  const resizeRoadmapSpine = useCallback((top, height, resizeMeta) => {
     patchState((prev) => {
+      if (prev.isLifeline && resizeMeta?.edge) {
+        const anchorDates = lifelineBoundDatesFromState(prev, lifelineAnchors);
+        const nextTheme = applyLifelineSpineResize(prev.mapTheme, anchorDates, {
+          top,
+          height,
+          ...resizeMeta,
+        });
+        if (!nextTheme) return prev;
+        if (
+          nextTheme.lifeline?.futureDays === prev.mapTheme?.lifeline?.futureDays
+          && nextTheme.lifeline?.startDate === prev.mapTheme?.lifeline?.startDate
+          && nextTheme.lifeline?.viewCenterDate === prev.mapTheme?.lifeline?.viewCenterDate
+          && nextTheme.roadmap?.top === prev.mapTheme?.roadmap?.top
+          && nextTheme.roadmap?.height === prev.mapTheme?.roadmap?.height
+        ) {
+          return prev;
+        }
+        return {
+          ...prev,
+          mapTheme: nextTheme,
+          stages: alignLifelinePlanStages(prev.stages, nextTheme, anchorDates),
+        };
+      }
       const h = Math.max(240, height);
       return {
         ...prev,
@@ -1901,7 +1957,7 @@ export function useAppState(userId) {
         }),
       };
     }, { debounce: true });
-  }, [patchState]);
+  }, [patchState, lifelineAnchors]);
 
   const moveRoadmapSpinePreview = applyRoadmapSpineMove;
 
@@ -2674,7 +2730,10 @@ export function useAppState(userId) {
 
   const updateLifelineDay = useCallback((date, patch) => {
     const current = stateRef.current;
-    const lifelineSource = current?.isLifeline ? current.lifelineDays : lifelineDaysRef.current;
+    const lifelineSource = mergeLifelineDaysMaps(
+      lifelineDaysRef.current,
+      current?.isLifeline ? current.lifelineDays : {}
+    );
     const nextLifelineDays = patchDayEntry(lifelineSource, date, patch);
 
     const journalPatch = {};
@@ -2726,9 +2785,10 @@ export function useAppState(userId) {
 
   const updateLifelineDaysBatch = useCallback((patchesByDate) => {
     const current = stateRef.current;
-    const lifelineSource = current?.isLifeline
-      ? current.lifelineDays
-      : lifelineDaysRef.current;
+    const lifelineSource = mergeLifelineDaysMaps(
+      lifelineDaysRef.current,
+      current?.isLifeline ? current.lifelineDays : {}
+    );
 
     const filtered = {};
     for (const [dateStr, patch] of Object.entries(patchesByDate ?? {})) {

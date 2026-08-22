@@ -151,26 +151,29 @@ export function getEmptyDayLabView(date = null) {
 }
 
 export function getDayLabView({ entryMetrics, date, ouraRow = null }) {
-  const metrics = entryMetrics?.preview === true ? null : entryMetrics;
+  const stored = entryMetrics?.preview === true ? null : entryMetrics;
+  const fromOura = ouraRow ? ouraRowToLifelineMetrics(ouraRow) : null;
+  const storedHasData = Boolean(
+    stored && (stored.leftMetrics?.length || stored.weight || stored.dayScore)
+  );
 
-  if (metrics && !metrics.preview) {
+  if (storedHasData) {
     return enrichDayLabMetrics(
       {
-        ...metrics,
+        ...fromOura,
+        ...stored,
         preview: false,
-        weight: metrics.weight ?? null,
+        weight: stored.weight ?? fromOura?.weight ?? null,
+        leftMetrics: stored.leftMetrics?.length ? stored.leftMetrics : fromOura?.leftMetrics,
+        rightMetrics: stored.rightMetrics?.length ? stored.rightMetrics : fromOura?.rightMetrics,
       },
       ouraRow,
     );
   }
-  if (metrics?.weight || metrics?.leftMetrics?.length) {
-    return enrichDayLabMetrics(
-      {
-        ...metrics,
-        preview: false,
-      },
-      ouraRow,
-    );
+
+  if (fromOura) {
+    return enrichDayLabMetrics({ ...fromOura, preview: false }, ouraRow);
   }
+
   return getEmptyDayLabView(date);
 }

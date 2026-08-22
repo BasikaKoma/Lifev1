@@ -4,10 +4,12 @@ import {
   clearScaleDevice,
   clearScaleDeviceFromCloud,
   fetchScaleDeviceFromCloud,
+  hasPhoneScaleCapture,
   isScaleLinked,
   persistScaleDevice,
   persistScaleDeviceToCloud,
   readScaleDevice,
+  readScaleIngestToken,
   resolveScaleDeviceForPlatform,
   syncScaleDeviceFromCloud,
 } from '../platform/ble/scalePersistence';
@@ -128,6 +130,7 @@ export function useScale({
   const [reconnecting, setReconnecting] = useState(false);
   const [connected, setConnected] = useState(false);
   const [linked, setLinked] = useState(() => Boolean(readScaleDevice()?.id));
+  const [phoneCapture, setPhoneCapture] = useState(false);
   const [devices, setDevices] = useState([]);
   const [lastMeasurement, setLastMeasurement] = useState(null);
   const [error, setError] = useState(null);
@@ -144,6 +147,7 @@ export function useScale({
   const reconnectInFlightRef = useRef(false);
   const linkedRef = useRef(Boolean(readScaleDevice()?.id));
   const connectedRef = useRef(false);
+  const phoneCaptureRef = useRef(false);
   const isWeb = detectPlatform() === 'web' || detectPlatform() === 'electron';
 
   useEffect(() => {
@@ -203,6 +207,8 @@ export function useScale({
         return [...prev, device];
       });
       if (canUseScaleBackground()) {
+        phoneCaptureRef.current = true;
+        setPhoneCapture(true);
         await managerRef.current.disconnect().catch(() => {});
         setConnected(false);
         await startScaleBackground(device).catch(() => {});
@@ -222,6 +228,7 @@ export function useScale({
 
   const attemptReconnect = useCallback(async ({ silent = false } = {}) => {
     if (canUseScaleBackground()) return false;
+    if (phoneCaptureRef.current) return false;
     if (!managerRef.current) return false;
     if (reconnectInFlightRef.current) return false;
 
@@ -229,6 +236,11 @@ export function useScale({
     if (!stored?.id) {
       try {
         const cloud = await fetchScaleDeviceFromCloud();
+        if (hasPhoneScaleCapture(cloud)) {
+          phoneCaptureRef.current = true;
+          setPhoneCapture(true);
+          return false;
+        }
         stored = resolveScaleDeviceForPlatform(cloud);
         if (stored?.id) persistScaleDevice(stored);
         if (isScaleLinked(cloud)) setLinked(true);
@@ -274,10 +286,13 @@ export function useScale({
       initDoneRef.current = false;
       if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
       managerRef.current?.disconnect().catch(() => {});
-      stopScaleBackground().catch(() => {});
-      notifyElectronScaleBackground(false);
+      // Keep Android ingest alive across exclusive-session logout (PC login).
+      // The native service uses a device token, not the signed-in JWT.
       setConnected(false);
-      setLinked(false);
+      const stored = readScaleDevice();
+      if (canUseScaleBackground() && stored?.id && readScaleIngestToken()) {
+        startScaleBackground(stored).catch(() => {});
+      }
       return undefined;
     }
 
@@ -377,12 +392,13 @@ export function useScale({
       if (cancelled) return;
 
       let linkedNow = Boolean(readScaleDevice()?.id);
+      let cloudRecord = null;
       try {
-        const cloud = await syncScaleDeviceFromCloud();
+        cloudRecord = await syncScaleDeviceFromCloud();
         const local = readScaleDevice();
-        linkedNow = Boolean(local?.id) || isScaleLinked(cloud);
+        linkedNow = Boolean(local?.id) || isScaleLinked(cloudRecord);
         if (!cancelled) setLinked(linkedNow);
-        if (local?.id && !isScaleLinked(cloud)) {
+        if (local?.id && !isScaleLinked(cloudRecord)) {
           await persistScaleDeviceToCloud(local).catch(() => {});
         }
       } catch {
@@ -392,13 +408,18 @@ export function useScale({
       }
 
       if (cancelled) return;
+      const phoneOwns = hasPhoneScaleCapture(cloudRecord) || canUseScaleBackground();
+      phoneCaptureRef.current = phoneOwns;
+      if (!cancelled) setPhoneCapture(phoneOwns);
       if (canUseScaleBackground() && linkedNow) {
         const stored = readScaleDevice();
         await startScaleBackground(stored).catch(() => {});
         notifyElectronScaleBackground(true);
       } else if (linkedNow) {
-        notifyElectronScaleBackground(true);
-        await attemptReconnect({ silent: true });
+        notifyElectronScaleBackground(!phoneCaptureRef.current);
+        if (!phoneCaptureRef.current) {
+          await attemptReconnect({ silent: true });
+        }
       }
     })().catch(() => {});
 
@@ -532,10 +553,12 @@ export function useScale({
     if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
     pendingMeasurementRef.current = null;
     await managerRef.current?.disconnect().catch(() => {});
-    await stopScaleBackground().catch(() => {});
+    await stopScaleBackground({ unpair: true }).catch(() => {});
     notifyElectronScaleBackground(false);
     clearScaleDevice();
     await clearScaleDeviceFromCloud().catch(() => {});
+    phoneCaptureRef.current = false;
+    setPhoneCapture(false);
     setConnected(false);
     setLinked(false);
     setLastMeasurement(null);
@@ -570,5 +593,6 @@ export function useScale({
     saveProfile: saveScaleProfile,
     refreshAvailability,
     backgroundCapture: canUseScaleBackground() || detectPlatform() === 'electron',
+    phoneCapture,
   };
 }

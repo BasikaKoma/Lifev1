@@ -4,6 +4,21 @@ import { toDateString, parseDate } from './lifeline';
 
 import { normalizeDayMetrics } from './lifelineSelfMetrics';
 import { normalizeSelfHubDayEntry } from './selfHubDays';
+import { normalizeRoutineLog } from './lifelineRoutines';
+
+export {
+  createRoutineTemplate,
+  normalizeRoutineTemplates,
+  routineTemplatesEqual,
+  mergeDayRoutines,
+  groupRoutinesByStack,
+  toggleRoutineDone,
+  getRoutineDayScore,
+  getRoutineWeekScore,
+  localTimeHm,
+  ROUTINE_STACKS,
+  ROUTINE_STACK_ORDER,
+} from './lifelineRoutines';
 
 function normalizeProjectSnapshotArchive(raw) {
   if (!raw || typeof raw !== 'object') return null;
@@ -52,52 +67,6 @@ export function createDayTodo(text = '') {
   };
 }
 
-export function createRoutineTemplate(label = '', defaultTime = '') {
-  return {
-    id: `routine-${generateId()}`,
-    label: label.trim(),
-    defaultTime: defaultTime.trim(),
-  };
-}
-
-function normalizeRoutineLog(raw) {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
-  const out = {};
-  for (const [id, entry] of Object.entries(raw)) {
-    if (!id || typeof entry !== 'object') continue;
-    out[id] = {
-      done: entry.done === true,
-      time: typeof entry.time === 'string' ? entry.time : '',
-    };
-  }
-  return out;
-}
-
-export function normalizeRoutineTemplates(raw) {
-  if (!Array.isArray(raw)) return [];
-  return raw
-    .map((item) => ({
-      id: item?.id || `routine-${generateId()}`,
-      label: typeof item?.label === 'string' ? item.label.trim() : '',
-      defaultTime: typeof item?.defaultTime === 'string' ? item.defaultTime.trim() : '',
-    }))
-    .filter((item) => item.label);
-}
-
-export function routineTemplatesEqual(a, b) {
-  return JSON.stringify(normalizeRoutineTemplates(a))
-    === JSON.stringify(normalizeRoutineTemplates(b));
-}
-
-export function mergeDayRoutines(templates, routineLog) {
-  const log = normalizeRoutineLog(routineLog);
-  return normalizeRoutineTemplates(templates).map((template) => ({
-    ...template,
-    done: log[template.id]?.done === true,
-    time: log[template.id]?.time || template.defaultTime || '',
-  }));
-}
-
 export function getDayEntry(lifelineDays, dateStr) {
   const key = toDateString(dateStr);
   if (!key) return createEmptyDayEntry();
@@ -137,6 +106,53 @@ export function normalizeLifelineDays(raw) {
       archivedAt: typeof entry?.archivedAt === 'string' ? entry.archivedAt : null,
       archivedFrom: typeof entry?.archivedFrom === 'string' ? entry.archivedFrom : null,
     };
+  }
+  return out;
+}
+
+function pickRicherText(local, cloud) {
+  const localText = typeof local === 'string' ? local.trim() : '';
+  if (localText) return local;
+  return typeof cloud === 'string' ? cloud : '';
+}
+
+function pickRicherList(local, cloud) {
+  if (Array.isArray(local) && local.length) return local;
+  return Array.isArray(cloud) ? cloud : [];
+}
+
+function pickRicherObject(local, cloud) {
+  if (local && typeof local === 'object' && !Array.isArray(local) && Object.keys(local).length) {
+    return local;
+  }
+  return cloud && typeof cloud === 'object' && !Array.isArray(cloud) ? cloud : null;
+}
+
+/** Merge one day so metrics-only local patches cannot wipe cloud notes/todos. */
+export function mergeLifelineDayEntry(cloud, local) {
+  if (!cloud) return local || createEmptyDayEntry();
+  if (!local) return cloud;
+  return {
+    ...cloud,
+    ...local,
+    notes: pickRicherText(local.notes, cloud.notes),
+    todos: pickRicherList(local.todos, cloud.todos),
+    routines: pickRicherObject(local.routines, cloud.routines) || {},
+    metrics: local.metrics || cloud.metrics || null,
+    projectSnapshot: local.projectSnapshot || cloud.projectSnapshot || null,
+    hubSnapshot: local.hubSnapshot || cloud.hubSnapshot || null,
+    archivedAt: local.archivedAt || cloud.archivedAt || null,
+    archivedFrom: local.archivedFrom || cloud.archivedFrom || null,
+  };
+}
+
+/** Union of day maps. Local wins on populated fields; empty local keeps cloud history. */
+export function mergeLifelineDaysMaps(cloud = {}, local = {}) {
+  const cloudDays = normalizeLifelineDays(cloud);
+  const localDays = normalizeLifelineDays(local);
+  const out = { ...cloudDays };
+  for (const [date, entry] of Object.entries(localDays)) {
+    out[date] = mergeLifelineDayEntry(cloudDays[date], entry);
   }
   return out;
 }
