@@ -21,6 +21,7 @@ import {
   mergeCompletedItems,
 } from './lifelineDays';
 import { getSelfHubDayEntry } from './selfHubDays';
+import { buildNextActionFromPath, buildTodayThreeFromPath } from '../lib/path/logic';
 
 function formatRelativeAgo(isoString) {
   if (!isoString) return null;
@@ -224,7 +225,7 @@ function buildSummaryStrip({ sleep, restingHr, hrvMs, tempDev, updatedAt }) {
   ];
 }
 
-function buildFromSelfData(selfData, { displayName, stages, ouraRow, projectActivity, selfHubDays, isLifeline, lifelineDays }) {
+function buildFromSelfData(selfData, { displayName, stages, ouraRow, projectActivity, selfHubDays, isLifeline, lifelineDays, pathBundle }) {
   const { metrics, systemStatus, source, updatedAt, dataDay } = selfData;
   const referenceTime = updatedAt ?? selfData.timeline?.referenceTime ?? null;
   const payload = ouraRow ? parseOuraPayload(ouraRow.payload) : {};
@@ -271,8 +272,10 @@ function buildFromSelfData(selfData, { displayName, stages, ouraRow, projectActi
   const movement = deriveMovementMetric(activityScore, summary?.steps);
 
   const workStages = resolveSelfHubWorkStages(stages, projectActivity, isLifeline);
+  const pathTodayThree = buildTodayThreeFromPath(pathBundle);
+  const pathNextAction = buildNextActionFromPath(pathBundle);
   const nextMove = getNextBestMove(workStages);
-  const todayThree = buildTodayThreeFromRoadmap(workStages);
+  const todayThree = pathTodayThree || buildTodayThreeFromRoadmap(workStages);
 
   const hasData =
     source !== 'empty' &&
@@ -393,7 +396,7 @@ function buildFromSelfData(selfData, { displayName, stages, ouraRow, projectActi
       source: readiness != null ? 'computed' : 'none',
     },
     todayThree,
-    nextAction: {
+    nextAction: pathNextAction || {
       title: 'NEXT BEST ACTION',
       message: nextMove?.action ?? 'Set up your roadmap to get daily actions',
       buttonLabel: 'Start Focus',
@@ -410,12 +413,14 @@ function buildFromSelfData(selfData, { displayName, stages, ouraRow, projectActi
   };
 }
 
-function buildEmptyView({ displayName, ouraStatus, scaleConnected, projectActivity, selfHubDays, stages, isLifeline, lifelineDays }) {
+function buildEmptyView({ displayName, ouraStatus, scaleConnected, projectActivity, selfHubDays, stages, isLifeline, lifelineDays, pathBundle }) {
   const referenceTime = null;
   const usingOura = ouraStatus?.connected;
   const usingScale = scaleConnected;
   const workStages = resolveSelfHubWorkStages(stages, projectActivity, isLifeline);
-  const todayThree = buildTodayThreeFromRoadmap(workStages);
+  const pathTodayThree = buildTodayThreeFromPath(pathBundle);
+  const pathNextAction = buildNextActionFromPath(pathBundle);
+  const todayThree = pathTodayThree || buildTodayThreeFromRoadmap(workStages);
   const nextMove = getNextBestMove(workStages);
 
   const emptyMetric = (label) => createEmptyMetric({ label });
@@ -453,7 +458,7 @@ function buildEmptyView({ displayName, ouraStatus, scaleConnected, projectActivi
       source: 'none',
     },
     todayThree,
-    nextAction: {
+    nextAction: pathNextAction || {
       title: 'NEXT BEST ACTION',
       message: nextMove?.action ?? 'Add roadmap checkpoints for daily actions',
       buttonLabel: 'Start Focus',
@@ -493,12 +498,13 @@ export function buildSelfHubView({
   selfHubDays,
   isLifeline,
   lifelineDays,
+  pathBundle,
 }) {
   if (!selfData || selfData.source === 'empty' || selfData.source === 'oura-empty') {
-    return buildEmptyView({ displayName, ouraStatus, scaleConnected, projectActivity, selfHubDays, stages, isLifeline, lifelineDays });
+    return buildEmptyView({ displayName, ouraStatus, scaleConnected, projectActivity, selfHubDays, stages, isLifeline, lifelineDays, pathBundle });
   }
 
-  return buildFromSelfData(selfData, { displayName, stages, ouraRow, projectActivity, selfHubDays, isLifeline, lifelineDays });
+  return buildFromSelfData(selfData, { displayName, stages, ouraRow, projectActivity, selfHubDays, isLifeline, lifelineDays, pathBundle });
 }
 
 function mergeWeightMetric(baseWeight, hubWeight) {

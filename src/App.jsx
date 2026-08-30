@@ -32,6 +32,8 @@ import { ScaleConnectModal } from './components/ScaleConnectModal';
 import { CamerasConnectModal } from './components/CamerasConnectModal';
 import { CamerasView } from './components/CamerasView';
 import { PersonalBrandView } from './components/brand/PersonalBrandView';
+import { PathView } from './components/path/PathView';
+import { loadPathBundle, readPathBundleLocal } from './lib/path/store';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { platform } from './platform';
 import { useMobilePinchZoom } from './hooks/useMobilePinchZoom';
@@ -67,6 +69,7 @@ export default function App() {
 
 function MainApp({ user, onSignOut }) {
   const [brainMode, setBrainMode] = useState('closed');
+  const [pathBundle, setPathBundle] = useState(() => readPathBundleLocal());
 
   const {
     loading,
@@ -308,6 +311,7 @@ function MainApp({ user, onSignOut }) {
         selfHubDays,
         isLifeline,
         lifelineDays,
+        pathBundle,
       }),
     [
       selfData,
@@ -320,8 +324,21 @@ function MainApp({ user, onSignOut }) {
       selfHubDays,
       isLifeline,
       lifelineDays,
+      pathBundle,
     ],
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    loadPathBundle()
+      .then((bundle) => {
+        if (!cancelled) setPathBundle(bundle);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [activeView]);
 
   useSelfHubLiveCapture({
     enabled: Boolean(user),
@@ -341,7 +358,7 @@ function MainApp({ user, onSignOut }) {
   const handleNavigate = (view) => {
     setFocusMode(false);
     const keepsLifelineProject =
-      view === 'self' || view === 'brand' || view === 'settings' || view === 'review' || view === 'devices';
+      view === 'self' || view === 'path' || view === 'brand' || view === 'settings' || view === 'review' || view === 'devices';
     if (isLifeline && !keepsLifelineProject) {
       const regular = filterRegularProjects(projectList);
       const target = regular.find((p) => p.id === projectId && !p.isLifeline) || regular[0];
@@ -711,6 +728,31 @@ function MainApp({ user, onSignOut }) {
             onRefreshProjectActivity={refreshProjectActivity}
             northStars={lifelineNorthStars}
             onUpdateNorthStars={updateLifelineNorthStars}
+            pathBundle={pathBundle}
+          />
+        );
+      case 'path':
+        return (
+          <PathView
+            projectList={projectList}
+            projectId={projectId}
+            projectTitle={projectTitle}
+            stages={stages}
+            canvasTasks={canvasTasks}
+            projectActivity={hubProjectActivity}
+            onCompleteLinkedTask={(linked) => {
+              if (!linked?.taskId) return;
+              for (const stage of stages || []) {
+                const checkpoint = (stage.checkpoints || []).find((item) => item.id === linked.taskId);
+                if (checkpoint) {
+                  updateCheckpoint(stage.id, linked.taskId, { done: true });
+                  return;
+                }
+              }
+              if ((canvasTasks || []).some((task) => task.id === linked.taskId)) {
+                updateCanvasTask(linked.taskId, { status: 'Done' });
+              }
+            }}
           />
         );
       case 'brand':
@@ -771,7 +813,7 @@ function MainApp({ user, onSignOut }) {
   };
 
   return (
-    <div className={`app ${focusMode ? 'app--focus' : ''} ${selectedStage ? 'app--detail' : ''} ${activeView === 'roadmap' && !selectedStage ? 'app--roadmap' : ''} ${activeView === 'self' ? 'app--self' : ''} ${activeView === 'brand' ? 'app--brand' : ''} ${activeView === 'settings' ? 'app--settings' : ''} ${activeView === 'review' ? 'app--review' : ''} ${activeView === 'devices' ? 'app--devices' : ''} ${canvasFullscreen ? 'app--canvas-fullscreen' : ''} ${sidebarCollapsed ? 'app--sidebar-collapsed' : ''} ${platform.isMobile ? 'app--mobile' : ''}`}>
+    <div className={`app ${focusMode ? 'app--focus' : ''} ${selectedStage ? 'app--detail' : ''} ${activeView === 'roadmap' && !selectedStage ? 'app--roadmap' : ''} ${activeView === 'self' ? 'app--self' : ''} ${activeView === 'path' ? 'app--path' : ''} ${activeView === 'brand' ? 'app--brand' : ''} ${activeView === 'settings' ? 'app--settings' : ''} ${activeView === 'review' ? 'app--review' : ''} ${activeView === 'devices' ? 'app--devices' : ''} ${canvasFullscreen ? 'app--canvas-fullscreen' : ''} ${sidebarCollapsed ? 'app--sidebar-collapsed' : ''} ${platform.isMobile ? 'app--mobile' : ''}`}>
       {!canvasFullscreen && !platform.isMobile && (
         <Sidebar
           activeView={activeView}

@@ -58,6 +58,7 @@ export function SelfView({
   onRefreshProjectActivity,
   northStars = [],
   onUpdateNorthStars,
+  pathBundle = null,
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [focusMessage, setFocusMessage] = useState(null);
@@ -125,8 +126,9 @@ export function SelfView({
         selfHubDays,
         isLifeline,
         lifelineDays,
+        pathBundle,
       }),
-    [selfData, displayName, ouraStatus, scaleConnected, stages, ouraRow, projectActivity, selfHubDays, isLifeline, lifelineDays],
+    [selfData, displayName, ouraStatus, scaleConnected, stages, ouraRow, projectActivity, selfHubDays, isLifeline, lifelineDays, pathBundle],
   );
 
   const waitingForData = ouraStatus?.connected && selfData?.source === 'oura-empty';

@@ -1,4 +1,4 @@
-export const APP_VIEWS = ['review', 'roadmap', 'workspace', 'self', 'brand', 'settings', 'devices'];
+export const APP_VIEWS = ['review', 'roadmap', 'workspace', 'self', 'path', 'brand', 'settings', 'devices'];
 
 const VIEW_ALIASES = {
   overview: 'roadmap',

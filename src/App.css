@@ -149,6 +149,7 @@ html:has(.app--roadmap) body {
   padding: 24px 32px 48px;
 }
 
+.app--path .main,
 .app--devices .main,
 .app--brand .main {
   max-width: none;
@@ -157,6 +158,7 @@ html:has(.app--roadmap) body {
   padding: 24px 32px 48px;
 }
 
+.app--path .main,
 .app--brand .main {
   padding: 0;
   max-width: none;
@@ -168,6 +170,7 @@ html:has(.app--roadmap) body {
   flex-direction: column;
 }
 
+.app--path .app__content,
 .app--brand .app__content {
   min-width: 0;
 }
