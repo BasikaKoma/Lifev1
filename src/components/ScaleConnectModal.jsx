@@ -23,6 +23,7 @@ export function ScaleConnectModal({
   onSaveProfile,
   isMobile = false,
   isWeb = false,
+  isIosWeb = false,
   backgroundCapture = false,
   phoneCapture = false,
   debug = null,
@@ -93,14 +94,22 @@ export function ScaleConnectModal({
           </span>
         </header>
 
-        {connected && !bleConnected && isWeb && phoneCapture && (
+        {isIosWeb && (
+          <p className="oura-modal__hint">
+            {phoneCapture
+              ? 'Το iPhone (Safari) δεν συνδέεται στη ζυγαριά με Bluetooth. Το Android συνεχίζει να γράφει τις μετρήσεις στο παρασκήνιο — τα κιλά εμφανίζονται εδώ από τον λογαριασμό.'
+              : 'Το Safari στο iPhone δεν υποστηρίζει Web Bluetooth. Άφησε το Android με την εφαρμογή ανοιχτή κοντά στη ζυγαριά και κάνε login με τον ίδιο λογαριασμό — τα κιλά θα έρχονται αυτόματα. Για να ζυγίζεσαι από το ίδιο το iPhone χρειάζεται η native εφαρμογή.'}
+          </p>
+        )}
+
+        {connected && !bleConnected && isWeb && !isIosWeb && phoneCapture && (
           <p className="oura-modal__hint">
             Το κινητό τραβάει τις μετρήσεις στο παρασκήνιο. Τα κιλά εμφανίζονται εδώ από τον λογαριασμό.
             Μην συνδέσεις τη ζυγαριά από τον υπολογιστή — η ζυγαριά δέχεται μόνο μία σύνδεση και το κινητό θα σταματήσει να γράφει.
           </p>
         )}
 
-        {connected && !bleConnected && isWeb && !phoneCapture && (
+        {connected && !bleConnected && isWeb && !isIosWeb && !phoneCapture && (
           <p className="oura-modal__hint">
             Η ζυγαριά είναι συνδεδεμένη στον λογαριασμό σου. Για live μετρήσεις σε αυτό το browser, πάτα «Σύνδεση QN-Scale» μία φορά.
           </p>
@@ -112,7 +121,7 @@ export function ScaleConnectModal({
           </p>
         )}
 
-        {!available && !error && (
+        {!available && !error && !isIosWeb && (
           <p className="oura-modal__hint">
             {isWeb
               ? 'Χρειάζεσαι Chrome ή Edge σε localhost/HTTPS. Πάτα «Σύνδεση QN-Scale» και επίλεξε τη συσκευή από το σύστημα.'
@@ -252,9 +261,11 @@ export function ScaleConnectModal({
           <h3 className="oura-modal__section-title">Συσκευές</h3>
           {devices.length === 0 && !scanning && (
             <p className="oura-modal__meta">
-              {isWeb
-                ? 'Στο browser η σύνδεση γίνεται μόνο με το κουμπί «Σύνδεση QN-Scale».'
-                : 'Πάτα Scan για να βρεις QN-Scale.'}
+              {isIosWeb
+                ? 'Η σύνδεση Bluetooth από Safari δεν είναι διαθέσιμη.'
+                : isWeb
+                  ? 'Στο browser η σύνδεση γίνεται μόνο με το κουμπί «Σύνδεση QN-Scale».'
+                  : 'Πάτα Scan για να βρεις QN-Scale.'}
             </p>
           )}
           <ul className="oura-modal__scopes">
@@ -274,7 +285,7 @@ export function ScaleConnectModal({
         </section>
 
         <footer className="oura-modal__actions">
-          {!bleConnected ? (
+          {!bleConnected && !isIosWeb ? (
             <>
               <button
                 type="button"
@@ -305,11 +316,11 @@ export function ScaleConnectModal({
                 </button>
               )}
             </>
-          ) : (
+          ) : !isIosWeb ? (
             <button type="button" className="oura-modal__btn oura-modal__btn--ghost" onClick={onDisconnect}>
               Αποσύνδεση
             </button>
-          )}
+          ) : null}
           <button type="button" className="oura-modal__btn" onClick={onClose}>
             Κλείσιμο
           </button>

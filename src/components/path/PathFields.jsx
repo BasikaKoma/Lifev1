@@ -10,6 +10,7 @@ import {
   WEEKDAYS,
   normalizeGoalColor,
 } from '../../lib/path/schema';
+import { blockLinkedProject, tasksForBlockProject } from '../../lib/path/logic';
 
 export function PathField({ label, hint, needs, wide, children }) {
   return (
@@ -28,8 +29,7 @@ export function GoalFields({ goal, onChange, projects = [], showStatus = true, s
     || (key === 'role' && !goal.role)
     || (key === 'area' && !goal.projectTitle && !goal.lifeArea)
     || (key === 'baseline' && !goal.baseline)
-    || (key === 'target' && goal.target == null)
-    || (key === 'unit' && !goal.unit)
+    || (key === 'target' && !String(goal.target || '').trim())
     || (key === 'deadline' && !goal.deadline)
     || (key === 'why' && !goal.why)
     || (key === 'weeklyAllocation' && !goal.weeklyAllocation)
@@ -114,15 +114,20 @@ export function GoalFields({ goal, onChange, projects = [], showStatus = true, s
           placeholder="π.χ. 80 κιλά, μέση 92 cm"
         />
       </PathField>
-      <PathField label="Target" needs={needs('target')}>
-        <input className="input" type="number" value={goal.target ?? ''} onChange={(event) => onChange({ target: event.target.value === '' ? null : Number(event.target.value) })} />
+      <PathField label="Target" wide needs={needs('target')}>
+        <input
+          className="input"
+          value={goal.target || ''}
+          onChange={(event) => onChange({ target: event.target.value || null })}
+          placeholder="π.χ. 72 kg με 12% λίπος"
+        />
       </PathField>
       {showCurrent ? (
         <PathField label="Current">
           <input className="input" type="number" value={goal.currentValue ?? ''} onChange={(event) => onChange({ currentValue: event.target.value === '' ? null : Number(event.target.value) })} />
         </PathField>
       ) : null}
-      <PathField label="Unit" needs={needs('unit')}>
+      <PathField label="Unit">
         <input className="input" value={goal.unit || ''} onChange={(event) => onChange({ unit: event.target.value || null })} placeholder="e.g. kg, €, calls" />
       </PathField>
       <PathField label="Deadline" needs={needs('deadline')}>
@@ -142,6 +147,10 @@ export function GoalFields({ goal, onChange, projects = [], showStatus = true, s
 }
 
 export function BlockFields({ block, onChange, goals = [], tasks = [], showCompleteTask = false }) {
+  const selectedGoal = goals.find((item) => item.id === block.goalId) || null;
+  const projectTasks = tasksForBlockProject(tasks, block, selectedGoal);
+  const { projectId } = blockLinkedProject(block, selectedGoal);
+
   return (
     <div className="path-form">
       <PathField label="Title" wide>
@@ -153,10 +162,20 @@ export function BlockFields({ block, onChange, goals = [], tasks = [], showCompl
           value={block.goalId || ''}
           onChange={(event) => {
             const goal = goals.find((item) => item.id === event.target.value);
+            const nextProjectId = goal ? (goal.projectId || null) : block.projectId;
+            const nextProjectTitle = goal ? (goal.projectTitle || null) : block.projectTitle;
+            const nextTasks = tasksForBlockProject(tasks, {
+              ...block,
+              goalId: goal?.id || null,
+              projectId: nextProjectId,
+              projectTitle: nextProjectTitle,
+            }, goal || null);
+            const keepTask = Boolean(block.taskId && nextTasks.some((task) => task.id === block.taskId));
             onChange({
               goalId: goal?.id || null,
-              projectId: goal?.projectId || block.projectId,
-              projectTitle: goal?.projectTitle || block.projectTitle,
+              projectId: nextProjectId,
+              projectTitle: nextProjectTitle,
+              ...(keepTask ? {} : { taskId: null, taskTitle: null, taskSource: null, completeLinkedTask: false }),
             });
           }}
         >
@@ -197,7 +216,7 @@ export function BlockFields({ block, onChange, goals = [], tasks = [], showCompl
           className="input"
           value={block.taskId || ''}
           onChange={(event) => {
-            const task = tasks.find((item) => item.id === event.target.value);
+            const task = projectTasks.find((item) => item.id === event.target.value);
             onChange({
               taskId: task?.id || null,
               taskTitle: task?.title || null,
@@ -206,12 +225,15 @@ export function BlockFields({ block, onChange, goals = [], tasks = [], showCompl
           }}
         >
           <option value="">None — time commitment only</option>
-          {tasks.map((task) => (
-            <option key={task.id} value={task.id}>
-              {task.title}{task.projectTitle ? ` · ${task.projectTitle}` : ''}
-            </option>
+          {projectTasks.map((task) => (
+            <option key={task.id} value={task.id}>{task.title}</option>
           ))}
         </select>
+        {!projectId && !projectTasks.length ? (
+          <span className="path-field__hint">Link a project goal to see that project’s tasks.</span>
+        ) : projectId && !projectTasks.length ? (
+          <span className="path-field__hint">No open tasks in this project.</span>
+        ) : null}
       </PathField>
       {showCompleteTask && block.taskId ? (
         <label className="path-check path-field--wide">

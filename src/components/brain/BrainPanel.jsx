@@ -449,6 +449,16 @@ function BrainSettings({
           />
         </label>
         <label className="brain-settings__toggle">
+          <span>Nutrition</span>
+          <input
+            type="checkbox"
+            checked={policy.appScopes.nutrition !== false}
+            onChange={(event) => updatePolicy({
+              appScopes: { ...policy.appScopes, nutrition: event.target.checked },
+            })}
+          />
+        </label>
+        <label className="brain-settings__toggle">
           <span>Projects / checkpoints</span>
           <input
             type="checkbox"

@@ -23,7 +23,7 @@ const ORIGIN_Y = 80;
 const MAJOR_W = 360;
 const CENTER_X = 480;
 const SIDE_GAP = 56;
-/** Extra offset so on-roadmap milestones clear lifeline date labels. */
+/** Extra offset so on-project milestones clear lifeline date labels. */
 const MILESTONE_SIDE_GAP = 104;
 /** Bottom of the timeline — first milestones start here and grow upward. */
 const BASE_Y = 880;
@@ -683,7 +683,7 @@ export function resolveMilestoneDrag(
   };
 }
 
-/** Move spine and every item attached to the roadmap together. */
+/** Move spine and every item attached to Projects together. */
 export function shiftRoadmapAttachedItems(
   { stages = [], backlog = [], canvasStickies = [], canvasObstacles = [], canvasResources = [], canvasTasks = [] },
   oldLayout,

@@ -52,7 +52,7 @@ function resolveSideFromPosition(centerX, side, dragOffset, labelWidth) {
   return labelCenter < centerX ? 'left' : 'right';
 }
 
-export function CheckpointRoadmapItem({
+export function CheckpointProjectsItem({
   checkpoint,
   centerX,
   side,
@@ -137,7 +137,7 @@ export function CheckpointRoadmapItem({
   }, [expanded, planMode]);
 
   const interactiveSelector =
-    '.checkpoint-roadmap-item__check, .checkpoint-roadmap-item__actions, .checkpoint-roadmap-item__copy, .checkpoint-roadmap-item__title-input, button, a, input, textarea, select';
+    '.checkpoint-projects-item__check, .checkpoint-projects-item__actions, .checkpoint-projects-item__copy, .checkpoint-projects-item__title-input, button, a, input, textarea, select';
 
   const openDeleteConfirm = () => {
     setConfirmDeleteOpen(true);
@@ -291,11 +291,11 @@ export function CheckpointRoadmapItem({
         <button
           type="button"
           className={[
-            'checkpoint-roadmap-item',
-            'checkpoint-roadmap-item--lifeline-mini',
-            `checkpoint-roadmap-item--${side}`,
-            done ? 'checkpoint-roadmap-item--done' : '',
-            isSelected ? 'checkpoint-roadmap-item--selected' : '',
+            'checkpoint-projects-item',
+            'checkpoint-projects-item--lifeline-mini',
+            `checkpoint-projects-item--${side}`,
+            done ? 'checkpoint-projects-item--done' : '',
+            isSelected ? 'checkpoint-projects-item--selected' : '',
           ]
             .filter(Boolean)
             .join(' ')}
@@ -308,7 +308,7 @@ export function CheckpointRoadmapItem({
           onClick={() => onOpenPlanPanel?.(stageId, checkpoint.id)}
           title={checkpoint.title}
         >
-          <span className="checkpoint-roadmap-item__lifeline-mini-title">{checkpoint.title}</span>
+          <span className="checkpoint-projects-item__lifeline-mini-title">{checkpoint.title}</span>
         </button>
       );
     }
@@ -330,14 +330,14 @@ export function CheckpointRoadmapItem({
         <div
           ref={labelRef}
           className={[
-            'checkpoint-roadmap-item',
-            'checkpoint-roadmap-item--plan',
-            `checkpoint-roadmap-item--${side}`,
-            isLifeline ? 'checkpoint-roadmap-item--plan-lifeline' : '',
-            done ? 'checkpoint-roadmap-item--done' : '',
-            dragging ? 'checkpoint-roadmap-item--dragging' : '',
-            isSelected ? 'checkpoint-roadmap-item--selected' : '',
-            dragAxis.current === 'y' ? 'checkpoint-roadmap-item--reordering' : '',
+            'checkpoint-projects-item',
+            'checkpoint-projects-item--plan',
+            `checkpoint-projects-item--${side}`,
+            isLifeline ? 'checkpoint-projects-item--plan-lifeline' : '',
+            done ? 'checkpoint-projects-item--done' : '',
+            dragging ? 'checkpoint-projects-item--dragging' : '',
+            isSelected ? 'checkpoint-projects-item--selected' : '',
+            dragAxis.current === 'y' ? 'checkpoint-projects-item--reordering' : '',
           ]
             .filter(Boolean)
             .join(' ')}
@@ -354,34 +354,34 @@ export function CheckpointRoadmapItem({
           onPointerCancel={handlePointerCancel}
           title="Κλικ για panel · σύρε κάθετα για αλλαγή ημέρας"
         >
-          <div className="checkpoint-roadmap-item__plan-anchor">
+          <div className="checkpoint-projects-item__plan-anchor">
             {dayLabel && (
               <span
                 className={[
-                  'checkpoint-roadmap-item__day-label',
-                  isLifeline ? 'checkpoint-roadmap-item__day-label--lifeline' : '',
+                  'checkpoint-projects-item__day-label',
+                  isLifeline ? 'checkpoint-projects-item__day-label--lifeline' : '',
                 ].filter(Boolean).join(' ')}
               >
                 {dayLabel}
               </span>
             )}
 
-            <div className="checkpoint-roadmap-item__plan-row">
+            <div className="checkpoint-projects-item__plan-row">
               <button
                 type="button"
-                className={`checkpoint-roadmap-item__node${done ? ' checkpoint-roadmap-item__node--done' : ''}`}
+                className={`checkpoint-projects-item__node${done ? ' checkpoint-projects-item__node--done' : ''}`}
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={handleToggle}
                 aria-label={done ? `Αναίρεση: ${checkpoint.title}` : `Ολοκλήρωση: ${checkpoint.title}`}
                 title={done ? 'Επαναφορά checkpoint' : 'Ολοκλήρωση checkpoint'}
               />
-              <span className="checkpoint-roadmap-item__plan-connector" aria-hidden="true" />
+              <span className="checkpoint-projects-item__plan-connector" aria-hidden="true" />
 
-              <div className="checkpoint-roadmap-item__plan-content">
+              <div className="checkpoint-projects-item__plan-content">
                 {editingTitle ? (
                   <input
                     ref={titleInputRef}
-                    className="checkpoint-roadmap-item__title-input"
+                    className="checkpoint-projects-item__title-input"
                     value={titleDraft}
                     onChange={(e) => setTitleDraft(e.target.value)}
                     onBlur={commitTitle}
@@ -399,9 +399,9 @@ export function CheckpointRoadmapItem({
                     aria-label="Τίτλος checkpoint"
                   />
                 ) : (
-                  <div className="checkpoint-roadmap-item__title-wrap checkpoint-roadmap-item__title-wrap--plan">
+                  <div className="checkpoint-projects-item__title-wrap checkpoint-projects-item__title-wrap--plan">
                     <span
-                      className="checkpoint-roadmap-item__text checkpoint-roadmap-item__text--plan"
+                      className="checkpoint-projects-item__text checkpoint-projects-item__text--plan"
                       onDoubleClick={handleTitleDoubleClick}
                       title="Διπλό κλικ για επεξεργασία"
                     >
@@ -409,7 +409,7 @@ export function CheckpointRoadmapItem({
                     </span>
                     <CopyTextButton
                       text={checkpoint.title}
-                      className="checkpoint-roadmap-item__copy checkpoint-roadmap-item__copy--plan"
+                      className="checkpoint-projects-item__copy checkpoint-projects-item__copy--plan"
                       title="Αντιγραφή τίτλου"
                       ariaLabel="Αντιγραφή τίτλου checkpoint"
                     />
@@ -420,9 +420,9 @@ export function CheckpointRoadmapItem({
           </div>
 
           <span
-            className={`checkpoint-roadmap-item__subtasks checkpoint-roadmap-item__subtasks--plan${
-              done || (subtasks && subtasks.done > 0) ? ' checkpoint-roadmap-item__subtasks--active' : ''
-            }${done ? ' checkpoint-roadmap-item__subtasks--complete' : ''}`}
+            className={`checkpoint-projects-item__subtasks checkpoint-projects-item__subtasks--plan${
+              done || (subtasks && subtasks.done > 0) ? ' checkpoint-projects-item__subtasks--active' : ''
+            }${done ? ' checkpoint-projects-item__subtasks--complete' : ''}`}
           >
             {done ? 'Ολοκληρώθηκε' : (subtasks?.label || 'Not started')}
           </span>
@@ -436,10 +436,10 @@ export function CheckpointRoadmapItem({
       <button
         type="button"
         className={[
-          'checkpoint-roadmap-item',
-          'checkpoint-roadmap-item--lifeline-dot',
-          done ? 'checkpoint-roadmap-item--done' : '',
-          isSelected ? 'checkpoint-roadmap-item--selected' : '',
+          'checkpoint-projects-item',
+          'checkpoint-projects-item--lifeline-dot',
+          done ? 'checkpoint-projects-item--done' : '',
+          isSelected ? 'checkpoint-projects-item--selected' : '',
         ]
           .filter(Boolean)
           .join(' ')}
@@ -456,11 +456,11 @@ export function CheckpointRoadmapItem({
       <button
         type="button"
         className={[
-          'checkpoint-roadmap-item',
-          'checkpoint-roadmap-item--lifeline-mini',
-          `checkpoint-roadmap-item--${side}`,
-          done ? 'checkpoint-roadmap-item--done' : '',
-          isSelected ? 'checkpoint-roadmap-item--selected' : '',
+          'checkpoint-projects-item',
+          'checkpoint-projects-item--lifeline-mini',
+          `checkpoint-projects-item--${side}`,
+          done ? 'checkpoint-projects-item--done' : '',
+          isSelected ? 'checkpoint-projects-item--selected' : '',
         ]
           .filter(Boolean)
           .join(' ')}
@@ -473,7 +473,7 @@ export function CheckpointRoadmapItem({
         onClick={() => onOpenCheckpoint?.(stageId, checkpoint.id)}
         title={checkpoint.title}
       >
-        <span className="checkpoint-roadmap-item__lifeline-mini-title">{checkpoint.title}</span>
+        <span className="checkpoint-projects-item__lifeline-mini-title">{checkpoint.title}</span>
       </button>
     );
   }
@@ -495,16 +495,16 @@ export function CheckpointRoadmapItem({
       <div
         ref={labelRef}
         className={[
-          'checkpoint-roadmap-item',
-          `checkpoint-roadmap-item--${side}`,
-          done ? 'checkpoint-roadmap-item--done' : '',
-          dragging ? 'checkpoint-roadmap-item--dragging' : '',
-          expanded ? 'checkpoint-roadmap-item--expanded' : '',
-          isConnectSource ? 'checkpoint-roadmap-item--connect-source' : '',
-          isSelected ? 'checkpoint-roadmap-item--selected' : '',
-          connectModeActive ? 'checkpoint-roadmap-item--connect-target' : '',
-          dragAxis.current === 'y' ? 'checkpoint-roadmap-item--reordering' : '',
-          showActions ? 'checkpoint-roadmap-item--actions-visible' : '',
+          'checkpoint-projects-item',
+          `checkpoint-projects-item--${side}`,
+          done ? 'checkpoint-projects-item--done' : '',
+          dragging ? 'checkpoint-projects-item--dragging' : '',
+          expanded ? 'checkpoint-projects-item--expanded' : '',
+          isConnectSource ? 'checkpoint-projects-item--connect-source' : '',
+          isSelected ? 'checkpoint-projects-item--selected' : '',
+          connectModeActive ? 'checkpoint-projects-item--connect-target' : '',
+          dragAxis.current === 'y' ? 'checkpoint-projects-item--reordering' : '',
+          showActions ? 'checkpoint-projects-item--actions-visible' : '',
         ]
           .filter(Boolean)
           .join(' ')}
@@ -529,7 +529,7 @@ export function CheckpointRoadmapItem({
         }
       >
         <label
-          className="checkpoint-roadmap-item__check"
+          className="checkpoint-projects-item__check"
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
         >
@@ -541,12 +541,12 @@ export function CheckpointRoadmapItem({
           />
         </label>
 
-        <div className="checkpoint-roadmap-item__body">
-          <div className="checkpoint-roadmap-item__row">
+        <div className="checkpoint-projects-item__body">
+          <div className="checkpoint-projects-item__row">
             {editingTitle ? (
               <input
                 ref={titleInputRef}
-                className="checkpoint-roadmap-item__title-input"
+                className="checkpoint-projects-item__title-input"
                 value={titleDraft}
                 onChange={(e) => setTitleDraft(e.target.value)}
                 onBlur={commitTitle}
@@ -565,9 +565,9 @@ export function CheckpointRoadmapItem({
                 aria-label="Τίτλος checkpoint"
               />
             ) : (
-              <div className="checkpoint-roadmap-item__title-wrap">
+              <div className="checkpoint-projects-item__title-wrap">
                 <span
-                  className={`checkpoint-roadmap-item__text${hasNotes ? ' checkpoint-roadmap-item__text--has-notes' : ''}`}
+                  className={`checkpoint-projects-item__text${hasNotes ? ' checkpoint-projects-item__text--has-notes' : ''}`}
                   onDoubleClick={handleTitleDoubleClick}
                   title="Διπλό κλικ για επεξεργασία τίτλου"
                 >
@@ -576,21 +576,21 @@ export function CheckpointRoadmapItem({
                 {hasPriority(checkpoint.priority) && (
                   <PriorityBadge
                     priority={checkpoint.priority}
-                    className="checkpoint-roadmap-item__priority-badge"
+                    className="checkpoint-projects-item__priority-badge"
                   />
                 )}
               </div>
             )}
 
             <div
-              className="checkpoint-roadmap-item__actions"
+              className="checkpoint-projects-item__actions"
               onPointerDown={(e) => e.stopPropagation()}
               onMouseEnter={() => setActionsPinned(true)}
               onMouseLeave={() => setActionsPinned(false)}
             >
               <CopyTextButton
                 text={checkpoint.title}
-                className="checkpoint-roadmap-item__copy"
+                className="checkpoint-projects-item__copy"
                 title="Αντιγραφή τίτλου"
                 ariaLabel="Αντιγραφή τίτλου checkpoint"
               />
@@ -598,7 +598,7 @@ export function CheckpointRoadmapItem({
               {onPriorityChange && (
                 <PrioritySelect
                   compact
-                  className="checkpoint-roadmap-item__priority"
+                  className="checkpoint-projects-item__priority"
                   value={checkpoint.priority}
                   onChange={(priority) => onPriorityChange(stageId, checkpoint.id, priority)}
                 />
@@ -607,7 +607,7 @@ export function CheckpointRoadmapItem({
               {onOpenCheckpoint && (
                 <button
                   type="button"
-                  className={`checkpoint-roadmap-item__notes${hasNotes ? ' checkpoint-roadmap-item__notes--active' : ''}`}
+                  className={`checkpoint-projects-item__notes${hasNotes ? ' checkpoint-projects-item__notes--active' : ''}`}
                   onPointerUp={(e) => {
                     e.stopPropagation();
                     e.preventDefault();
@@ -628,7 +628,7 @@ export function CheckpointRoadmapItem({
               {(onEditCheckpoint || onUpdateCheckpoint) && (
                 <button
                   type="button"
-                  className="checkpoint-roadmap-item__edit"
+                  className="checkpoint-projects-item__edit"
                   onPointerUp={(e) => {
                     e.stopPropagation();
                     e.preventDefault();
@@ -647,7 +647,7 @@ export function CheckpointRoadmapItem({
               {onRemove && (
                 <button
                   type="button"
-                  className="checkpoint-roadmap-item__delete"
+                  className="checkpoint-projects-item__delete"
                   onPointerUp={(e) => {
                     e.stopPropagation();
                     e.preventDefault();
@@ -663,15 +663,15 @@ export function CheckpointRoadmapItem({
           </div>
 
           {expanded && (
-            <div className="checkpoint-roadmap-item__full">
-              <p className="checkpoint-roadmap-item__full-text">{fullText}</p>
+            <div className="checkpoint-projects-item__full">
+              <p className="checkpoint-projects-item__full-text">{fullText}</p>
               {done && doneDate && (
-                <p className="checkpoint-roadmap-item__full-meta">Εκτελεσμένο · {doneDate}</p>
+                <p className="checkpoint-projects-item__full-meta">Εκτελεσμένο · {doneDate}</p>
               )}
               {onOpenCheckpoint && (
                 <button
                   type="button"
-                  className="checkpoint-roadmap-item__open"
+                  className="checkpoint-projects-item__open"
                   onPointerUp={(e) => {
                     e.stopPropagation();
                     e.preventDefault();
@@ -684,7 +684,7 @@ export function CheckpointRoadmapItem({
               {onSelectStage && (
                 <button
                   type="button"
-                  className="checkpoint-roadmap-item__open"
+                  className="checkpoint-projects-item__open"
                   onPointerUp={(e) => {
                     e.stopPropagation();
                     e.preventDefault();
@@ -699,7 +699,7 @@ export function CheckpointRoadmapItem({
         </div>
 
         {!expanded && done && doneDate && (
-          <span className="checkpoint-roadmap-item__date">{doneDate}</span>
+          <span className="checkpoint-projects-item__date">{doneDate}</span>
         )}
       </div>
     </>

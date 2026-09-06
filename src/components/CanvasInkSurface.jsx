@@ -5,7 +5,7 @@ import { useZoomTransform } from './ZoomCanvas';
 
 /**
  * Owns live-stroke state so pointer-move updates do NOT re-render the whole
- * roadmap board (milestones, lifeline ticks, etc.).
+ * projects board (milestones, lifeline ticks, etc.).
  */
 function CanvasInkSurfaceInner({
   tool,

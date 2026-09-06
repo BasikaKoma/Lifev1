@@ -10,6 +10,9 @@ export function CanvasTopBar({
   syncing = false,
   hasUnsavedChanges = false,
   onSave,
+  syncError = null,
+  syncConflict = false,
+  onReloadCloud,
   onMapThemeChange,
   onAddMilestone,
   onAddTask,
@@ -160,6 +163,9 @@ export function CanvasTopBar({
             syncing={syncing}
             hasUnsavedChanges={hasUnsavedChanges}
             onSave={onSave}
+            syncError={syncError}
+            syncConflict={syncConflict}
+            onReloadCloud={onReloadCloud}
             compact={isMobile}
           />
           <button

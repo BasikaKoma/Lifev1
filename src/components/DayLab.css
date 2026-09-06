@@ -689,21 +689,21 @@
   min-height: 96px;
 }
 
-.roadmap-canvas-view--day-view .zoom-canvas__viewport {
+.projects-canvas-view--day-view .zoom-canvas__viewport {
   transition: opacity 0.35s ease;
 }
 
-.roadmap-canvas-view[data-day-view-phase='day-expanded'] .zoom-canvas__viewport {
+.projects-canvas-view[data-day-view-phase='day-expanded'] .zoom-canvas__viewport {
   opacity: 0;
   pointer-events: none;
 }
 
-.roadmap-canvas-view[data-day-view-phase='day-transitioning'] .zoom-canvas__viewport,
-.roadmap-canvas-view[data-day-view-phase='returning-to-timeline'] .zoom-canvas__viewport {
+.projects-canvas-view[data-day-view-phase='day-transitioning'] .zoom-canvas__viewport,
+.projects-canvas-view[data-day-view-phase='returning-to-timeline'] .zoom-canvas__viewport {
   opacity: 0.35;
 }
 
-.roadmap-canvas-board--day-view {
+.projects-canvas-board--day-view {
   pointer-events: none;
 }
 

@@ -18,9 +18,25 @@ export function detectPlatform() {
   return 'web';
 }
 
+export function getNativeOs() {
+  try {
+    const native = Capacitor.getPlatform();
+    if (native === 'ios' || native === 'android') return native;
+  } catch {
+    // Capacitor not available
+  }
+  return null;
+}
+
 function isMobileUserAgent() {
   if (typeof navigator === 'undefined') return false;
   return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+
+export function isIosWebBrowser() {
+  if (typeof navigator === 'undefined') return false;
+  if (detectPlatform() !== 'web') return false;
+  return /iPhone|iPad|iPod/i.test(navigator.userAgent);
 }
 
 export function isMobilePlatform() {
@@ -40,12 +56,15 @@ export function hasBleSupport() {
 export function getPlatformInfo() {
   const id = detectPlatform();
   const isMobile = isMobilePlatform();
+  const nativeOs = getNativeOs();
 
   return {
     id,
+    nativeOs,
     isElectron: id === 'electron',
     isCapacitor: id === 'capacitor',
     isWeb: id === 'web',
+    isIosWeb: isIosWebBrowser(),
     isMobile,
     hasBLE: hasBleSupport,
     hasAutoUpdate() {

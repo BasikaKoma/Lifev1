@@ -72,7 +72,7 @@ export function IdeaCanvasCard({
         <div className="idea-canvas-card__head-actions">
           <CategoryBadge category={idea.category} />
           <PriorityBadge priority={idea.priority} />
-          <span className={`roadmap-badge roadmap-badge--outline roadmap-badge--${status.className}`}>
+          <span className={`projects-badge projects-badge--outline projects-badge--${status.className}`}>
             {status.label}
           </span>
           {onRemove && (

@@ -182,8 +182,8 @@ function CanvasTasksSection({
   onUpdateTask,
   onToggleTaskComplete,
   title = 'Tasks',
-  description = 'Canvas tasks από το Roadmap',
-  emptyMessage = 'Δεν υπάρχουν tasks ακόμα — πρόσθεσέ τα από το Roadmap ή εδώ.',
+  description = 'Canvas tasks από τα Projects',
+  emptyMessage = 'Δεν υπάρχουν tasks ακόμα — πρόσθεσέ τα από τα Projects ή εδώ.',
 }) {
   const { open, done } = partitionCanvasTasks(tasks);
 
@@ -344,7 +344,7 @@ function NoteListItem({
           />
         )}
         {isSticky && (
-          <p className="workspace-note__source-hint">Από Roadmap sticky</p>
+          <p className="workspace-note__source-hint">Από sticky στα Projects</p>
         )}
         <div className="workspace-list__actions">
           <button type="button" className="btn btn--primary btn--sm" onClick={save}>
@@ -588,12 +588,12 @@ function ChapterDetail({
         <div className="chapter-detail__section-head">
           <h4>Checkpoints</h4>
           <button type="button" className="btn btn--outline btn--sm" onClick={() => onSelectStage(stage.id)}>
-            Επεξεργασία στο Roadmap
+            Επεξεργασία στα Projects
           </button>
         </div>
 
         {openCheckpoints.length === 0 && doneCheckpoints.length === 0 ? (
-          <p className="chapter-detail__notes-empty">Δεν υπάρχουν checkpoints ακόμα — πρόσθεσέ τα στο Roadmap.</p>
+          <p className="chapter-detail__notes-empty">Δεν υπάρχουν checkpoints ακόμα — πρόσθεσέ τα στα Projects.</p>
         ) : openCheckpoints.length === 0 ? (
           <p className="chapter-detail__notes-empty">Όλα τα checkpoints είναι στο Archived κάτω.</p>
         ) : (
@@ -1105,7 +1105,7 @@ export function WorkspaceView({
 
       {onBack && (
         <button type="button" className="workspace-view__back btn btn--text" onClick={onBack}>
-          ← Roadmap
+          ← Projects
         </button>
       )}
 
@@ -1174,7 +1174,7 @@ export function WorkspaceView({
       ) : chapters.length === 0 && !selectedChapter ? (
         <>
           <div className="empty-state">
-            Πρόσθεσε milestones στο Roadmap — θα εμφανιστούν εδώ ως κεφάλαια.
+            Πρόσθεσε milestones στα Projects — θα εμφανιστούν εδώ ως κεφάλαια.
           </div>
           <IndependentNotesChapter
             notes={unlinkedNotes}

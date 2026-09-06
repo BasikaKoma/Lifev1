@@ -20,7 +20,7 @@ export function SelfTodayThreeCard({ todayThree, onOpenDayDetails }) {
     >
       <p className="self-hub-card__eyebrow">TODAY&apos;S 3</p>
       {todayThree.items.length === 0 ? (
-        <p className="self-hub-card__empty">No tasks yet — add checkpoints in Roadmap</p>
+        <p className="self-hub-card__empty">No tasks yet — add checkpoints in Projects</p>
       ) : (
         <ol className="self-hub-card__list">
           {todayThree.items.map((item, index) => (

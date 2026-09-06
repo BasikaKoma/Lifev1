@@ -43,7 +43,7 @@ export function isNoteSettled(note, stages = [], canvasConnections = []) {
   return isItemDone(note) || isNoteSettledByCheckpoints(note, stages, canvasConnections);
 }
 
-/** Hidden on the roadmap until a linked done checkpoint (or the note itself) is selected. */
+/** Hidden on Projects until a linked done checkpoint (or the note itself) is selected. */
 export function isSettledNoteVisibleOnRoadmap(
   note,
   stages = [],

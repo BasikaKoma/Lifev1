@@ -4,7 +4,7 @@ import { MilestoneCanvasCard } from './MilestoneCanvasCard';
 import { ObstacleCanvasCard } from './ObstacleCanvasCard';
 import { ResourceCanvasCard } from './ResourceCanvasCard';
 import { TaskCanvasCard } from './TaskCanvasCard';
-import { CheckpointRoadmapItem } from './CheckpointRoadmapItem';
+import { CheckpointProjectsItem } from './CheckpointProjectsItem';
 import { IdeaCanvasCard } from './IdeaCanvasCard';
 import { StickyNoteCard } from './StickyNoteCard';
 import { CanvasConnections } from './CanvasConnections';
@@ -73,7 +73,7 @@ import {
 import { computeNodeLevels, canvasViewportStyle, DEFAULT_MAP_THEME, getRoadmapLayout, getRoadmapOrigin, getThemedConnectionPath, connectionLineStyle } from '../utils/mapTheme';
 import { matchInsertShortcut } from '../utils/canvasInsertShortcuts';
 import { collectProjectCategories } from '../utils/categories';
-import { RoadmapOriginCard } from './RoadmapOriginCard';
+import { ProjectsOriginCard } from './ProjectsOriginCard';
 import { LifelineDayTicks } from './LifelineDayTicks';
 import { LifelineDayModal } from './LifelineDayModal';
 import { LifelineProjectAnchors, LifelineUnanchoredPanel } from './LifelineProjectAnchors';
@@ -114,14 +114,14 @@ import {
   checkpointHasSettledLinkedNotes,
 } from '../utils/noteSettle';
 
-const ROADMAP_OPEN_SCALE = 0.55;
+const PROJECTS_OPEN_SCALE = 0.55;
 const canvasViewCache = new Map();
 
 function canvasViewCacheKey(projectId, isLifeline) {
-  return `${isLifeline ? 'lifeline' : 'roadmap'}:${projectId || ''}`;
+  return `${isLifeline ? 'lifeline' : 'projects'}:${projectId || ''}`;
 }
 
-function getRoadmapOpenFocusPoint(checkpoints, stages, layout) {
+function getProjectsOpenFocusPoint(checkpoints, stages, layout) {
   const current = getCurrentStage(stages);
   const next = current ? getNextIncompleteCheckpoint(current) : null;
   const fromCurrent = next
@@ -192,7 +192,7 @@ function PlanDayTicks({ ticks, lineTop }) {
   );
 }
 
-function RoadmapTimelineDot({ node, lineTop, onMoveTimelineY, onReorderCheckpoint, onSelect }) {
+function ProjectsTimelineDot({ node, lineTop, onMoveTimelineY, onReorderCheckpoint, onSelect }) {
   const { scale } = useZoomTransform();
   const dragging = useRef(false);
   const origin = useRef(null);
@@ -248,7 +248,7 @@ function RoadmapTimelineDot({ node, lineTop, onMoveTimelineY, onReorderCheckpoin
     return (
       <button
         type="button"
-        className={`roadmap-center-line__dot roadmap-center-line__dot--${(node.status || 'Locked').toLowerCase()} roadmap-center-line__dot--checkpoint roadmap-center-line__dot--draggable`}
+        className={`projects-center-line__dot projects-center-line__dot--${(node.status || 'Locked').toLowerCase()} projects-center-line__dot--checkpoint projects-center-line__dot--draggable`}
         style={{ top: node.top - lineTop - 9 + dragOffsetY }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -264,7 +264,7 @@ function RoadmapTimelineDot({ node, lineTop, onMoveTimelineY, onReorderCheckpoin
     return (
       <button
         type="button"
-        className="roadmap-center-line__dot roadmap-center-line__dot--plan-start roadmap-center-line__dot--draggable"
+        className="projects-center-line__dot projects-center-line__dot--plan-start projects-center-line__dot--draggable"
         style={{ top: node.top - lineTop - 10 }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -279,7 +279,7 @@ function RoadmapTimelineDot({ node, lineTop, onMoveTimelineY, onReorderCheckpoin
   return (
     <button
       type="button"
-      className={`roadmap-center-line__dot roadmap-center-line__dot--${(node.status || 'Locked').toLowerCase()} roadmap-center-line__dot--${node.kind || 'milestone'} roadmap-center-line__dot--draggable`}
+      className={`projects-center-line__dot projects-center-line__dot--${(node.status || 'Locked').toLowerCase()} projects-center-line__dot--${node.kind || 'milestone'} projects-center-line__dot--draggable`}
       style={{ top: node.top - lineTop - 10 }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
@@ -291,7 +291,7 @@ function RoadmapTimelineDot({ node, lineTop, onMoveTimelineY, onReorderCheckpoin
   );
 }
 
-function RoadmapCenterLine({
+function ProjectsCenterLine({
   lineMetrics,
   selected,
   onSelect,
@@ -323,7 +323,7 @@ function RoadmapCenterLine({
 
   const startMove = (e) => {
     if (e.button !== 0) return;
-    if (e.target.closest('.roadmap-center-line__handle, .roadmap-center-line__dot, .lifeline-day-tick')) return;
+    if (e.target.closest('.projects-center-line__handle, .projects-center-line__dot, .lifeline-day-tick')) return;
     e.stopPropagation();
     e.preventDefault();
     onSelect?.();
@@ -401,7 +401,7 @@ function RoadmapCenterLine({
 
   return (
     <div
-      className={`roadmap-center-line${selected ? ' roadmap-center-line--selected' : ''}${lifelineDayTicks ? ' roadmap-center-line--lifeline' : ''}${planWindows?.length ? ' roadmap-center-line--plan-active' : ''}`}
+      className={`projects-center-line${selected ? ' projects-center-line--selected' : ''}${lifelineDayTicks ? ' projects-center-line--lifeline' : ''}${planWindows?.length ? ' projects-center-line--plan-active' : ''}`}
       style={{
         left: lineMetrics.centerX,
         top: lineMetrics.top,
@@ -414,12 +414,12 @@ function RoadmapCenterLine({
       onPointerCancel={onPointerUp}
       role="presentation"
     >
-      <div className="roadmap-center-line__glow" aria-hidden="true" />
-      <div className="roadmap-center-line__stroke" />
+      <div className="projects-center-line__glow" aria-hidden="true" />
+      <div className="projects-center-line__stroke" />
       {(planWindows || []).map((win) => (
         <div
           key={win.stageId}
-          className="roadmap-center-line__plan-segment"
+          className="projects-center-line__plan-segment"
           style={{
             top: win.top - lineMetrics.top,
             height: win.height,
@@ -431,7 +431,7 @@ function RoadmapCenterLine({
       {(planProgressSegments || []).map((seg) => (
         <div
           key={`progress:${seg.stageId}`}
-          className="roadmap-center-line__plan-progress"
+          className="projects-center-line__plan-progress"
           style={{
             top: seg.top - lineMetrics.top,
             height: seg.height,
@@ -442,7 +442,7 @@ function RoadmapCenterLine({
       {(planProgressSegments || []).map((seg) => (
         <div
           key={`progress-glow:${seg.stageId}`}
-          className="roadmap-center-line__plan-progress-glow"
+          className="projects-center-line__plan-progress-glow"
           style={{
             top: seg.top - lineMetrics.top,
             height: seg.height,
@@ -453,7 +453,7 @@ function RoadmapCenterLine({
       {(planProgressSegments || []).filter((seg) => !seg.complete).map((seg) => (
         <div
           key={`progress-head:${seg.stageId}`}
-          className="roadmap-center-line__plan-progress-head"
+          className="projects-center-line__plan-progress-head"
           style={{ top: seg.endY - lineMetrics.top }}
           aria-hidden="true"
         />
@@ -464,7 +464,7 @@ function RoadmapCenterLine({
       {(planCheckpoints || []).map((cp) => (
         <div
           key={`plan-cp:${cp.stageId}:${cp.id}`}
-          className={`roadmap-center-line__plan-cp-dot${cp.done || cp.archived ? ' roadmap-center-line__plan-cp-dot--done' : ''}`}
+          className={`projects-center-line__plan-cp-dot${cp.done || cp.archived ? ' projects-center-line__plan-cp-dot--done' : ''}`}
           style={{ top: cp.timelineY - lineMetrics.top, transform: 'translateY(-50%)' }}
           aria-hidden="true"
         />
@@ -472,20 +472,20 @@ function RoadmapCenterLine({
       {lifelineDayTicks}
       <button
         type="button"
-        className="roadmap-center-line__handle roadmap-center-line__handle--top"
+        className="projects-center-line__handle projects-center-line__handle--top"
         onPointerDown={startResize('top')}
         title={lifelineConfig ? 'Τράβηξε πάνω για πιο μετά' : 'Μεγέθυνση από πάνω'}
-        aria-label={lifelineConfig ? 'Επέκταση Lifeline προς το μέλλον' : 'Resize roadmap from top'}
+        aria-label={lifelineConfig ? 'Επέκταση Lifeline προς το μέλλον' : 'Resize canvas from top'}
       />
       <button
         type="button"
-        className="roadmap-center-line__handle roadmap-center-line__handle--bottom"
+        className="projects-center-line__handle projects-center-line__handle--bottom"
         onPointerDown={startResize('bottom')}
         title={lifelineConfig ? 'Τράβηξε κάτω για πιο πριν' : 'Μεγέθυνση από κάτω'}
-        aria-label={lifelineConfig ? 'Επέκταση Lifeline προς το παρελθόν' : 'Resize roadmap from bottom'}
+        aria-label={lifelineConfig ? 'Επέκταση Lifeline προς το παρελθόν' : 'Resize canvas from bottom'}
       />
       {(lineMetrics.nodes || []).map((node) => (
-        <RoadmapTimelineDot
+        <ProjectsTimelineDot
           key={node.id}
           node={node}
           lineTop={lineMetrics.top}
@@ -591,9 +591,9 @@ function CanvasBoard({
   onToolbarAction,
   canPasteNode,
   canPasteStyle,
-  roadmapLayout,
+  projectsLayout,
   lineMetrics,
-  roadmapCheckpoints = [],
+  projectsCheckpoints = [],
   isPremium,
   onArchiveCheckpoint,
   onDeleteMilestone,
@@ -649,12 +649,12 @@ function CanvasBoard({
   routineTemplates = [],
 }) {
   const layoutWithOrigin =
-    roadmapLayout?.direction === 'vertical' && typeof lineMetrics?.bottomY === 'number'
+    projectsLayout?.direction === 'vertical' && typeof lineMetrics?.bottomY === 'number'
       ? {
-          ...roadmapLayout,
-          originAnchor: { centerX: roadmapLayout.centerX, originY: lineMetrics.bottomY },
+          ...projectsLayout,
+          originAnchor: { centerX: projectsLayout.centerX, originY: lineMetrics.bottomY },
         }
-      : roadmapLayout;
+      : projectsLayout;
 
   const visibleStickies = canvasStickies.filter((sticky) =>
     isSettledNoteVisibleOnRoadmap(sticky, stages, connections, selectedNodeRef)
@@ -662,7 +662,7 @@ function CanvasBoard({
 
   return (
     <div
-      className="roadmap-canvas-surface"
+      className="projects-canvas-surface"
       style={{ width: inkSurfaceSize.width, height: inkSurfaceSize.height }}
     >
       <CanvasInkSurface
@@ -685,7 +685,7 @@ function CanvasBoard({
       />
 
       <div
-        className={`roadmap-canvas-board${roadmapLayout?.direction === 'vertical' ? ' roadmap-canvas-board--vertical' : ''}${isPremium ? ' roadmap-canvas-board--premium' : ''}${connectModeActive ? ' roadmap-canvas-board--connecting' : ''}${selectedDayDate ? ' roadmap-canvas-board--day-view' : ''}`}
+        className={`projects-canvas-board${projectsLayout?.direction === 'vertical' ? ' projects-canvas-board--vertical' : ''}${isPremium ? ' projects-canvas-board--premium' : ''}${connectModeActive ? ' projects-canvas-board--connecting' : ''}${selectedDayDate ? ' projects-canvas-board--day-view' : ''}`}
         data-day-view={selectedDayDate ? '1' : '0'}
         data-day-view-phase={dayViewPhase}
         data-lifeline-zoom={isLifeline && lifelineZoomLevel ? lifelineZoomLevel : undefined}
@@ -694,8 +694,8 @@ function CanvasBoard({
         onPointerLeave={onBoardPointerLeave}
       >
 
-      {roadmapLayout?.direction === 'vertical' && (
-        <RoadmapCenterLine
+      {projectsLayout?.direction === 'vertical' && (
+        <ProjectsCenterLine
           lineMetrics={lineMetrics}
           selected={spineSelected}
           onSelect={onSelectSpine}
@@ -718,7 +718,7 @@ function CanvasBoard({
                 zoomLevel={lifelineZoomLevel}
                 lifelineConfig={lifelineConfig}
                 lineMetrics={lineMetrics}
-                layout={roadmapLayout}
+                layout={projectsLayout}
                 hiddenTickRanges={lifelineHiddenTickRanges}
                 selectedDate={selectedDayDate}
                 routineTemplates={routineTemplates}
@@ -739,8 +739,8 @@ function CanvasBoard({
             projects={lifelineAnchorsWithPos}
             config={lifelineConfig}
             lineMetrics={lineMetrics}
-            layout={roadmapLayout}
-            centerX={roadmapLayout.centerX}
+            layout={projectsLayout}
+            centerX={projectsLayout.centerX}
             zoomLevel={lifelineZoomLevel}
             onUpdateAnchor={onUpdateLifelineAnchor}
             onOpenProject={onOpenLifelineProject}
@@ -755,13 +755,13 @@ function CanvasBoard({
         </>
       )}
 
-      {roadmapLayout?.direction === 'vertical'
+      {projectsLayout?.direction === 'vertical'
         && origin
         && typeof lineMetrics?.bottomY === 'number'
         && !(isLifeline && lifelineConfig?.windowed) && (
-        <RoadmapOriginCard
+        <ProjectsOriginCard
           origin={origin}
-          centerX={roadmapLayout.centerX}
+          centerX={projectsLayout.centerX}
           originY={lineMetrics.bottomY}
           selected={originSelected}
           onSelect={onSelectOrigin}
@@ -846,12 +846,12 @@ function CanvasBoard({
         />
       ))}
 
-      {roadmapLayout?.direction === 'vertical' &&
-        roadmapCheckpoints.map((cp) => (
-          <CheckpointRoadmapItem
+      {projectsLayout?.direction === 'vertical' &&
+        projectsCheckpoints.map((cp) => (
+          <CheckpointProjectsItem
             key={`${cp.stageId}:${cp.id}`}
             checkpoint={cp}
-            centerX={lineMetrics?.centerX ?? roadmapLayout.centerX}
+            centerX={lineMetrics?.centerX ?? projectsLayout.centerX}
             side={cp.side}
             stageId={cp.stageId}
             onSelectStage={onSelectStage}
@@ -997,7 +997,7 @@ function CanvasBoard({
   );
 }
 
-export function RoadmapCanvas({
+export function ProjectsCanvas({
   stages,
   backlog = [],
   canvasConnections = [],
@@ -1017,8 +1017,8 @@ export function RoadmapCanvas({
   onMoveStagePosition,
   onMoveStageTimelineY,
   onMoveItemTimelineY,
-  onApplyRoadmapSpine,
-  onResizeRoadmapSpine,
+  onApplyProjectsSpine,
+  onResizeProjectsSpine,
   onClearStageFromCanvas,
   onMoveIdeaPosition,
   onMoveBacklogIdeaPosition,
@@ -1074,6 +1074,9 @@ export function RoadmapCanvas({
   syncing = false,
   hasUnsavedChanges = false,
   onSave,
+  syncError = null,
+  syncConflict = false,
+  onReloadCloud,
   onOpenWorkspace,
   onBrainContextChange,
   brainOrb = null,
@@ -1115,7 +1118,7 @@ export function RoadmapCanvas({
   }, [isLifeline, onBrainContextChange, dayView.date, selectedNodeRef, lifelineAnchors, projectId]);
 
   const [autoEditStickyId, setAutoEditStickyId] = useState(null);
-  const transformRef = useRef({ scale: ROADMAP_OPEN_SCALE, pan: { x: 48, y: 24 }, viewportRef: null });
+  const transformRef = useRef({ scale: PROJECTS_OPEN_SCALE, pan: { x: 48, y: 24 }, viewportRef: null });
   const cachedCanvasView = canvasViewCache.get(canvasViewCacheKey(projectId, isLifeline)) || null;
   const zoomCanvasRef = useRef(null);
   const canvasTransformRef = useRef(null);
@@ -1142,7 +1145,7 @@ export function RoadmapCanvas({
       }),
     [isLifeline, projectId]
   );
-  const [zoomPercent, setZoomPercent] = useState(Math.round(ROADMAP_OPEN_SCALE * 100));
+  const [zoomPercent, setZoomPercent] = useState(Math.round(PROJECTS_OPEN_SCALE * 100));
   const [lifelineCssScale, setLifelineCssScale] = useState(0.9);
   const lifelineSyncedThemeRef = useRef(null);
   const lastPointerClientRef = useRef(null);
@@ -1346,8 +1349,8 @@ export function RoadmapCanvas({
     }
     onMapThemeChange({ lifeline: synced.lifeline, roadmap: synced.roadmap });
   }, [isLifeline, mapTheme, lifelineBoundDates, onMapThemeChange]);
-  const roadmapLayout = useMemo(() => getRoadmapLayout(activeTheme), [activeTheme]);
-  const roadmapOrigin = useMemo(() => getRoadmapOrigin(activeTheme), [activeTheme]);
+  const projectsLayout = useMemo(() => getRoadmapLayout(activeTheme), [activeTheme]);
+  const projectsOrigin = useMemo(() => getRoadmapOrigin(activeTheme), [activeTheme]);
   const lifelineConfig = useMemo(
     () => (isLifeline ? getLifelineConfig(activeTheme, lifelineBoundDates) : null),
     [isLifeline, activeTheme, lifelineBoundDates]
@@ -1355,9 +1358,9 @@ export function RoadmapCanvas({
   const lifelinePlanContext = useMemo(
     () =>
       lifelineConfig
-        ? buildLifelinePlanContext(lifelineConfig, roadmapLayout, lifelineBoundDates)
+        ? buildLifelinePlanContext(lifelineConfig, projectsLayout, lifelineBoundDates)
         : null,
-    [lifelineConfig, roadmapLayout, lifelineBoundDates]
+    [lifelineConfig, projectsLayout, lifelineBoundDates]
   );
   const lifelineZoomLevel = useMemo(() => {
     if (!isLifeline || !lifelinePlanContext) return null;
@@ -1368,7 +1371,7 @@ export function RoadmapCanvas({
     [lifelineZoomLevel]
   );
   const lineMetrics = useMemo(
-    () => getCenterLineMetrics(stages, roadmapLayout, {
+    () => getCenterLineMetrics(stages, projectsLayout, {
       ideas: canvasIdeas,
       stickies: canvasStickiesOnBoard,
       obstacles: canvasObstaclesOnBoard,
@@ -1376,7 +1379,7 @@ export function RoadmapCanvas({
       tasks: canvasTasksOnBoard,
       lifelineContext: lifelinePlanContext,
     }),
-    [stages, roadmapLayout, canvasIdeas, canvasStickiesOnBoard, canvasObstaclesOnBoard, canvasResourcesOnBoard, canvasTasksOnBoard, lifelinePlanContext]
+    [stages, projectsLayout, canvasIdeas, canvasStickiesOnBoard, canvasObstaclesOnBoard, canvasResourcesOnBoard, canvasTasksOnBoard, lifelinePlanContext]
   );
   const lifelinePlanDateLabels = useMemo(
     () => (isLifeline ? collectLifelinePlanDateLabels(stages, lifelinePlanContext) : null),
@@ -1389,14 +1392,14 @@ export function RoadmapCanvas({
   const lifelineDayTicks = useMemo(
     () =>
       isLifeline && lifelineConfig
-        ? generateDayTicks(lifelineConfig, lineMetrics, roadmapLayout, {
+        ? generateDayTicks(lifelineConfig, lineMetrics, projectsLayout, {
             planDates: lifelinePlanDateLabels,
             lifelineDays,
             zoomLevel: lifelineZoomLevel ?? undefined,
             activityDates: lifelineActivityDates,
           })
         : null,
-    [isLifeline, lifelineConfig, lineMetrics, roadmapLayout, lifelinePlanDateLabels, lifelineDays, lifelineZoomLevel, lifelineActivityDates]
+    [isLifeline, lifelineConfig, lineMetrics, projectsLayout, lifelinePlanDateLabels, lifelineDays, lifelineZoomLevel, lifelineActivityDates]
   );
   const lifelineDayBands = useMemo(
     () =>
@@ -1404,23 +1407,23 @@ export function RoadmapCanvas({
         ? generateLifelineDayBands(
             lifelineConfig,
             lineMetrics,
-            roadmapLayout,
+            projectsLayout,
             lifelineDays,
             lifelineZoomLevel,
             lifelineActivityDates
           )
         : null,
-    [isLifeline, lifelineConfig, lineMetrics, roadmapLayout, lifelineDays, lifelineZoomLevel, lifelineActivityDates]
+    [isLifeline, lifelineConfig, lineMetrics, projectsLayout, lifelineDays, lifelineZoomLevel, lifelineActivityDates]
   );
   const lifelineAnchorsWithPos = useMemo(() => {
     if (!isLifeline || !lifelineConfig) return lifelineAnchors;
     return lifelineAnchors.map((project) => ({
       ...project,
       _anchorTop: project.lifelineAnchorDate
-        ? dateToTimelineY(project.lifelineAnchorDate, lifelineConfig, lineMetrics, roadmapLayout)
+        ? dateToTimelineY(project.lifelineAnchorDate, lifelineConfig, lineMetrics, projectsLayout)
         : null,
     }));
-  }, [isLifeline, lifelineConfig, lifelineAnchors, lineMetrics, roadmapLayout]);
+  }, [isLifeline, lifelineConfig, lifelineAnchors, lineMetrics, projectsLayout]);
 
   const openDayView = dayView.open;
   const closeDayView = dayView.close;
@@ -1444,8 +1447,8 @@ export function RoadmapCanvas({
         height: r.height,
       };
     } else if (viewportEl && lifelineConfig) {
-      const dayY = getDayTickCanvasY(date, lifelineConfig, roadmapLayout, lifelineBoundDates);
-      const centerX = roadmapLayout?.centerX ?? 480;
+      const dayY = getDayTickCanvasY(date, lifelineConfig, projectsLayout, lifelineBoundDates);
+      const centerX = projectsLayout?.centerX ?? 480;
       if (dayY != null) {
         const vr = viewportEl.getBoundingClientRect();
         const screenX = vr.left + pan.x + centerX * scale;
@@ -1476,8 +1479,8 @@ export function RoadmapCanvas({
     // Soft pan to center the day, then Premium Day Lab fades in (no exaggerated dive).
     let targetPan = pan;
     if (viewportEl && lifelineConfig) {
-      const dayY = getDayTickCanvasY(date, lifelineConfig, roadmapLayout, lifelineBoundDates);
-      const centerX = roadmapLayout?.centerX ?? 480;
+      const dayY = getDayTickCanvasY(date, lifelineConfig, projectsLayout, lifelineBoundDates);
+      const centerX = projectsLayout?.centerX ?? 480;
       if (dayY != null) {
         const w = viewportEl.clientWidth;
         const h = viewportEl.clientHeight;
@@ -1500,7 +1503,7 @@ export function RoadmapCanvas({
     isLifeline,
     onRefreshProjectActivity,
     lifelineConfig,
-    roadmapLayout,
+    projectsLayout,
     lifelineBoundDates,
     activeTheme,
     openDayView,
@@ -1513,12 +1516,12 @@ export function RoadmapCanvas({
   const lifelineScrollTarget = useMemo(() => {
     if (!isLifeline || !lifelineConfig) return null;
     // Wait until spine matches day grid — otherwise the first pan lands on the wrong date.
-    if (!isLifelineSpineReady(lifelineConfig, roadmapLayout)) return null;
+    if (!isLifelineSpineReady(lifelineConfig, projectsLayout)) return null;
     // Prefer the rendered today tick; fall back to spine math (never tip / -420).
     const todayTick = lifelineDayTicks?.find((tick) => tick.isToday);
     const point = todayTick
       ? { x: lineMetrics.centerX, y: todayTick.top }
-      : getLifelineTodayScrollPoint(lifelineConfig, roadmapLayout, lineMetrics, lifelineBoundDates);
+      : getLifelineTodayScrollPoint(lifelineConfig, projectsLayout, lineMetrics, lifelineBoundDates);
     if (!point || typeof point.y !== 'number' || Number.isNaN(point.y)) return null;
     // Trigger ONLY on focus/open — never on dayHeight zoom (height/y change),
     // or zoom would yank the viewport back to "today".
@@ -1532,54 +1535,54 @@ export function RoadmapCanvas({
     lifelineConfig,
     lifelineFocusToken,
     lifelineDayTicks,
-    roadmapLayout,
+    projectsLayout,
     lineMetrics,
     lifelineBoundDates,
   ]);
   const lifelineDefaultPan = useMemo(() => {
     const target = lifelineScrollTarget || (
       lifelineConfig
-        ? getLifelineTodayScrollPoint(lifelineConfig, roadmapLayout, lineMetrics, lifelineBoundDates)
+        ? getLifelineTodayScrollPoint(lifelineConfig, projectsLayout, lineMetrics, lifelineBoundDates)
         : null
     );
     if (!target) {
       // Mid-spine fallback — never y:-420 (that lands on the future tip / ~today+1y).
-      const midY = (roadmapLayout.top || 80) + (roadmapLayout.height || 1000) * 0.5;
+      const midY = (projectsLayout.top || 80) + (projectsLayout.height || 1000) * 0.5;
       const s = 0.9;
-      return { x: 480 - (roadmapLayout.centerX || 480) * s, y: 360 - midY * s };
+      return { x: 480 - (projectsLayout.centerX || 480) * s, y: 360 - midY * s };
     }
     const s = 0.9;
     return {
       x: 480 - target.x * s,
       y: 360 - target.y * s,
     };
-  }, [lifelineScrollTarget, lifelineConfig, roadmapLayout, lineMetrics, lifelineBoundDates]);
-  const roadmapCheckpoints = useMemo(
-    () => collectRoadmapCheckpoints(stages, roadmapLayout, lifelinePlanContext),
-    [stages, roadmapLayout, lifelinePlanContext]
+  }, [lifelineScrollTarget, lifelineConfig, projectsLayout, lineMetrics, lifelineBoundDates]);
+  const projectsCheckpoints = useMemo(
+    () => collectRoadmapCheckpoints(stages, projectsLayout, lifelinePlanContext),
+    [stages, projectsLayout, lifelinePlanContext]
   );
-  const roadmapScrollTarget = useMemo(() => {
+  const projectsScrollTarget = useMemo(() => {
     if (isLifeline) return null;
-    const point = getRoadmapOpenFocusPoint(roadmapCheckpoints, stages, roadmapLayout);
+    const point = getProjectsOpenFocusPoint(projectsCheckpoints, stages, projectsLayout);
     if (!point) return null;
     return { ...point, trigger: 'open' };
-  }, [isLifeline, roadmapCheckpoints, stages, roadmapLayout]);
-  const roadmapDefaultPan = useMemo(() => {
-    const target = roadmapScrollTarget;
-    const s = ROADMAP_OPEN_SCALE;
+  }, [isLifeline, projectsCheckpoints, stages, projectsLayout]);
+  const projectsDefaultPan = useMemo(() => {
+    const target = projectsScrollTarget;
+    const s = PROJECTS_OPEN_SCALE;
     if (!target) return { x: 48, y: 24 };
     return {
       x: 480 - target.x * s,
       y: 360 - target.y * s,
     };
-  }, [roadmapScrollTarget]);
+  }, [projectsScrollTarget]);
   const lifelineHiddenTickRanges = useMemo(
-    () => (isLifeline ? collectLifelineHiddenTickRanges(roadmapCheckpoints) : []),
-    [isLifeline, roadmapCheckpoints]
+    () => (isLifeline ? collectLifelineHiddenTickRanges(projectsCheckpoints) : []),
+    [isLifeline, projectsCheckpoints]
   );
   const planWindows = useMemo(
-    () => collectPlanWindows(stages, roadmapLayout, undefined, lifelinePlanContext),
-    [stages, roadmapLayout, lifelinePlanContext]
+    () => collectPlanWindows(stages, projectsLayout, undefined, lifelinePlanContext),
+    [stages, projectsLayout, lifelinePlanContext]
   );
   const planDayTicks = useMemo(
     () =>
@@ -1589,16 +1592,16 @@ export function RoadmapCanvas({
     [stages, lifelinePlanContext, isLifeline]
   );
   const planProgressSegments = useMemo(
-    () => collectPlanProgressSegments(stages, roadmapLayout, lifelinePlanContext),
-    [stages, roadmapLayout, lifelinePlanContext]
+    () => collectPlanProgressSegments(stages, projectsLayout, lifelinePlanContext),
+    [stages, projectsLayout, lifelinePlanContext]
   );
   const planCheckpoints = useMemo(
-    () => roadmapCheckpoints.filter((cp) => cp.stagePlanMode),
-    [roadmapCheckpoints]
+    () => projectsCheckpoints.filter((cp) => cp.stagePlanMode),
+    [projectsCheckpoints]
   );
   const boardSize = useMemo(
-    () => getBoardSizeWithStickies(stages, canvasIdeas, canvasStickies, roadmapLayout),
-    [stages, canvasIdeas, canvasStickies, roadmapLayout]
+    () => getBoardSizeWithStickies(stages, canvasIdeas, canvasStickies, projectsLayout),
+    [stages, canvasIdeas, canvasStickies, projectsLayout]
   );
   const inkSurfaceSize = useMemo(
     () => getInkSurfaceSize(boardSize, canvasInk),
@@ -1692,7 +1695,7 @@ export function RoadmapCanvas({
             canvasObstacles,
             canvasResources,
             canvasTasks,
-            roadmapLayout
+            projectsLayout
           )
         : null,
     [
@@ -1703,7 +1706,7 @@ export function RoadmapCanvas({
       canvasObstacles,
       canvasResources,
       canvasTasks,
-      roadmapLayout,
+      projectsLayout,
     ]
   );
 
@@ -1749,11 +1752,11 @@ export function RoadmapCanvas({
       stages,
       backlog,
       canvasStickies,
-      roadmapLayout,
+      projectsLayout,
       size,
       canvasPlacementExtras
     );
-  }, [stages, backlog, canvasStickies, roadmapLayout, canvasPlacementExtras]);
+  }, [stages, backlog, canvasStickies, projectsLayout, canvasPlacementExtras]);
 
   const handleAddMilestone = useCallback(() => {
     const pos = getInsertBoardPosition({ w: MAJOR_W, h: CARD_H + 24 });
@@ -2018,12 +2021,12 @@ export function RoadmapCanvas({
     onMapThemeChange?.({
       roadmap: {
         origin: {
-          ...roadmapOrigin,
+          ...projectsOrigin,
           ...updates,
         },
       },
     });
-  }, [onMapThemeChange, roadmapOrigin]);
+  }, [onMapThemeChange, projectsOrigin]);
 
   const handleNodeSelect = useCallback((nodeRef) => {
     if (connectFrom) {
@@ -2113,7 +2116,7 @@ export function RoadmapCanvas({
       canvasObstacles,
       canvasResources,
       canvasTasks,
-      roadmapLayout
+      projectsLayout
     );
     if (!pos) return;
     const linkToMilestone =
@@ -2134,7 +2137,7 @@ export function RoadmapCanvas({
       setSelectedNodeRef({ type: 'sticky', id: sticky.id });
       setAutoEditStickyId(sticky.id);
     }
-  }, [selectedNodeRef, stages, backlog, canvasStickies, canvasObstacles, canvasResources, canvasTasks, roadmapLayout, onAddCanvasSticky, onAddCanvasConnection]);
+  }, [selectedNodeRef, stages, backlog, canvasStickies, canvasObstacles, canvasResources, canvasTasks, projectsLayout, onAddCanvasSticky, onAddCanvasConnection]);
 
   const handleToolbarAddImageNearSelection = useCallback(() => {
     if (selectedNodeRef) {
@@ -2146,7 +2149,7 @@ export function RoadmapCanvas({
         canvasObstacles,
         canvasResources,
         canvasTasks,
-        roadmapLayout
+        projectsLayout
       );
       if (pos) {
         // Prefer dropping near the selected node when picking from the toolbar.
@@ -2161,7 +2164,7 @@ export function RoadmapCanvas({
       }
     }
     handleToolbarAddImage();
-  }, [selectedNodeRef, stages, backlog, canvasStickies, canvasObstacles, canvasResources, canvasTasks, handleToolbarAddImage, roadmapLayout]);
+  }, [selectedNodeRef, stages, backlog, canvasStickies, canvasObstacles, canvasResources, canvasTasks, handleToolbarAddImage, projectsLayout]);
 
   const handleToolbarAddLink = useCallback(() => {
     if (!selectedNodeRef) return;
@@ -2211,7 +2214,7 @@ export function RoadmapCanvas({
           canvasObstacles,
           canvasResources,
           canvasTasks,
-          roadmapLayout
+          projectsLayout
         )
       : null;
     const bounds = node?.bounds;
@@ -2536,7 +2539,7 @@ export function RoadmapCanvas({
         viewport
       );
       const canvasY = (pointY - (ctx.pan?.y || 0)) / (ctx.scale || 1);
-      const spine = getLifelineSpineMetrics(roadmapLayout);
+      const spine = getLifelineSpineMetrics(projectsLayout);
       const metrics = {
         bottomY: spine.bottom,
         top: spine.top,
@@ -2548,13 +2551,13 @@ export function RoadmapCanvas({
           canvasY,
           getLifelineConfig(base, lifelineBoundDates),
           metrics,
-          roadmapLayout
+          projectsLayout
         ),
         pointY,
         canvasY,
       };
     },
-    [activeTheme, lifelineBoundDates, roadmapLayout]
+    [activeTheme, lifelineBoundDates, projectsLayout]
   );
 
   const applyLifelineDensityZoom = useCallback(
@@ -2788,7 +2791,7 @@ export function RoadmapCanvas({
   return (
     <section
       ref={containerRef}
-      className={`roadmap-canvas-view${isFullscreen ? ' roadmap-canvas-view--fullscreen' : ''}${dayView.isActive ? ' roadmap-canvas-view--day-view' : ''}`}
+      className={`projects-canvas-view${isFullscreen ? ' projects-canvas-view--fullscreen' : ''}${dayView.isActive ? ' projects-canvas-view--day-view' : ''}`}
       data-day-view-phase={dayView.phase}
     >
       <input
@@ -2810,12 +2813,12 @@ export function RoadmapCanvas({
         />
       )}
       {connectFrom && (
-        <p className="roadmap-canvas__connect-hint roadmap-canvas__connect-hint--floating">
+        <p className="projects-canvas__connect-hint projects-canvas__connect-hint--floating">
           Σύνδεση… κάνε κλικ στο στοιχείο-στόχο ή Esc για ακύρωση
         </p>
       )}
 
-      <div className="roadmap-canvas-panel">
+      <div className="projects-canvas-panel">
         <CanvasTopBar
           hasSelection={Boolean(selectedNodeRef)}
           isConnecting={Boolean(connectFrom)}
@@ -2838,6 +2841,9 @@ export function RoadmapCanvas({
           syncing={syncing}
           hasUnsavedChanges={hasUnsavedChanges}
           onSave={onSave}
+          syncError={syncError}
+          syncConflict={syncConflict}
+          onReloadCloud={onReloadCloud}
           drawTool={drawTool}
           drawColor={drawColor}
           drawSize={drawSize}
@@ -2852,7 +2858,7 @@ export function RoadmapCanvas({
         />
 
       <div
-        className="roadmap-canvas__stage"
+        className="projects-canvas__stage"
         onPointerMove={(e) => trackPointerClient(e.clientX, e.clientY)}
         onPointerLeave={handleCanvasPointerLeave}
         onDragOver={handleCanvasDragOver}
@@ -2884,10 +2890,10 @@ export function RoadmapCanvas({
           )}
           <ZoomCanvas
             ref={zoomCanvasRef}
-            key={isLifeline ? 'lifeline-v6' : 'roadmap'}
-            className="roadmap-canvas zoom-canvas--no-toolbar"
-            defaultScale={cachedCanvasView?.scale ?? (isLifeline ? 0.9 : ROADMAP_OPEN_SCALE)}
-            defaultPan={cachedCanvasView?.pan ?? (isLifeline ? lifelineDefaultPan : roadmapDefaultPan)}
+            key={isLifeline ? 'lifeline-v6' : 'projects'}
+            className="projects-canvas zoom-canvas--no-toolbar"
+            defaultScale={cachedCanvasView?.scale ?? (isLifeline ? 0.9 : PROJECTS_OPEN_SCALE)}
+            defaultPan={cachedCanvasView?.pan ?? (isLifeline ? lifelineDefaultPan : projectsDefaultPan)}
             minScale={isLifeline ? LIFELINE_ZOOM.minScale : 0.25}
             maxScale={isLifeline ? LIFELINE_ZOOM.maxScale : 2}
             interceptWheel={isLifeline ? handleLifelineWheel : undefined}
@@ -2901,9 +2907,9 @@ export function RoadmapCanvas({
             scrollToCanvasPoint={
               cachedCanvasView
                 ? null
-                : (isLifeline ? lifelineScrollTarget : roadmapScrollTarget)
+                : (isLifeline ? lifelineScrollTarget : projectsScrollTarget)
             }
-            panExcludeSelector=".milestone-canvas-card, .idea-canvas-card, .sticky-note-card, .obstacle-canvas-card, .resource-canvas-card, .task-canvas-card, .checkpoint-roadmap-item, .canvas-floating-toolbar, .canvas-top-bar, .drawing-toolbar, .roadmap-center-line, .roadmap-row, .roadmap__header, .roadmap-card, .roadmap-node, .roadmap-canvas__fab-dock, .workspace-nav-btn, .brain-orb, .add-milestone-form, .canvas-connection__hit"
+            panExcludeSelector=".milestone-canvas-card, .idea-canvas-card, .sticky-note-card, .obstacle-canvas-card, .resource-canvas-card, .task-canvas-card, .checkpoint-projects-item, .canvas-floating-toolbar, .canvas-top-bar, .drawing-toolbar, .projects-center-line, .projects-row, .projects__header, .projects-card, .projects-node, .projects-canvas__fab-dock, .workspace-nav-btn, .brain-orb, .add-milestone-form, .canvas-connection__hit"
           >
             <CanvasTransformBridge bridgeRef={canvasTransformRef} />
             <InkDragHost
@@ -2973,9 +2979,9 @@ export function RoadmapCanvas({
             onToolbarAction={handleToolbarAction}
             canPasteNode={Boolean(nodeClipboard)}
             canPasteStyle={Boolean(styleClipboard)}
-            roadmapLayout={roadmapLayout}
+            projectsLayout={projectsLayout}
             lineMetrics={lineMetrics}
-            roadmapCheckpoints={roadmapCheckpoints}
+            projectsCheckpoints={projectsCheckpoints}
             isPremium={isPremium}
             onArchiveCheckpoint={handleToggleCheckpointComplete}
             onDeleteMilestone={handleDeleteMilestone}
@@ -2988,9 +2994,9 @@ export function RoadmapCanvas({
             onSelectMilestone={handleSelectFromTimeline}
             spineSelected={spineSelected}
             onSelectSpine={handleSelectSpine}
-            onApplySpineMove={onApplyRoadmapSpine}
-            onResizeSpine={onResizeRoadmapSpine}
-            origin={roadmapOrigin}
+            onApplySpineMove={onApplyProjectsSpine}
+            onResizeSpine={onResizeProjectsSpine}
+            origin={projectsOrigin}
             originSelected={originSelected}
             onSelectOrigin={handleSelectOrigin}
             onUpdateOrigin={handleUpdateOrigin}
@@ -3032,11 +3038,11 @@ export function RoadmapCanvas({
           />
           </ZoomCanvas>
 
-          <div className={`roadmap-canvas__fab-dock${platform.isMobile ? ' roadmap-canvas__fab-dock--mobile' : ''}`}>
-            <div className="roadmap-canvas__spacing" title={isLifeline && lifelineZoomMeta ? lifelineZoomMeta.description : 'Zoom'}>
+          <div className={`projects-canvas__fab-dock${platform.isMobile ? ' projects-canvas__fab-dock--mobile' : ''}`}>
+            <div className="projects-canvas__spacing" title={isLifeline && lifelineZoomMeta ? lifelineZoomMeta.description : 'Zoom'}>
               <button
                 type="button"
-                className="roadmap-canvas__fab-btn roadmap-canvas__fab-btn--sm"
+                className="projects-canvas__fab-btn projects-canvas__fab-btn--sm"
                 onClick={handleZoomOut}
                 title="Zoom out"
                 aria-label="Zoom out"
@@ -3047,7 +3053,7 @@ export function RoadmapCanvas({
               </button>
               <button
                 type="button"
-                className={`roadmap-canvas__spacing-label roadmap-canvas__spacing-label--btn${isLifeline && lifelineZoomMeta && !platform.isMobile ? ' roadmap-canvas__spacing-label--lifeline' : ''}`}
+                className={`projects-canvas__spacing-label projects-canvas__spacing-label--btn${isLifeline && lifelineZoomMeta && !platform.isMobile ? ' projects-canvas__spacing-label--lifeline' : ''}`}
                 onClick={handleResetZoom}
                 title={
                   isLifeline && lifelineZoomMeta
@@ -3058,8 +3064,8 @@ export function RoadmapCanvas({
               >
                 {isLifeline && lifelineZoomMeta && !platform.isMobile ? (
                   <>
-                    <span className="roadmap-canvas__spacing-level">{lifelineZoomMeta.shortLabel}</span>
-                    <span className="roadmap-canvas__spacing-sublabel">{zoomPercent}%</span>
+                    <span className="projects-canvas__spacing-level">{lifelineZoomMeta.shortLabel}</span>
+                    <span className="projects-canvas__spacing-sublabel">{zoomPercent}%</span>
                   </>
                 ) : (
                   `${zoomPercent}%`
@@ -3067,7 +3073,7 @@ export function RoadmapCanvas({
               </button>
               <button
                 type="button"
-                className="roadmap-canvas__fab-btn roadmap-canvas__fab-btn--sm"
+                className="projects-canvas__fab-btn projects-canvas__fab-btn--sm"
                 onClick={handleZoomIn}
                 title="Zoom in"
                 aria-label="Zoom in"
@@ -3082,7 +3088,7 @@ export function RoadmapCanvas({
               <>
             <button
               type="button"
-              className={`roadmap-canvas__fab-btn${isFullscreen ? ' roadmap-canvas__fab-btn--active' : ''}`}
+              className={`projects-canvas__fab-btn${isFullscreen ? ' projects-canvas__fab-btn--active' : ''}`}
               onClick={toggleFullscreen}
               title={isFullscreen ? 'Exit full screen (Esc)' : 'Full screen (F)'}
               aria-label={isFullscreen ? 'Exit full screen' : 'Full screen'}
@@ -3105,7 +3111,7 @@ export function RoadmapCanvas({
             </button>
             <button
               type="button"
-              className="roadmap-canvas__fab-btn"
+              className="projects-canvas__fab-btn"
               onClick={onApplyAutoLayout}
               title="Auto-layout board"
               aria-label="Auto-layout board"
@@ -3124,9 +3130,9 @@ export function RoadmapCanvas({
         </div>
 
       {isEmptyBoard && (
-        <div className="roadmap-canvas__empty">
-          <p className="roadmap-canvas__empty-title">Άδειο roadmap</p>
-          <p className="roadmap-canvas__empty-hint">
+        <div className="projects-canvas__empty">
+          <p className="projects-canvas__empty-title">Άδειο project</p>
+          <p className="projects-canvas__empty-hint">
             Πρόσθεσε το πρώτο σου milestone για να ξεκινήσεις.
           </p>
           <button

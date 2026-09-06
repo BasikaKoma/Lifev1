@@ -32,7 +32,7 @@ export function createEmptyProject(title = 'My Business', { isLifeline = false }
     projectBrief: normalizeProjectBrief(),
     selectedStageId: null,
     focusMode: false,
-    activeView: 'roadmap',
+    activeView: 'projects',
   };
 }
 
@@ -44,7 +44,7 @@ function migrateV1ToV2(v1) {
     notes: v1.notes || [],
     selectedStageId: v1.selectedStageId || null,
     focusMode: v1.focusMode || false,
-    activeView: normalizeActiveView(v1.activeView || 'roadmap'),
+    activeView: normalizeActiveView(v1.activeView || 'projects'),
   };
   return { activeProjectId: project.id, projects: [project] };
 }
@@ -107,7 +107,7 @@ function normalizeLocalProject(p) {
     whiteboardStrokes: p.whiteboardStrokes || [],
     mapTheme: p.mapTheme || { ...DEFAULT_MAP_THEME },
     projectBrief: normalizeProjectBrief(p.projectBrief || p.brief),
-    activeView: normalizeActiveView(p.activeView || 'roadmap'),
+    activeView: normalizeActiveView(p.activeView || 'projects'),
     isLifeline: isLifelineProject(p),
     lifelineAnchorDate: p.lifelineAnchorDate || p.lifeline_anchor_date || null,
     lifelineDays: normalizeLifelineDays(p.lifelineDays || p.lifeline_days),

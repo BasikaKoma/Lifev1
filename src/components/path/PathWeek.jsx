@@ -9,8 +9,9 @@ import {
   startOfWeekMonday,
   weekDates,
 } from '../../lib/path/schema';
-import { blocksForDate, formatDuration, formatWeekRange } from '../../lib/path/logic';
+import { blocksForDate, blockActionProgress, formatDuration, formatWeekRange } from '../../lib/path/logic';
 import { BlockFields, PathModal, TemplateFields } from './PathFields';
+import { PathBlockWorkspace } from './PathBlockWorkspace';
 
 const STATUS_CLASS = {
   Done: 'path-pill--done',
@@ -25,11 +26,13 @@ function BlockCard({
   canMoveUp,
   canMoveDown,
   onOpen,
+  onEdit,
   onStatus,
   onNudge,
   onDropOnBlock,
   onDragOverBlock,
 }) {
+  const progress = blockActionProgress(block);
   return (
     <article
       className={`path-block${color ? ' path-block--goal' : ''}${isOver ? ' path-block--over' : ''}`}
@@ -62,6 +65,17 @@ function BlockCard({
         <div className="path-block__reorder" onMouseDown={(event) => event.stopPropagation()}>
           <button
             type="button"
+            className="path-block__icon"
+            aria-label="Edit block"
+            onClick={(event) => {
+              event.stopPropagation();
+              onEdit?.(block);
+            }}
+          >
+            ✎
+          </button>
+          <button
+            type="button"
             aria-label="Move up"
             disabled={!canMoveUp}
             onClick={(event) => {
@@ -86,6 +100,7 @@ function BlockCard({
       </div>
       <div className="path-pills">
         <span className={`path-pill ${STATUS_CLASS[block.status] || ''}`}>{block.status}</span>
+        {progress ? <span className="path-pill path-pill--actions">{progress.done}/{progress.total} actions</span> : null}
       </div>
       <div className="path-block__actions">
         {block.status !== 'Done' ? <button type="button" onClick={() => onStatus(block, 'Done')}>Done</button> : null}
@@ -99,6 +114,7 @@ function BlockCard({
 
 export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteLinkedTask }) {
   const [editor, setEditor] = useState(null);
+  const [workspaceId, setWorkspaceId] = useState(null);
   const [templateEditor, setTemplateEditor] = useState(null);
   const [completePrompt, setCompletePrompt] = useState(null);
   const [overDate, setOverDate] = useState(null);
@@ -109,6 +125,12 @@ export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteL
   useEffect(() => {
     path.ensureWeek(weekStart);
   }, [weekStart, path.ensureWeek]);
+
+  useEffect(() => {
+    if (workspaceId && !path.blocks.some((block) => block.id === workspaceId)) {
+      setWorkspaceId(null);
+    }
+  }, [workspaceId, path.blocks]);
 
   const openNew = (date) => {
     setEditor(createEmptyBlock({
@@ -147,6 +169,10 @@ export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteL
     if (completeLinkedTask && linked) onCompleteLinkedTask?.(linked);
     setCompletePrompt(null);
   };
+
+  const workspaceBlock = workspaceId
+    ? path.blocks.find((block) => block.id === workspaceId) || null
+    : null;
 
   return (
     <div>
@@ -196,7 +222,8 @@ export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteL
                   isOver={overBlockId === block.id}
                   canMoveUp={blockIndex > 0}
                   canMoveDown={blockIndex < dayBlocks.length - 1}
-                  onOpen={setEditor}
+                  onOpen={(item) => setWorkspaceId(item.id)}
+                  onEdit={setEditor}
                   onStatus={requestStatus}
                   onNudge={path.nudgeBlock}
                   onDragOverBlock={() => {
@@ -239,6 +266,19 @@ export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteL
         </section>
       ) : null}
 
+      {workspaceBlock ? (
+        <PathBlockWorkspace
+          block={workspaceBlock}
+          goal={path.goals.find((goal) => goal.id === workspaceBlock.goalId) || null}
+          tasks={tasks}
+          saving={path.saving}
+          onPatch={(patch) => path.upsertBlock({ ...workspaceBlock, ...patch })}
+          onEdit={setEditor}
+          onClose={() => setWorkspaceId(null)}
+          onStatus={requestStatus}
+        />
+      ) : null}
+
       <PathModal open={Boolean(editor)} title={editor && path.blocks.some((block) => block.id === editor.id) ? 'Edit block' : 'New block'} onClose={() => setEditor(null)}>
         {editor ? (
           <>
@@ -254,7 +294,15 @@ export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteL
             />
             <div className="path-modal__actions">
               {path.blocks.some((block) => block.id === editor.id) ? (
-                <button type="button" className="btn" onClick={() => { path.removeBlock(editor.id); setEditor(null); }}>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => {
+                    path.removeBlock(editor.id);
+                    if (workspaceId === editor.id) setWorkspaceId(null);
+                    setEditor(null);
+                  }}
+                >
                   Delete
                 </button>
               ) : null}

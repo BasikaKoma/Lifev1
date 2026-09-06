@@ -46,8 +46,8 @@ const MENU_ITEMS = [
     ),
   },
   {
-    id: 'roadmap',
-    label: 'Roadmap',
+    id: 'projects',
+    label: 'Projects',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
@@ -65,6 +65,16 @@ const MENU_ITEMS = [
         <path d="M6 20v-1a6 6 0 0 1 12 0v1" />
         <path d="M19 4l1.5 1.5L19 7" />
         <path d="M19 4l-1.5 1.5" />
+      </svg>
+    ),
+  },
+  {
+    id: 'nutrition',
+    label: 'Nutrition',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 3c2.5 4 6 6.2 6 10a6 6 0 0 1-12 0c0-3.8 3.5-6 6-10z" />
+        <path d="M9.5 14.5c.5 1.5 1.5 2.5 2.5 3" />
       </svg>
     ),
   },
@@ -109,6 +119,9 @@ export function Sidebar({
   syncing = false,
   hasUnsavedChanges = false,
   onSave,
+  syncError = null,
+  syncConflict = false,
+  onReloadCloud,
   collapsed = false,
   onToggleCollapse,
   children,
@@ -160,7 +173,7 @@ export function Sidebar({
           <button
             key={item.id}
             type="button"
-            className={`sidebar__link ${activeView === item.id && !(isLifeline && item.id === 'roadmap') ? 'sidebar__link--active' : ''}`}
+            className={`sidebar__link ${activeView === item.id && !(isLifeline && item.id === 'projects') ? 'sidebar__link--active' : ''}`}
             onClick={() => onNavigate(item.id)}
             title={item.label}
           >
@@ -179,6 +192,9 @@ export function Sidebar({
           syncing={syncing}
           hasUnsavedChanges={hasUnsavedChanges}
           onSave={onSave}
+          syncError={syncError}
+          syncConflict={syncConflict}
+          onReloadCloud={onReloadCloud}
           className="sidebar__save-status"
           compact={collapsed}
         />

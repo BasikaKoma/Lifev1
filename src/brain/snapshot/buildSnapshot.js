@@ -8,6 +8,8 @@ import { computeCapacity, deriveCircadianContext, deriveCurrentState } from '../
 import { computeFocusWindow } from '../../utils/focusWindowEngine';
 import { readBrandBundleLocal } from '../../lib/brand/store';
 import { itemsByStage } from '../../lib/brand/schema';
+import { readNutritionBundleLocal } from '../../lib/nutrition/store';
+import { activePlan, profileTargets } from '../../lib/nutrition/schema';
 
 function compactText(value, max = 280) {
   const text = String(value || '').replace(/\s+/g, ' ').trim();
@@ -135,6 +137,7 @@ export function buildSnapshot({
   const includeSelf = scopes.self !== false;
   const includeLifeline = scopes.lifeline !== false;
   const includeBrand = scopes.brand !== false;
+  const includeNutrition = scopes.nutrition !== false;
   const includeProjects = scopes.projects !== false;
   const includeNotes = scopes.notes !== false;
   const date = context?.selectedDate || localTodayIsoDate();
@@ -153,6 +156,7 @@ export function buildSnapshot({
     self: null,
     lifeline: { focusDay: null, recentDays: [], northStars: [] },
     brand: null,
+    nutrition: null,
     projects: [],
     mentionedProjects: [],
     localFolders: [],
@@ -241,6 +245,32 @@ export function buildSnapshot({
     sources.push(snapshot.brand.sourceId);
   }
 
+  if (includeNutrition) {
+    const nutrition = readNutritionBundleLocal();
+    const plan = activePlan(nutrition);
+    const targets = profileTargets(nutrition.profile);
+    snapshot.nutrition = {
+      goal: nutrition.profile?.goal || 'maintenance',
+      calorieTarget: targets.calories,
+      proteinTarget: targets.protein,
+      targetsAreSuggestions: Boolean(targets.caloriesAreSuggestion || targets.proteinAreSuggestion),
+      mealsPerDay: nutrition.profile?.mealsPerDay || 4,
+      allergies: nutrition.profile?.allergies || [],
+      activePlan: plan
+        ? {
+          startDate: plan.startDate,
+          days: plan.days,
+          avgCalories: plan.weeklyTotals?.avgCalories || null,
+          avgProtein: plan.weeklyTotals?.avgProtein || null,
+        }
+        : null,
+      pantryCount: (nutrition.pantry || []).length,
+      sourceId: sourceId('nutrition', 'profile'),
+      rule: 'Calories and macros are user targets or editable suggestions, not medical advice. Nutrition is an app screen, not a project.',
+    };
+    sources.push(snapshot.nutrition.sourceId);
+  }
+
   if (includeProjects) {
     const catalog = (projectCatalog || []).length
       ? projectCatalog
@@ -314,6 +344,7 @@ export function buildSnapshot({
     notes: (snapshot.projects || []).reduce((sum, project) => sum + (project.notes?.length || 0), 0),
     currentProject: snapshot.currentProject?.title || null,
     brand: Boolean(snapshot.brand?.sourceId),
+    nutrition: Boolean(snapshot.nutrition?.sourceId),
   };
 
   if (Array.isArray(localFolders) && localFolders.length) {

@@ -398,7 +398,7 @@ function buildFromSelfData(selfData, { displayName, stages, ouraRow, projectActi
     todayThree,
     nextAction: pathNextAction || {
       title: 'NEXT BEST ACTION',
-      message: nextMove?.action ?? 'Set up your roadmap to get daily actions',
+      message: nextMove?.action ?? 'Set up your projects to get daily actions',
       buttonLabel: 'Start Focus',
       source: nextMove?.type ? 'computed' : 'none',
     },
@@ -460,7 +460,7 @@ function buildEmptyView({ displayName, ouraStatus, scaleConnected, projectActivi
     todayThree,
     nextAction: pathNextAction || {
       title: 'NEXT BEST ACTION',
-      message: nextMove?.action ?? 'Add roadmap checkpoints for daily actions',
+      message: nextMove?.action ?? 'Add project checkpoints for daily actions',
       buttonLabel: 'Start Focus',
       source: nextMove?.type ? 'computed' : 'none',
     },

@@ -3,7 +3,12 @@ import * as save from './save';
 import * as updater from './updater';
 import * as deepLink from './deepLink';
 import * as brain from './brain';
-import { getPlatformInfo, hasBleSupport, isMobilePlatform } from './capabilities';
+import {
+  getPlatformInfo,
+  hasBleSupport,
+  isIosWebBrowser,
+  isMobilePlatform,
+} from './capabilities';
 
 export const platform = {
   get id() {
@@ -17,6 +22,9 @@ export const platform = {
   },
   get isWeb() {
     return detectPlatform() === 'web';
+  },
+  get isIosWeb() {
+    return isIosWebBrowser();
   },
   get isMobile() {
     return isMobilePlatform();

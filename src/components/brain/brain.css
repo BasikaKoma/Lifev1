@@ -16,7 +16,7 @@
   flex-direction: column;
 }
 
-.lifeline-workspace__canvas .roadmap-canvas-view {
+.lifeline-workspace__canvas .projects-canvas-view {
   flex: 1;
   min-height: 0;
 }
@@ -41,7 +41,7 @@
   z-index: 24;
 }
 
-.roadmap-canvas__stage .brain-orb,
+.projects-canvas__stage .brain-orb,
 .brain-orb {
   position: absolute;
   top: 12px;

@@ -79,7 +79,7 @@ export function useAppHistory(state, setState, loading) {
 
   const closeStage = useCallback(() => {
     skipHistoryPush.current = true;
-    const nav = { activeView: 'roadmap', selectedStageId: null };
+    const nav = { activeView: 'projects', selectedStageId: null };
     setState((prev) => (prev ? { ...prev, ...nav, focusMode: false } : prev));
     window.history.replaceState(nav, '', pathFromNavigation(nav));
   }, [setState]);

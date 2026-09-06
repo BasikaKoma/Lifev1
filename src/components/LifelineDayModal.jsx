@@ -44,7 +44,7 @@ import './selfHub.css';
 import './DayLab.css';
 
 /**
- * Premium Day Lab — Self-style emerald panels inside the Roadmap panel.
+ * Premium Day Lab — Self-style emerald panels inside Projects panel.
  * Day view: real metrics when synced, otherwise No data. Notes / todos always editable.
  */
 export function LifelineDayModal({

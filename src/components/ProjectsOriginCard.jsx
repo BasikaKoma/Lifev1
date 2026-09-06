@@ -19,7 +19,7 @@ export function getOriginPosition(centerX, originY) {
   };
 }
 
-export function RoadmapOriginCard({
+export function ProjectsOriginCard({
   origin,
   centerX,
   originY,
@@ -62,7 +62,7 @@ export function RoadmapOriginCard({
   return (
     <article
       className={[
-        'roadmap-origin-card',
+        'projects-origin-card',
         'canvas-node',
         'canvas-node--typed',
         isSelected ? 'canvas-node--selected' : '',
@@ -74,19 +74,19 @@ export function RoadmapOriginCard({
       style={{ left: pos.left, top: pos.top, width: ORIGIN_W, minHeight: ORIGIN_H, ...themeVars }}
       onPointerDown={handlePointerDown}
       role="group"
-      aria-label="Roadmap origin"
+      aria-label="Projects origin"
       title={connectModeActive ? 'Κλικ για σύνδεση · Alt+κλικ για σύνδεση' : 'Αρχή διαδρομής · Alt+κλικ για σύνδεση'}
     >
-      <div className="roadmap-origin-card__connector" aria-hidden="true" />
+      <div className="projects-origin-card__connector" aria-hidden="true" />
 
-      <div className="roadmap-origin-card__head">
-        <span className="roadmap-origin-card__icon" aria-hidden="true">✦</span>
-        <span className="roadmap-origin-card__label">Αρχή</span>
+      <div className="projects-origin-card__head">
+        <span className="projects-origin-card__icon" aria-hidden="true">✦</span>
+        <span className="projects-origin-card__label">Αρχή</span>
       </div>
 
       {editingTitle ? (
         <input
-          className="roadmap-origin-card__input roadmap-origin-card__input--title"
+          className="projects-origin-card__input projects-origin-card__input--title"
           value={origin.title}
           autoFocus
           onChange={(e) => onUpdate?.({ title: e.target.value })}
@@ -96,7 +96,7 @@ export function RoadmapOriginCard({
         />
       ) : (
         <h3
-          className="roadmap-origin-card__title"
+          className="projects-origin-card__title"
           onDoubleClick={() => setEditingTitle(true)}
         >
           {origin.title || 'Η Ιδέα'}
@@ -105,7 +105,7 @@ export function RoadmapOriginCard({
 
       {editingSubtitle ? (
         <input
-          className="roadmap-origin-card__input roadmap-origin-card__input--subtitle"
+          className="projects-origin-card__input projects-origin-card__input--subtitle"
           value={origin.subtitle}
           autoFocus
           onChange={(e) => onUpdate?.({ subtitle: e.target.value })}
@@ -115,7 +115,7 @@ export function RoadmapOriginCard({
         />
       ) : (
         <p
-          className="roadmap-origin-card__subtitle"
+          className="projects-origin-card__subtitle"
           onDoubleClick={() => setEditingSubtitle(true)}
         >
           {origin.subtitle || 'Αρχή της διαδρομής'}

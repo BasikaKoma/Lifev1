@@ -3,7 +3,8 @@
   "appName": "lifev1",
   "webDir": "dist",
   "server": {
-    "androidScheme": "https"
+    "androidScheme": "https",
+    "iosScheme": "https"
   },
   "plugins": {
     "SplashScreen": {

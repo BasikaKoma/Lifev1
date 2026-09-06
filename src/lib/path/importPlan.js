@@ -13,6 +13,7 @@ import {
   missingGoalFields,
   nowIso,
 } from './schema';
+import { assertPlanPdf, loadPdfDocument } from './planFile';
 
 const IMPORT_DRAFT_KEY = 'lifev1-path-import-draft';
 
@@ -57,7 +58,7 @@ export const PATH_IMPORT_SCHEMA = {
           projectOrLifeArea: { type: ['string', 'null'] },
           role: { type: ['string', 'null'] },
           baseline: { type: ['string', 'null'] },
-          target: { type: ['number', 'null'] },
+          target: { type: ['string', 'number', 'null'] },
           unit: { type: ['string', 'null'] },
           deadline: { type: ['string', 'null'] },
           why: { type: ['string', 'null'] },
@@ -122,15 +123,16 @@ const IMPORT_INSTRUCTIONS = `You extract a personal or professional 90-day plan 
 Return JSON only. Match the given schema exactly.
 
 LANGUAGE
-Keep every user-facing string in the SOURCE language. If the plan is Greek, write title, why, notes, projectOrLifeArea, weeklyAllocation, minimumAction, metric names, and block titles in Greek. Never translate into English.
+Keep every user-facing string in the SOURCE language. If the plan is Greek, write title, why, notes, projectOrLifeArea, weeklyAllocation, minimumAction, baseline, target, metric names, and block titles in Greek. Never translate into English.
 
 FILLING FIELDS
 Be thorough. Pull values that are stated or clearly implied in the same goal section.
 - title: the goal in the source language. Keep the original wording. If it has a project prefix ("Symphon: ..."), keep it.
 - projectOrLifeArea: the project, company, product, or life area named next to the goal (Symphon, Health, Sales, Personal). If the title starts with "Name:", that name is the area.
 - role: Primary / Growth / Maintenance. Map Greek: κύριος/βασικός/primary → Primary, ανάπτυξη/growth → Growth, συντήρηση/maintenance → Maintenance. The main 90-day business outcome is usually Primary.
-- baseline: where you are NOW, in plain words, same language. Not the target number. Examples: "80 κιλά, μέση 92 cm", "2 πληρωμένα καταστήματα", "χωρίς σταθερή ρουτίνα προπόνησης". Never copy the target (π.χ. 80%) into baseline.
-- target, unit: the number you are aiming for and what it measures. "≥80% συνέπεια" → target 80, unit % συνέπεια. "από 2 σε 10 καταστήματα" → target 10, unit καταστήματα.
+- baseline: where you are NOW, in plain words, same language. Not the destination. Examples: "80 κιλά, μέση 92 cm", "2 πληρωμένα καταστήματα", "χωρίς σταθερή ρουτίνα προπόνησης". Never copy the target into baseline.
+- target: the destination in plain words, same language. Keep numbers, units, and extra detail in the same field. Examples: "72 kg με 12% λίπος", "10 πληρωμένα καταστήματα", "≥80% συνέπεια". Never reduce this to a bare number.
+- unit: optional. Leave null when the unit is already inside target.
 - deadline: the goal date, cycle end, "έως", "μέχρι", "by", or the plan end date if the goal belongs to that cycle. YYYY-MM-DD.
 - why: one or two sentences from the source, same language. Use the stated reason, outcome, or constraint — do not invent a new why.
 - weeklyAllocation: hours, blocks, or cadence from the plan ("6 ώρες / εβδομάδα", "3 blocks"). Same language as the source.
@@ -157,31 +159,29 @@ function parseJson(text) {
 }
 
 export async function extractPdfText(file) {
-  if (!file) throw new Error('Choose a PDF file.');
-  if (file.type && file.type !== 'application/pdf' && !file.name?.toLowerCase().endsWith('.pdf')) {
-    throw new Error('Only PDF files are supported.');
-  }
-  const { getDocument, GlobalWorkerOptions } = await import('pdfjs-dist');
-  const worker = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
-  GlobalWorkerOptions.workerSrc = worker.default;
+  assertPlanPdf(file);
   const data = await file.arrayBuffer();
-  const pdf = await getDocument({ data }).promise;
-  const pages = [];
-  for (let index = 1; index <= pdf.numPages; index += 1) {
-    const page = await pdf.getPage(index);
-    const content = await page.getTextContent();
-    const text = (content.items || []).reduce((out, item) => {
-      const piece = item?.str || '';
-      if (!piece && !item?.hasEOL) return out;
-      return `${out}${piece}${item?.hasEOL ? '\n' : ' '}`;
-    }, '').replace(/[ \t]+\n/g, '\n').replace(/[ \t]{2,}/g, ' ').trim();
-    if (text) pages.push(text);
+  const pdf = await loadPdfDocument(data);
+  try {
+    const pages = [];
+    for (let index = 1; index <= pdf.numPages; index += 1) {
+      const page = await pdf.getPage(index);
+      const content = await page.getTextContent();
+      const text = (content.items || []).reduce((out, item) => {
+        const piece = item?.str || '';
+        if (!piece && !item?.hasEOL) return out;
+        return `${out}${piece}${item?.hasEOL ? '\n' : ' '}`;
+      }, '').replace(/[ \t]+\n/g, '\n').replace(/[ \t]{2,}/g, ' ').trim();
+      if (text) pages.push(text);
+    }
+    const extracted = pages.join('\n\n').trim();
+    if (!extracted) {
+      throw new Error('No readable text was found in this PDF.');
+    }
+    return extracted.slice(0, 20000);
+  } finally {
+    pdf.destroy?.();
   }
-  const extracted = pages.join('\n\n').trim();
-  if (!extracted) {
-    throw new Error('No readable text was found in this PDF.');
-  }
-  return extracted.slice(0, 20000);
 }
 
 const GREEK_MONTHS = {
@@ -312,6 +312,17 @@ function allocationFromTemplates(templates = []) {
   return Number.isInteger(hours) ? `${hours} ώρες / εβδομάδα` : `${hours.toFixed(1)} ώρες / εβδομάδα`;
 }
 
+function asGoalTargetText(value, unit) {
+  if (value == null || value === '') return null;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const number = Number.isInteger(value) ? String(value) : String(value);
+    const extra = unit ? String(unit).trim() : '';
+    return extra ? `${number} ${extra}` : number;
+  }
+  const text = String(value).trim();
+  return text || null;
+}
+
 function asDraftGoal(raw, index, { plan, projects } = {}) {
   const area = raw?.projectOrLifeArea || raw?.lifeArea || raw?.projectTitle || areaFromTitle(raw?.title);
   const matched = matchKnownProject(area, projects) || matchKnownProject(raw?.title, projects);
@@ -326,7 +337,8 @@ function asDraftGoal(raw, index, { plan, projects } = {}) {
     baseline: raw?.baseline == null || raw?.baseline === ''
       ? null
       : String(raw.baseline).trim(),
-    target: parseLooseNumber(raw?.target) ?? parseLooseNumber(firstOutcome?.target),
+    target: asGoalTargetText(raw?.target, raw?.unit)
+      || asGoalTargetText(firstOutcome?.target, firstOutcome?.unit || raw?.unit),
     unit: raw?.unit || firstOutcome?.unit || null,
     deadline: parseFlexibleDate(raw?.deadline) || parseFlexibleDate(plan?.endDate),
     why: raw?.why,
@@ -343,7 +355,7 @@ function asDraftGoal(raw, index, { plan, projects } = {}) {
       type: 'Outcome',
       unit: metric.unit || goal.unit,
       baseline: parseLooseNumber(metric.baseline),
-      target: parseLooseNumber(metric.target) ?? goal.target,
+      target: parseLooseNumber(metric.target) ?? parseLooseNumber(goal.target),
       direction: normalizeDirection(metric.direction),
       frequency: normalizeFrequency(metric.frequency),
     }));

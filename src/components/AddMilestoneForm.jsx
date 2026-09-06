@@ -49,7 +49,7 @@ export function AddMilestoneForm({ onAdd, onCancel, categoryOptions }) {
 
       <div className="add-milestone-form__actions">
         <button type="submit" className="btn btn--primary btn--sm">
-          Add to roadmap
+          Add to projects
         </button>
         <button type="button" className="btn btn--text btn--sm" onClick={onCancel}>
           Cancel

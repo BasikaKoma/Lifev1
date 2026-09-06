@@ -18,6 +18,7 @@ import { processStages, setStageComplete, toggleStageComplete as toggleStageComp
 import { withCompletionTimestamp } from '../utils/archive';
 import { normalizeProjectBrief } from '../utils/projectBrief';
 import { isSupabaseConfigured } from '../lib/supabase';
+import { flushPathNow, hasPendingPathSave, subscribePathSave } from '../lib/path/store';
 import { SAVE_INTERVAL_MS } from '../constants/save';
 import {
   loadInitialProject,
@@ -371,6 +372,7 @@ export function useAppState(userId) {
 
   const persistInactiveSessionProjects = useCallback(async () => {
     const currentId = stateRef.current?.projectId;
+    let lastError = null;
     for (const [id, cached] of sessionProjectsRef.current) {
       if (id === currentId || !cached?.dirty || !cached.state) continue;
       const columns = [...cached.dirtyColumns];
@@ -380,21 +382,29 @@ export function useAppState(userId) {
       }
       try {
         const result = await saveProjectToSupabase(cached.state, { columns });
-        if (result?.ok === false || result?.conflict) continue;
+        if (result?.conflict) {
+          lastError = result.warning || 'Conflict with another device';
+          continue;
+        }
+        if (result?.ok === false) {
+          lastError = result.warning || 'Database save failed';
+          continue;
+        }
         cached.dirty = false;
         cached.dirtyColumns = new Set();
         cached.syncedPersistable = capturePersistable(cached.state);
         if (result.cloudUpdatedAt) {
           cached.state = { ...cached.state, cloudUpdatedAt: result.cloudUpdatedAt };
         }
-      } catch {
-        /* keep dirty for the next manual / interval save */
+      } catch (err) {
+        lastError = err?.message || 'Database save failed';
       }
     }
+    if (lastError) throw new Error(lastError);
   }, []);
 
   const sessionHasUnsavedWork = useCallback(() => {
-    if (dirtyRef.current || pendingLifelineBundleRef.current) return true;
+    if (dirtyRef.current || pendingLifelineBundleRef.current || hasPendingPathSave()) return true;
     for (const cached of sessionProjectsRef.current.values()) {
       if (cached?.dirty) return true;
     }
@@ -653,7 +663,7 @@ export function useAppState(userId) {
         const existing = sessionProjectsRef.current.get(lifelineProjectId);
         if (existing?.dirty) return;
         const assembled = assembleProjectState(
-          { ...data, activeView: 'roadmap' },
+          { ...data, activeView: 'projects' },
           { resetSelection: true }
         );
         sessionProjectsRef.current.set(lifelineProjectId, {
@@ -758,12 +768,14 @@ export function useAppState(userId) {
     try {
       const data = await loadProjectById(projectId);
       applyRemoteProject(data, { keepUi: true });
+      setSyncConflict(false);
+      setHasUnsavedChanges(sessionHasUnsavedWork());
     } catch (err) {
       setSyncError(err.message || 'Failed to reload from cloud');
     } finally {
       setLoading(false);
     }
-  }, [applyRemoteProject]);
+  }, [applyRemoteProject, sessionHasUnsavedWork]);
 
   const handleSaveResult = useCallback((result, savedColumns, savedSnapshot) => {
     if (result?.conflict) {
@@ -923,29 +935,58 @@ export function useAppState(userId) {
   }, [lifelineProjectId, applyCloudTimestamp]);
 
   const flushSaveNow = useCallback(async () => {
-    if (syncConflict) return false;
-    if (savingRef.current && savePromiseRef.current) {
+    setSyncing(true);
+    let pathError = null;
+    try {
       try {
-        await savePromiseRef.current;
-      } catch {
+        await flushPathNow();
+      } catch (err) {
+        pathError = err;
+      }
+
+      if (syncConflict) {
+        setSyncError(
+          pathError?.message
+          || 'Το project ενημερώθηκε από άλλη συσκευή. Πάτα «Φόρτωση cloud» για συγχρονισμό.'
+        );
         return false;
       }
-    }
-    await flushPendingLifelineBundle();
-    flushActiveInkStroke();
-    try {
-      if (dirtyRef.current) {
-        await runSave([...dirtyColumnsRef.current]);
-        if (!dirtyRef.current) pendingLifelineBundleRef.current = false;
+
+      if (savingRef.current && savePromiseRef.current) {
+        try {
+          await savePromiseRef.current;
+        } catch {
+          return false;
+        }
       }
-      await persistInactiveSessionProjects();
-      const stillDirty = sessionHasUnsavedWork();
-      setHasUnsavedChanges(stillDirty);
-      return !stillDirty && !syncConflict;
-    } catch {
-      return false;
+      await flushPendingLifelineBundle();
+      flushActiveInkStroke();
+      try {
+        if (dirtyRef.current) {
+          await runSave([...dirtyColumnsRef.current]);
+          if (!dirtyRef.current) pendingLifelineBundleRef.current = false;
+        }
+        await persistInactiveSessionProjects();
+        const stillDirty = sessionHasUnsavedWork();
+        setHasUnsavedChanges(stillDirty);
+        if (pathError) {
+          setSyncError(pathError.message || 'Το Path δεν αποθηκεύτηκε στο cloud.');
+          return false;
+        }
+        if (!stillDirty) setSyncError(null);
+        return !stillDirty && !syncConflict;
+      } catch (err) {
+        setSyncError(err?.message || 'Η αποθήκευση απέτυχε');
+        return false;
+      }
+    } finally {
+      if (!savingRef.current) setSyncing(false);
     }
   }, [runSave, syncConflict, flushPendingLifelineBundle, persistInactiveSessionProjects, sessionHasUnsavedWork]);
+
+  useEffect(() => subscribePathSave(() => {
+    setHasUnsavedChanges(sessionHasUnsavedWork());
+  }), [sessionHasUnsavedWork]);
 
   useEffect(() => {
     flushSaveNowRef.current = flushSaveNow;
@@ -1220,7 +1261,7 @@ export function useAppState(userId) {
         ...data,
         projectList: projectListRef.current,
         selectedStageId: null,
-        activeView: normalizeActiveView(data.activeView || 'roadmap'),
+        activeView: normalizeActiveView(data.activeView || 'projects'),
       });
     } catch (err) {
       setSyncError(err.message || 'Failed to switch project');
@@ -1301,7 +1342,7 @@ export function useAppState(userId) {
   }, []);
 
   const openStage = useCallback((stageId) => {
-    setState((prev) => (prev ? { ...prev, activeView: 'roadmap', selectedStageId: stageId } : prev));
+    setState((prev) => (prev ? { ...prev, activeView: 'projects', selectedStageId: stageId } : prev));
   }, []);
 
   const loadTemplate = useCallback((stages) => {
@@ -2018,7 +2059,7 @@ export function useAppState(userId) {
     }, { debounce: true, canvasHeadroom: true });
   }, [patchState]);
 
-  const applyRoadmapSpineMove = useCallback((spine) => {
+  const applyProjectsSpineMove = useCallback((spine) => {
     if (!spine) return;
     patchState((prev) => {
       const oldLayout = getRoadmapLayout(prev.mapTheme);
@@ -2050,9 +2091,9 @@ export function useAppState(userId) {
     }, { debounce: true, canvasHeadroom: true });
   }, [patchState]);
 
-  const shiftRoadmapSpine = applyRoadmapSpineMove;
+  const shiftProjectsSpine = applyProjectsSpineMove;
 
-  const resizeRoadmapSpine = useCallback((top, height, resizeMeta) => {
+  const resizeProjectsSpine = useCallback((top, height, resizeMeta) => {
     patchState((prev) => {
       if (prev.isLifeline && resizeMeta?.edge) {
         const anchorDates = lifelineBoundDatesFromState(prev, lifelineAnchors);
@@ -2093,7 +2134,7 @@ export function useAppState(userId) {
     }, { debounce: true, canvasHeadroom: true });
   }, [patchState, lifelineAnchors]);
 
-  const moveRoadmapSpinePreview = applyRoadmapSpineMove;
+  const moveProjectsSpinePreview = applyProjectsSpineMove;
 
   const addBacklogIdea = useCallback((ideaData = {}) => {
     const idea = createEmptyIdea({
@@ -2777,10 +2818,10 @@ export function useAppState(userId) {
     });
   }, [clearHistory, flushSaveNow, rememberSyncedState]);
 
-  const openProjectRoadmap = useCallback(async (projectId, stageId = null) => {
+  const openProjectCanvas = useCallback(async (projectId, stageId = null) => {
     if (stateRef.current?.projectId === projectId) {
       setState((prev) =>
-        prev ? { ...prev, activeView: 'roadmap', selectedStageId: stageId } : prev
+        prev ? { ...prev, activeView: 'projects', selectedStageId: stageId } : prev
       );
       return;
     }
@@ -2788,7 +2829,7 @@ export function useAppState(userId) {
     const switchingToLifeline = Boolean(lifelineProjectId && projectId === lifelineProjectId);
     setSyncError(null);
     stashCurrentProject();
-    if (restoreSessionProject(projectId, { activeView: 'roadmap', selectedStageId: stageId })) {
+    if (restoreSessionProject(projectId, { activeView: 'projects', selectedStageId: stageId })) {
       return;
     }
     if (!switchingToLifeline) setLoading(true);
@@ -2798,7 +2839,7 @@ export function useAppState(userId) {
       applyProject({
         ...data,
         projectList: projectListRef.current,
-        activeView: 'roadmap',
+        activeView: 'projects',
         selectedStageId: stageId,
       });
     } catch (err) {
@@ -2838,11 +2879,11 @@ export function useAppState(userId) {
           /* fall through */
         }
       }
-      setState((prev) => (prev ? { ...prev, activeView: 'roadmap', selectedStageId: null } : prev));
+      setState((prev) => (prev ? { ...prev, activeView: 'projects', selectedStageId: null } : prev));
       return;
     }
-    await openProjectRoadmap(lifelineProjectId);
-  }, [lifelineProjectId, openProjectRoadmap, applyRemoteProject]);
+    await openProjectCanvas(lifelineProjectId);
+  }, [lifelineProjectId, openProjectCanvas, applyRemoteProject]);
 
   const setLifelineAnchorDate = useCallback(async (projectId, anchorDate) => {
     setLifelineAnchors((prev) => {
@@ -3102,7 +3143,7 @@ export function useAppState(userId) {
         throw new Error('Δεν βρήκα τον στόχο για διαγραφή. Δοκίμασε με το όνομά του.');
       }
       if (intents.some((i) => i.type === 'idea' || i.type === 'checkpoint')) {
-        throw new Error('Δεν βρέθηκε milestone στο roadmap. Πρόσθεσε πρώτα φάση στο Roadmap ή φόρτωσε template.');
+        throw new Error('Δεν βρέθηκε milestone στα Projects. Πρόσθεσε πρώτα φάση ή φόρτωσε template.');
       }
       throw new Error('Δεν κατάλαβα την εντολή. Δοκίμασε ξανά.');
     }
@@ -3140,7 +3181,7 @@ export function useAppState(userId) {
         return title && needle && (title === needle || title.includes(needle) || needle.includes(title));
       });
       if (existing) {
-        await openProjectRoadmap(existing.id);
+        await openProjectCanvas(existing.id);
         return {
           created: false,
           projectId: existing.id,
@@ -3155,7 +3196,7 @@ export function useAppState(userId) {
       if (Array.isArray(data.projectList)) setProjectList(data.projectList);
       loadAllProjectsActivity().then((activity) => setProjectActivity(activity)).catch(() => {});
       const checkpointCount = seed?.stages?.reduce((sum, stage) => sum + (stage.checkpoints?.length || 0), 0) || 0;
-      if (data.projectId) await openProjectRoadmap(data.projectId);
+      if (data.projectId) await openProjectCanvas(data.projectId);
       return {
         created: true,
         projectId: data.projectId || null,
@@ -3201,7 +3242,7 @@ export function useAppState(userId) {
     for (const action of openProjectActions(actions)) {
       const projectId = resolveBrainProjectId(action, current) || grouped.keys().next().value || null;
       if (!projectId) continue;
-      await openProjectRoadmap(projectId);
+      await openProjectCanvas(projectId);
       openedId = projectId;
     }
 
@@ -3219,7 +3260,7 @@ export function useAppState(userId) {
       projectId: openedId,
       message: parts.length ? `Έτοιμο: ${parts.join(', ')}.` : 'Άνοιξα το project.',
     };
-  }, [flushSaveNow, openProjectRoadmap, patchState, resolveBrainProjectId]);
+  }, [flushSaveNow, openProjectCanvas, patchState, resolveBrainProjectId]);
 
   const applySmartCapture = useCallback(async (capture) => {
     const current = stateRef.current;
@@ -3331,7 +3372,7 @@ export function useAppState(userId) {
     setFocusMode,
     setActiveView,
     openStage,
-    openProjectRoadmap,
+    openProjectCanvas,
     openLifeline,
     lifelineProjectId,
     lastRegularProjectId,
@@ -3385,10 +3426,10 @@ export function useAppState(userId) {
     updateCanvasSticky,
     moveCanvasSticky,
     removeCanvasSticky,
-    shiftRoadmapSpine,
-    resizeRoadmapSpine,
-    moveRoadmapSpinePreview,
-    applyRoadmapSpineMove,
+    shiftProjectsSpine,
+    resizeProjectsSpine,
+    moveProjectsSpinePreview,
+    applyProjectsSpineMove,
     clearStickyFromCanvas,
     addCanvasInkStroke,
     removeCanvasInkStrokes,

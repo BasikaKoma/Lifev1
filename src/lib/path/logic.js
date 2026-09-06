@@ -2,9 +2,11 @@ import { localTodayIsoDate } from '../../utils/selfDateUtils';
 import {
   WEEKDAYS,
   createEmptyBlock,
+  createEmptyBlockAction,
   nowIso,
   parseLocalDate,
   roleRank,
+  sortBlockActions,
   startOfWeekMonday,
   toIsoDate,
   weekDates,
@@ -12,7 +14,29 @@ import {
 } from './schema';
 
 function toNum(value) {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  return null;
+}
+
+export function numericGoalTarget(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (value == null || value === '') return null;
+  const match = String(value).replace(',', '.').match(/-?\d+(?:\.\d+)?/);
+  if (!match) return null;
+  const num = Number(match[0]);
+  return Number.isFinite(num) ? num : null;
+}
+
+export function formatGoalAim(goal, current) {
+  const target = String(goal?.target ?? '').trim();
+  const unit = String(goal?.unit ?? '').trim();
+  const aim = target
+    ? (unit && !target.toLowerCase().includes(unit.toLowerCase()) ? `${target} ${unit}` : target)
+    : '';
+  if (aim && current != null) return `${current} → ${aim}`;
+  if (aim) return aim;
+  if (current != null) return String(current);
+  return 'No measurement yet';
 }
 
 export function activeGoals(goals = []) {
@@ -59,7 +83,7 @@ function numericMetricStart(goal, metrics = []) {
 
 export function computeGoalProgress(goal, metrics = []) {
   const current = resolveCurrentValue(goal, metrics);
-  const target = toNum(goal?.target);
+  const target = numericGoalTarget(goal?.target);
   if (current == null || target == null) return null;
   const start = numericMetricStart(goal, metrics) ?? 0;
   const span = target - start;
@@ -72,14 +96,14 @@ function inferDirection(goal, metrics = []) {
   const outcome = linked.find((metric) => metric.type === 'Outcome');
   if (outcome?.direction) return outcome.direction;
   const start = numericMetricStart(goal, metrics);
-  const target = toNum(goal?.target);
+  const target = numericGoalTarget(goal?.target);
   if (start != null && target != null && target < start) return 'Decrease';
   return 'Increase';
 }
 
 export function computeTrackStatus(goal, metrics = []) {
   const current = resolveCurrentValue(goal, metrics);
-  const target = toNum(goal?.target);
+  const target = numericGoalTarget(goal?.target);
   if (current == null || target == null) return 'No data';
 
   const direction = inferDirection(goal, metrics);
@@ -297,6 +321,30 @@ export function formatDuration(minutes) {
   return rest ? `${hours}h ${rest}m` : `${hours}h`;
 }
 
+export function blockActionProgress(block) {
+  const actions = Array.isArray(block?.actions) ? block.actions : [];
+  if (!actions.length) return null;
+  return {
+    done: actions.filter((item) => item.completed).length,
+    total: actions.length,
+  };
+}
+
+export function reorderBlockActions(actions = [], actionId, beforeId) {
+  const list = sortBlockActions(actions);
+  const moving = list.find((item) => item.id === actionId);
+  if (!moving) return actions;
+  const others = list.filter((item) => item.id !== actionId);
+  const insertAt = beforeId ? others.findIndex((item) => item.id === beforeId) : others.length;
+  const next = [...others];
+  next.splice(insertAt < 0 ? next.length : insertAt, 0, moving);
+  return next.map((item, index) => createEmptyBlockAction({
+    ...item,
+    position: index,
+    updatedAt: nowIso(),
+  }));
+}
+
 export function formatDateLabel(isoDate) {
   const date = parseLocalDate(isoDate);
   if (!date) return isoDate || '';
@@ -344,6 +392,43 @@ export function formatWeekRange(weekStart) {
   const startLabel = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' }).format(start);
   const endLabel = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(end);
   return `${startLabel} – ${endLabel}`;
+}
+
+export function blockLinkedProject(block, goal) {
+  if (goal) {
+    return {
+      projectId: goal.projectId || null,
+      projectTitle: goal.projectTitle || null,
+    };
+  }
+  return {
+    projectId: block?.projectId || null,
+    projectTitle: block?.projectTitle || null,
+  };
+}
+
+export function tasksForBlockProject(tasks = [], block, goal) {
+  const { projectId, projectTitle } = blockLinkedProject(block, goal);
+  const titleKey = String(projectTitle || '').trim().toLowerCase();
+  const matchesProject = (task) => {
+    if (projectId) return task.projectId === projectId;
+    if (titleKey) return String(task.projectTitle || '').trim().toLowerCase() === titleKey;
+    return false;
+  };
+  const filtered = (tasks || []).filter(matchesProject);
+  if (block?.taskId && !filtered.some((task) => task.id === block.taskId)) {
+    const linked = (tasks || []).find((task) => task.id === block.taskId);
+    if (linked) return [linked, ...filtered];
+    if (block.taskTitle) {
+      return [{
+        id: block.taskId,
+        title: block.taskTitle,
+        source: block.taskSource,
+        projectTitle: block.projectTitle,
+      }, ...filtered];
+    }
+  }
+  return filtered;
 }
 
 export function collectLinkableTasks({ stages = [], canvasTasks = [], projectActivity = [], projectId, projectTitle } = {}) {

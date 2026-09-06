@@ -10,7 +10,7 @@ create table if not exists projects (
   title text not null default 'My Business',
   stages jsonb not null default '[]'::jsonb,
   goals jsonb not null default '[]'::jsonb,
-  active_view text not null default 'roadmap',
+  active_view text not null default 'projects',
   focus_mode boolean not null default false,
   selected_stage_id text,
   notes jsonb not null default '[]'::jsonb,

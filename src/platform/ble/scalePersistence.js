@@ -1,13 +1,23 @@
-import { detectPlatform } from '../capabilities.js';
+import { detectPlatform, getNativeOs } from '../capabilities.js';
 import { getSupabaseClient } from '../../lib/supabase';
 
 const SCALE_DEVICE_KEY = 'lifev1-scale-device';
 const INGEST_TOKEN_KEY = 'lifev1-scale-ingest-token';
 
 function platformKey(platform = detectPlatform()) {
-  if (platform === 'capacitor') return 'capacitor';
   if (platform === 'electron') return 'electron';
+  if (platform === 'capacitor') return getNativeOs() || 'android';
+  if (platform === 'ios' || platform === 'android') return platform;
   return 'web';
+}
+
+function platformEntry(normalized, key) {
+  const platforms = normalized?.platforms;
+  if (!platforms) return null;
+  if (platforms[key]?.id) return platforms[key];
+  // Legacy native apps stored a single "capacitor" slot (Android).
+  if (key === 'android' && platforms.capacitor?.id) return platforms.capacitor;
+  return null;
 }
 
 function normalizeCloudRecord(raw) {
@@ -70,11 +80,11 @@ export function clearScaleDevice() {
 export function resolveScaleDeviceForPlatform(cloudRecord, platform = detectPlatform()) {
   const normalized = normalizeCloudRecord(cloudRecord);
   const key = platformKey(platform);
-  const platformEntry = normalized?.platforms?.[key];
+  const entry = platformEntry(normalized, key);
 
-  if (platformEntry?.id) {
+  if (entry?.id) {
     return {
-      id: platformEntry.id,
+      id: entry.id,
       name: normalized.name || 'QN-Scale',
     };
   }
@@ -90,9 +100,14 @@ export function isScaleLinked(cloudRecord) {
   return Boolean(readScaleDevice()?.id);
 }
 
-/** Phone owns always-on BLE capture; desktop should read cloud data instead. */
+/** A phone owns BLE capture; desktop/web should read cloud data instead. */
 export function hasPhoneScaleCapture(cloudRecord) {
-  return Boolean(normalizeCloudRecord(cloudRecord)?.platforms?.capacitor?.id);
+  const platforms = normalizeCloudRecord(cloudRecord)?.platforms;
+  return Boolean(
+    platforms?.android?.id
+    || platforms?.ios?.id
+    || platforms?.capacitor?.id,
+  );
 }
 
 export async function fetchScaleDeviceFromCloud() {
@@ -126,16 +141,19 @@ export async function persistScaleDeviceToCloud(device, platform = detectPlatfor
   };
 
   const key = platformKey(platform);
+  const slot = {
+    id: device.id,
+    pairedAt: new Date().toISOString(),
+  };
   const record = {
     name: device.name || existing.name || 'QN-Scale',
     pairedAt: existing.pairedAt || new Date().toISOString(),
     ingest_token_hash: existing.ingest_token_hash ?? null,
     platforms: {
       ...(existing.platforms ?? {}),
-      [key]: {
-        id: device.id,
-        pairedAt: new Date().toISOString(),
-      },
+      [key]: slot,
+      // Keep legacy "capacitor" in sync so older Android/desktop builds still see the phone.
+      ...(key === 'android' ? { capacitor: slot } : {}),
     },
   };
 

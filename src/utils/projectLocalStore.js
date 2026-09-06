@@ -121,7 +121,7 @@ export async function readLocalProject(projectId) {
     ...persistable,
     isLifeline: meta?.isLifeline === true,
     cloudUpdatedAt: meta?.cloudUpdatedAt || null,
-    activeView: meta?.ui?.activeView || 'roadmap',
+    activeView: meta?.ui?.activeView || 'projects',
     selectedStageId: meta?.ui?.selectedStageId || null,
     focusMode: meta?.ui?.focusMode === true,
     dirtyColumns: meta?.dirtyColumns || [],
@@ -183,7 +183,7 @@ function metaRecord(state, dirtyColumns) {
     dirtyColumns: [...(dirtyColumns || [])],
     localUpdatedAt: Date.now(),
     ui: {
-      activeView: state.activeView || 'roadmap',
+      activeView: state.activeView || 'projects',
       selectedStageId: state.selectedStageId || null,
       focusMode: state.focusMode === true,
     },

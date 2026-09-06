@@ -71,7 +71,7 @@ function GoalCard({ goal, canDelete, isFirst, isLast, onUpdate, onDelete, onMove
     <div className={`card goal-card goal-card--${statusClass}`}>
       <div className="goal-card__header">
         <div className="goal-card__order">Goal {goal.order}</div>
-        <span className={`roadmap-badge roadmap-badge--${statusClass}`}>
+        <span className={`projects-badge projects-badge--${statusClass}`}>
           {goal.status === 'Done' ? 'Completed' : goal.status === 'Current' ? 'In Progress' : 'Upcoming'}
         </span>
       </div>
@@ -107,7 +107,7 @@ export function GoalsView({ goals, onAdd, onUpdate, onRemove, onMove }) {
         <div>
           <h2 className="view-section__title">Goals</h2>
           <p className="view-section__desc">
-            Strategic goals for your business — separate from the roadmap milestones.
+            Strategic goals for your business — separate from project milestones.
           </p>
         </div>
         <button type="button" className="btn btn--primary btn--sm" onClick={onAdd}>
@@ -117,7 +117,7 @@ export function GoalsView({ goals, onAdd, onUpdate, onRemove, onMove }) {
 
       {sorted.length === 0 ? (
         <div className="empty-state">
-          No goals yet. Add what you want to achieve — these stay here and do not appear on the roadmap.
+          No goals yet. Add what you want to achieve — these stay here and do not appear in Projects.
         </div>
       ) : (
         <div className="goals-list">

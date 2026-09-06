@@ -743,7 +743,7 @@ export async function ensureLifelineProject() {
     user_id: userId,
     title: lifeline.title,
     stages: lifeline.stages,
-    active_view: 'roadmap',
+    active_view: 'projects',
     focus_mode: false,
     map_theme: lifeline.mapTheme,
     lifeline_days: {},
@@ -780,7 +780,7 @@ export async function ensureLifelineProject() {
     title: lifeline.title,
     stages: lifeline.stages,
     is_lifeline: true,
-    active_view: 'roadmap',
+    active_view: 'projects',
     focus_mode: false,
     map_theme: lifeline.mapTheme,
   });
@@ -1180,7 +1180,7 @@ export async function createProject(title = 'New Business', options = {}) {
     stages,
     goals: seed?.goals || [],
     notes: seed?.notes || [],
-    active_view: 'roadmap',
+    active_view: 'projects',
     focus_mode: false,
     is_lifeline: false,
   });
@@ -1276,7 +1276,7 @@ export async function resetSupabaseProject(state) {
     projectBrief: normalizeProjectBrief(),
     selectedStageId: null,
     focusMode: false,
-    activeView: 'roadmap',
+    activeView: 'projects',
   };
 
   if (!state.projectId) {
@@ -1291,7 +1291,7 @@ export async function resetSupabaseProject(state) {
       stages: defaults,
       goals: [],
       notes: [],
-      active_view: 'roadmap',
+      active_view: 'projects',
       focus_mode: false,
       selected_stage_id: null,
     })

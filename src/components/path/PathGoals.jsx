@@ -4,6 +4,7 @@ import {
   computeGoalProgress,
   computeTrackStatus,
   formatDateLabel,
+  formatGoalAim,
   metricsForGoal,
   progressPercent,
   resolveCurrentValue,
@@ -41,9 +42,7 @@ function GoalCard({ goal, metrics, blocks, weekStart, onOpen }) {
         <span className={`path-pill ${ROLE_CLASS[goal.role] || ''}`}>{goal.role}</span>
       </div>
       <p className="path-card__meta">
-        {current != null || goal.target != null
-          ? `${current ?? '—'} / ${goal.target ?? '—'}${goal.unit ? ` ${goal.unit}` : ''}`
-          : 'No measurement yet'}
+        {formatGoalAim(goal, current)}
         {goal.deadline ? ` · ${formatDateLabel(goal.deadline)}` : ''}
       </p>
       <div className="path-progress" aria-hidden>

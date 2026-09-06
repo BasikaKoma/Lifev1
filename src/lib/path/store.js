@@ -3,6 +3,7 @@ import { waitForAuthSession } from '../auth';
 import { createEmptyBundle, normalizeBundle, nowIso } from './schema';
 
 const STORAGE_KEY = 'lifev1-path';
+const SAVE_DEBOUNCE_MS = 400;
 
 function isMissingTable(error) {
   const message = [error?.message, error?.details, error?.code].filter(Boolean).join(' ');
@@ -103,17 +104,101 @@ export async function loadPathBundle() {
   }
 }
 
-export async function savePathBundle(bundle) {
+let pendingBundle = null;
+let saveTimer = null;
+let savePromise = null;
+let pendingCloud = false;
+let saving = false;
+let lastError = '';
+const listeners = new Set();
+
+function pathSaveSnapshot() {
+  return {
+    pending: pendingCloud || Boolean(pendingBundle),
+    saving,
+    error: lastError,
+  };
+}
+
+function notifyPathSave() {
+  const snapshot = pathSaveSnapshot();
+  listeners.forEach((listener) => listener(snapshot));
+}
+
+export function subscribePathSave(listener) {
+  listeners.add(listener);
+  listener(pathSaveSnapshot());
+  return () => listeners.delete(listener);
+}
+
+export function hasPendingPathSave() {
+  return pendingCloud || Boolean(pendingBundle) || Boolean(saveTimer);
+}
+
+export function queuePathSave(bundle) {
   const next = writeLocal({
     ...normalizeBundle(bundle),
-    updatedAt: nowIso(),
+    updatedAt: bundle?.updatedAt || nowIso(),
   });
-  try {
-    await pushPathBundle(next);
-  } catch {
-    /* stay local if cloud is down */
-  }
+  pendingBundle = next;
+  pendingCloud = true;
+  lastError = '';
+  notifyPathSave();
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    flushPathNow().catch(() => {});
+  }, SAVE_DEBOUNCE_MS);
   return next;
+}
+
+export async function flushPathNow() {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+  if (!pendingBundle && !pendingCloud) return { ok: true };
+  if (savePromise) return savePromise;
+
+  savePromise = (async () => {
+    saving = true;
+    notifyPathSave();
+    try {
+      while (pendingBundle || pendingCloud) {
+        const next = pendingBundle || readLocal();
+        pendingBundle = null;
+        writeLocal(next);
+        const result = await pushPathBundle(next);
+        if (result?.ok === false && (result.reason === 'missing-table' || result.reason === 'offline-or-signed-out')) {
+          if (!pendingBundle) pendingCloud = false;
+          lastError = '';
+          if (!pendingBundle) return { ok: true, localOnly: true };
+          continue;
+        }
+        lastError = '';
+        if (!pendingBundle) {
+          pendingCloud = false;
+          return { ok: true };
+        }
+      }
+      return { ok: true };
+    } catch (err) {
+      pendingCloud = true;
+      lastError = err?.message || 'Path could not save.';
+      throw err;
+    } finally {
+      saving = false;
+      savePromise = null;
+      notifyPathSave();
+    }
+  })();
+
+  return savePromise;
+}
+
+export async function savePathBundle(bundle) {
+  queuePathSave(bundle);
+  return flushPathNow();
 }
 
 export function readPathBundleLocal() {

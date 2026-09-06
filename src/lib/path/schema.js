@@ -116,11 +116,27 @@ function asNullableNumber(value) {
   return Number.isFinite(num) ? num : null;
 }
 
+export function normalizePlanSourceFile(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const name = asNullableString(raw.name);
+  const id = asNullableString(raw.id);
+  if (!name && !id) return null;
+  return {
+    id: id || createPathId('planfile'),
+    name: name || 'plan.pdf',
+    size: asNullableNumber(raw.size),
+    type: asNullableString(raw.type) || 'application/pdf',
+    uploadedAt: asNullableString(raw.uploadedAt || raw.uploaded_at),
+    storagePath: asNullableString(raw.storagePath || raw.storage_path),
+  };
+}
+
 export function createEmptyPlan(overrides = {}) {
   return {
     title: asString(overrides.title),
     startDate: asNullableString(overrides.startDate || overrides.start_date),
     endDate: asNullableString(overrides.endDate || overrides.end_date),
+    sourceFile: normalizePlanSourceFile(overrides.sourceFile || overrides.source_file),
   };
 }
 
@@ -138,7 +154,7 @@ export function createEmptyGoal(overrides = {}) {
     lifeArea: asNullableString(overrides.lifeArea || overrides.life_area),
     role: overrides.role === null ? null : pick(GOAL_ROLES, overrides.role, 'Growth'),
     baseline: asNullableString(overrides.baseline),
-    target: asNullableNumber(overrides.target),
+    target: asNullableString(overrides.target),
     currentValue: asNullableNumber(overrides.currentValue || overrides.current_value),
     unit: asNullableString(overrides.unit),
     deadline: asNullableString(overrides.deadline),
@@ -182,9 +198,51 @@ export function createEmptyBlock(overrides = {}) {
     completeLinkedTask: Boolean(overrides.completeLinkedTask),
     templateId: asNullableString(overrides.templateId || overrides.template_id),
     notes: asNullableString(overrides.notes),
+    desiredOutcome: asNullableString(overrides.desiredOutcome || overrides.desired_outcome),
+    resultSummary: asNullableString(overrides.resultSummary || overrides.result_summary),
+    remaining: asNullableString(overrides.remaining),
+    nextStep: asNullableString(overrides.nextStep || overrides.next_step),
+    actions: sortBlockActions(
+      Array.isArray(overrides.actions)
+        ? overrides.actions.map(createEmptyBlockAction)
+        : [],
+    ),
+    resources: (Array.isArray(overrides.resources) ? overrides.resources : [])
+      .map(createEmptyBlockResource)
+      .filter((item) => item.url || item.title),
     createdAt: overrides.createdAt || overrides.created_at || now,
     updatedAt: overrides.updatedAt || overrides.updated_at || now,
   };
+}
+
+export function createEmptyBlockAction(overrides = {}) {
+  const now = nowIso();
+  return {
+    id: overrides.id || createPathId('bact'),
+    text: asString(overrides.text),
+    completed: Boolean(overrides.completed),
+    position: Number.isFinite(Number(overrides.position)) ? Number(overrides.position) : 0,
+    createdAt: overrides.createdAt || overrides.created_at || now,
+    updatedAt: overrides.updatedAt || overrides.updated_at || now,
+  };
+}
+
+export function createEmptyBlockResource(overrides = {}) {
+  const now = nowIso();
+  return {
+    id: overrides.id || createPathId('bres'),
+    title: asNullableString(overrides.title),
+    url: asNullableString(overrides.url),
+    createdAt: overrides.createdAt || overrides.created_at || now,
+  };
+}
+
+export function sortBlockActions(actions = []) {
+  return [...(actions || [])].sort((a, b) => {
+    const pos = (Number(a.position) || 0) - (Number(b.position) || 0);
+    if (pos) return pos;
+    return String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
+  });
 }
 
 export function normalizeBlock(raw = {}) {
@@ -327,8 +385,7 @@ export function missingGoalFields(goal) {
   if (!goal?.role) missing.push('role');
   if (!goal?.projectTitle && !goal?.lifeArea) missing.push('project or life area');
   if (!goal?.baseline) missing.push('baseline');
-  if (goal?.target == null) missing.push('target');
-  if (!goal?.unit) missing.push('unit');
+  if (!String(goal?.target || '').trim()) missing.push('target');
   if (!goal?.deadline) missing.push('deadline');
   if (!goal?.why) missing.push('why');
   if (!goal?.weeklyAllocation) missing.push('weekly allocation');

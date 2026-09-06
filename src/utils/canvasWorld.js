@@ -102,7 +102,7 @@ export function shiftCanvasWorld(state, dy) {
   };
 }
 
-/** Insert space at the top of a project roadmap so objects can keep moving upward. */
+/** Insert space at the top of a project canvas so objects can keep moving upward. */
 export function ensureCanvasHeadroom(state) {
   if (!state || state.isLifeline) return { state, dy: 0 };
   const minY = contentMinY(state);

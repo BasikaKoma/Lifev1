@@ -1,5 +1,5 @@
 import { Capacitor } from '@capacitor/core';
-import { detectPlatform } from '../../capabilities.js';
+import { detectPlatform, getNativeOs } from '../../capabilities.js';
 import {
   QN_SCALE_SERVICE_FFE0,
   QN_SCALE_SERVICE_FFF0,
@@ -194,7 +194,7 @@ export class CapacitorBleTransport extends WebBleTransport {
   async requestPermissions() {
     const { BleClient } = await import('@capacitor-community/bluetooth-le');
     await BleClient.initialize({ androidNeverForLocation: true });
-    if (typeof BleClient.requestEnable === 'function') {
+    if (getNativeOs() === 'android' && typeof BleClient.requestEnable === 'function') {
       try {
         await BleClient.requestEnable();
       } catch {

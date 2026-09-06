@@ -1,5 +1,5 @@
 import { registerPlugin } from '@capacitor/core';
-import { detectPlatform } from '../capabilities.js';
+import { detectPlatform, getNativeOs } from '../capabilities.js';
 import { getSupabaseAnonKey, getSupabaseUrl } from '../../lib/supabase';
 import {
   ensureScaleIngestToken,
@@ -8,8 +8,9 @@ import {
 
 const ScaleBackground = registerPlugin('ScaleBackground');
 
+/** Always-on BLE ingest exists only as an Android foreground service. */
 export function canUseScaleBackground() {
-  return detectPlatform() === 'capacitor';
+  return detectPlatform() === 'capacitor' && getNativeOs() === 'android';
 }
 
 export async function startScaleBackground(device = readScaleDevice()) {

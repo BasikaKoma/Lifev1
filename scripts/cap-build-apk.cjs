@@ -27,7 +27,17 @@ function run(cmd, opts = {}) {
   execSync(cmd, { stdio: 'inherit', ...opts });
 }
 
+function ensureProdCapacitorConfig() {
+  const configPath = path.join(projectRoot, 'capacitor.config.json');
+  const prodPath = path.join(projectRoot, 'capacitor.config.prod.json');
+  if (fs.existsSync(prodPath)) {
+    fs.copyFileSync(prodPath, configPath);
+    console.log('Using production Capacitor config (bundled assets, no live-reload URL).');
+  }
+}
+
 function main() {
+  ensureProdCapacitorConfig();
   console.log('Building web assets and syncing Capacitor...');
   run('npm run cap:sync', { cwd: projectRoot, shell: true });
 

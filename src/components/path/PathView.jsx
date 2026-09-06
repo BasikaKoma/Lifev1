@@ -10,6 +10,7 @@ import { PathGoals } from './PathGoals';
 import { PathWeek } from './PathWeek';
 import { PathMetrics } from './PathMetrics';
 import { PathImportPlan } from './PathImportPlan';
+import { PathPlanFileButton } from './PathPlanFileViewer';
 import './path.css';
 
 function initialPathTab(requested) {
@@ -59,6 +60,9 @@ export function PathView({
             {path.plan.title || '90-day goals → weekly plan → time blocks → execution → measurements.'}
             {path.plan.startDate && path.plan.endDate ? ` ${path.plan.startDate} – ${path.plan.endDate}` : ''}
           </p>
+        </div>
+        <div className="path-view__actions">
+          {!importing ? <PathPlanFileButton sourceFile={path.plan.sourceFile} label="Open PDF" /> : null}
         </div>
       </header>
 

@@ -120,7 +120,7 @@ export function StageDetails({
 
       <div className={`stage-details__hero stage-details__hero--major${done ? ' stage-details__hero--done' : ''}`}>
         <div className="stage-details__hero-left">
-          <span className="roadmap-row__phase">Milestone</span>
+          <span className="projects-row__phase">Milestone</span>
           {editingTitle ? (
             <div className="stage-details__title-edit">
               <input
@@ -195,13 +195,13 @@ export function StageDetails({
           </div>
 
           <div className="stage-details__badges">
-            <span className={`roadmap-badge roadmap-badge--${status.className}`}>{status.label}</span>
+            <span className={`projects-badge projects-badge--${status.className}`}>{status.label}</span>
             {done && stage.completedAt && (
               <span className="stage-details__complete-date">
                 Εκτελεσμένο · {formatArchiveDate(stage.completedAt)}
               </span>
             )}
-            <span className={`roadmap-badge roadmap-badge--health-${health.toLowerCase().replace(' ', '-')}`}>
+            <span className={`projects-badge projects-badge--health-${health.toLowerCase().replace(' ', '-')}`}>
               {health}
             </span>
             <span className="stage-details__count">{completed}/{total} checkpoints</span>
@@ -350,7 +350,7 @@ export function StageDetails({
               <span className="stage-details__archived-count">{archivedCheckpoints.length}</span>
             </h3>
             <p className="stage-details__archived-desc">
-              Checked / ολοκληρωμένα checkpoints — μένουν ορατά στο Roadmap ως εκτελεσμένα
+              Checked / ολοκληρωμένα checkpoints — μένουν ορατά στα Projects ως εκτελεσμένα
             </p>
             <div className="detail-section__list detail-section__list--grid">
               {archivedCheckpoints.map((cp) => (

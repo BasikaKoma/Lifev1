@@ -34,7 +34,7 @@ export function withCompletionTimestamp(current, updates, now = new Date().toISO
   return next;
 }
 
-/** Mark as completed — stays visible on roadmap / workspace. */
+/** Mark as completed — stays visible on the projects canvas / workspace. */
 export function buildCompletePatch(now = new Date().toISOString()) {
   return {
     done: true,

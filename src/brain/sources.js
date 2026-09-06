@@ -75,6 +75,14 @@ export function buildSourceIndex({ snapshot, catalog = [] } = {}) {
     });
   }
 
+  if (snapshot?.nutrition?.sourceId) {
+    add({
+      id: snapshot.nutrition.sourceId,
+      kind: 'nutrition',
+      label: 'Nutrition',
+    });
+  }
+
   return index;
 }
 

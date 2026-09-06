@@ -21,7 +21,7 @@ export function getStageDisplayStatus(stage, sortedStages) {
   return 'Locked';
 }
 
-/** Roadmap milestones → workspace chapter rows (live projection, no separate store). */
+/** Project milestones → workspace chapter rows (live projection, no separate store). */
 export function stagesAsChapters(stages = []) {
   const sorted = [...stages].sort((a, b) => a.order - b.order);
   return sorted.map((stage, index) => ({

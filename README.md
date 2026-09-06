@@ -1,6 +1,6 @@
 # lifev1
 
-A personal operating system for mapping your life, goals, and daily momentum — roadmap, lifeline, and self insights in one premium workspace.
+A personal operating system for mapping your life, goals, and daily momentum — projects, lifeline, and self insights in one premium workspace.
 
 ## Stack
 
@@ -73,7 +73,7 @@ On a new PC, open **Settings** once and paste your OpenAI key for voice. Cloud s
 
 ## Features
 
-- **Roadmap** — Visual planning for milestones, goals, and projects
+- **Projects** — Visual planning for milestones, goals, and workstreams
 - **Lifeline** — Daily rhythm view for habits, checkpoints, and progress
 - **Self** — Personal metrics and Oura integration
 - **Cloud sync** — Projects saved across devices when signed in

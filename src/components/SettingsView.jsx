@@ -295,9 +295,13 @@ export function SettingsView({
               <div className="settings-block">
                 <h3 className="settings-block__title">Smart Scale (QN-Scale)</h3>
                 <p className="settings-block__desc">
-                  {scaleConnected
-                    ? 'Συνδεδεμένη ζυγαριά — βάρος συγχρονίζεται στο Self και Lifeline.'
-                    : 'Σύνδεσε ACME SC101 (QN-Scale) μέσω Bluetooth για αυτόματη καταγραφή βάρους.'}
+                  {platform.isIosWeb
+                    ? (scaleConnected
+                      ? 'Τα κιλά συγχρονίζονται από το Android (η ζυγαριά μένει συνδεδεμένη εκεί). Στο Safari του iPhone δεν γίνεται Bluetooth pairing.'
+                      : 'Στο iPhone Safari δεν γίνεται σύνδεση Bluetooth. Άφησε το Android με την εφαρμογή κοντά στη ζυγαριά και τον ίδιο λογαριασμό — μετά τα κιλά φαίνονται και εδώ.')
+                    : (scaleConnected
+                      ? 'Συνδεδεμένη ζυγαριά — βάρος συγχρονίζεται στο Self και Lifeline.'
+                      : 'Σύνδεσε ACME SC101 (QN-Scale) μέσω Bluetooth για αυτόματη καταγραφή βάρους.')}
                 </p>
                 <button type="button" className="btn btn--primary" onClick={onOpenScaleModal}>
                   {scaleConnected ? 'Διαχείριση Scale' : 'Connect Scale'}

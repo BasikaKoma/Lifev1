@@ -14,11 +14,11 @@ export function TasksView({ stages, onSelectStage }) {
     <section className="section view-section">
       <h2 className="view-section__title">Tasks</h2>
       <p className="view-section__desc">
-        Open checkpoints across your roadmap milestones. {totalIncomplete} task(s) remaining.
+        Open checkpoints across your project milestones. {totalIncomplete} task(s) remaining.
       </p>
 
       {sorted.length === 0 ? (
-        <div className="empty-state">Add milestones on the Roadmap first — checkpoints live inside each phase.</div>
+        <div className="empty-state">Add milestones in Projects first — checkpoints live inside each phase.</div>
       ) : totalIncomplete === 0 ? (
         <div className="empty-state">All checkpoints complete!</div>
       ) : (

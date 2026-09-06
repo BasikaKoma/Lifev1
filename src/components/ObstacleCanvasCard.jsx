@@ -63,7 +63,7 @@ export function ObstacleCanvasCard({
               onChange={(priority) => onUpdate(obstacle.id, { priority })}
             />
           )}
-          <span className={`roadmap-badge roadmap-badge--outline roadmap-badge--${severityClass}`}>
+          <span className={`projects-badge projects-badge--outline projects-badge--${severityClass}`}>
             {obstacle.severity || 'Medium'}
           </span>
           {onRemove && (

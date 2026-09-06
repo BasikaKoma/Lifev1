@@ -186,7 +186,7 @@ export function MilestoneCanvasCard({
                   onChange={(priority) => onUpdateStage(stage.id, { priority })}
                 />
               )}
-              <span className={`roadmap-badge roadmap-badge--outline roadmap-badge--${status.className}`}>
+              <span className={`projects-badge projects-badge--outline projects-badge--${status.className}`}>
                 {status.label}
               </span>
               {onRemove && (

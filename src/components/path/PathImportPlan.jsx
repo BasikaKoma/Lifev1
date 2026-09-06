@@ -9,13 +9,16 @@ import {
   refreshDraft,
   saveImportDraft,
 } from '../../lib/path/importPlan';
+import { deletePlanSourceFile, loadImportFileMeta, savePlanSourceFile, syncPlanSourceFile } from '../../lib/path/planFile';
 import { goalColorStyle } from '../../lib/path/schema';
 import { GoalFields } from './PathFields';
+import { PathPlanFileButton } from './PathPlanFileViewer';
 
 export function PathImportPlan({ path, projects = [], onClose, onCreated }) {
   const inputRef = useRef(null);
   const abortRef = useRef(null);
   const [draft, setDraft] = useState(() => loadImportDraft());
+  const [keptFile, setKeptFile] = useState(() => loadImportDraft()?.plan?.sourceFile || loadImportFileMeta());
   const [phase, setPhase] = useState(() => (loadImportDraft() ? 'review' : 'pick'));
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
@@ -25,6 +28,23 @@ export function PathImportPlan({ path, projects = [], onClose, onCreated }) {
   useEffect(() => {
     if (draft?.drafts?.length) saveImportDraft(draft);
   }, [draft]);
+
+  useEffect(() => {
+    const meta = draft?.plan?.sourceFile;
+    if (!meta?.id || meta.storagePath) return undefined;
+    let cancelled = false;
+    syncPlanSourceFile(meta).then((next) => {
+      if (cancelled || !next?.storagePath) return;
+      setDraft((prev) => {
+        if (!prev || prev.plan?.sourceFile?.id !== next.id) return prev;
+        if (prev.plan.sourceFile.storagePath === next.storagePath) return prev;
+        return { ...prev, plan: { ...prev.plan, sourceFile: next } };
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [draft?.plan?.sourceFile?.id, draft?.plan?.sourceFile?.storagePath]);
 
   useEffect(() => () => {
     abortRef.current?.abort();
@@ -45,8 +65,16 @@ export function PathImportPlan({ path, projects = [], onClose, onCreated }) {
     abortRef.current = controller;
     setError('');
     setPhase('upload');
-    setStatus('Uploading PDF…');
+    setStatus('Saving PDF…');
     try {
+      const previous = draft?.plan?.sourceFile;
+      const sourceFile = await savePlanSourceFile(file);
+      if (controller.signal.aborted) return;
+      if (previous?.id && previous.id !== sourceFile.id && previous.id !== path.plan?.sourceFile?.id) {
+        deletePlanSourceFile(previous);
+      }
+      setDraft((prev) => (prev ? { ...prev, plan: { ...prev.plan, sourceFile } } : prev));
+      setKeptFile(sourceFile);
       setPhase('extract');
       setStatus('Extracting text…');
       const text = await extractPdfText(file);
@@ -55,6 +83,7 @@ export function PathImportPlan({ path, projects = [], onClose, onCreated }) {
       setStatus('Analyzing plan with Brain…');
       const next = await analyzePlanText(text, { projects, signal: controller.signal });
       if (controller.signal.aborted) return;
+      next.plan = { ...next.plan, sourceFile };
       saveImportDraft(next);
       setDraft(next);
       setPhase('review');
@@ -81,7 +110,10 @@ export function PathImportPlan({ path, projects = [], onClose, onCreated }) {
   };
 
   const createGoals = () => {
-    const created = path.createImportedGoals(draft.drafts, draft.plan);
+    const created = path.createImportedGoals(draft.drafts, {
+      ...draft.plan,
+      sourceFile: draft.plan.sourceFile || keptFile,
+    });
     if (!created.length) {
       setError('Select at least one goal with a title.');
       return;
@@ -98,13 +130,16 @@ export function PathImportPlan({ path, projects = [], onClose, onCreated }) {
             <h2 className="path-card__title">Import Plan</h2>
             <p className="path-empty">
               {draft
-                ? 'A review is already saved. Continue it, or upload a new PDF to replace it.'
-                : 'Upload a PDF. The review stays saved until you create the goals.'}
+                ? 'A review is already saved. Continue it, or upload a new PDF to replace it. The original file stays available to open later.'
+                : 'Upload a PDF. The original file is kept so you can open it later, and the review stays saved until you create the goals.'}
             </p>
           </div>
-          <button type="button" className="btn" onClick={phase === 'pick' ? onClose : cancelAnalyze}>
-            {phase === 'pick' ? 'Back' : 'Cancel'}
-          </button>
+          <div className="path-view__actions">
+            <PathPlanFileButton sourceFile={draft?.plan?.sourceFile || keptFile} />
+            <button type="button" className="btn" onClick={phase === 'pick' ? onClose : cancelAnalyze}>
+              {phase === 'pick' ? 'Back' : 'Cancel'}
+            </button>
+          </div>
         </div>
         {error ? <p className="path-error">{error}</p> : null}
         {phase === 'pick' ? (
@@ -132,7 +167,10 @@ export function PathImportPlan({ path, projects = [], onClose, onCreated }) {
               type="file"
               accept="application/pdf,.pdf"
               hidden
-              onChange={(event) => processFile(event.target.files?.[0])}
+              onChange={(event) => {
+                processFile(event.target.files?.[0]);
+                event.target.value = '';
+              }}
             />
           </div>
         ) : (
@@ -151,9 +189,10 @@ export function PathImportPlan({ path, projects = [], onClose, onCreated }) {
       <div className="path-toolbar">
         <div>
           <h2 className="path-card__title">Review imported goals</h2>
-          <p className="path-empty">This review stays saved until you press Create Goals. Refresh is safe. Empty fields stay empty — fill only what you know.</p>
+          <p className="path-empty">This review stays saved until you press Create Goals. Refresh is safe. Empty fields stay empty — fill only what you know. Open the original PDF whenever you want to study it.</p>
         </div>
         <div className="path-view__actions">
+          <PathPlanFileButton sourceFile={draft?.plan?.sourceFile || keptFile} />
           <button type="button" className="btn" onClick={() => { setPhase('pick'); setError(''); }}>New PDF</button>
           <button type="button" className="btn" onClick={onClose}>Cancel</button>
           <button type="button" className="btn btn--primary" onClick={createGoals}>Create Goals</button>
@@ -176,6 +215,11 @@ export function PathImportPlan({ path, projects = [], onClose, onCreated }) {
             <input className="input" type="date" value={draft.plan.endDate || ''} onChange={(event) => setDraft((prev) => ({ ...prev, plan: { ...prev.plan, endDate: event.target.value || null } }))} />
           </label>
         </div>
+        {(draft.plan.sourceFile?.name || keptFile?.name) ? (
+          <p className="path-card__meta" style={{ marginTop: 12 }}>
+            Original file: {draft.plan.sourceFile?.name || keptFile.name}
+          </p>
+        ) : null}
       </section>
 
       <div className="path-toolbar" style={{ marginTop: 16 }}>

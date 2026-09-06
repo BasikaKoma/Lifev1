@@ -38,8 +38,8 @@ const ITEMS = [
     ),
   },
   {
-    id: 'roadmap',
-    label: 'Roadmap',
+    id: 'projects',
+    label: 'Projects',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
         <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
@@ -56,6 +56,15 @@ const ITEMS = [
         <circle cx="12" cy="8" r="3" />
         <path d="M6 20v-1a6 6 0 0 1 12 0v1" />
         <path d="M19 4l1.5 1.5L19 7" />
+      </svg>
+    ),
+  },
+  {
+    id: 'nutrition',
+    label: 'Food',
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+        <path d="M12 3c2.5 4 6 6.2 6 10a6 6 0 0 1-12 0c0-3.8 3.5-6 6-10z" />
       </svg>
     ),
   },
@@ -92,8 +101,8 @@ export function MobileBottomNav({
   if (!platform.isMobile || hidden) return null;
 
   const isItemActive = (item) => {
-    if (item.id === 'lifeline') return isLifeline && activeView === 'roadmap';
-    if (item.id === 'roadmap') return !isLifeline && activeView === 'roadmap';
+    if (item.id === 'lifeline') return isLifeline && activeView === 'projects';
+    if (item.id === 'projects') return !isLifeline && activeView === 'projects';
     return item.id === activeView;
   };
 

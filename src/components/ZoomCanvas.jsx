@@ -41,7 +41,7 @@ export const ZoomCanvas = forwardRef(function ZoomCanvas({
   className = '',
   defaultScale = 0.85,
   defaultPan = { x: 32, y: 24 },
-  panExcludeSelector = '.milestone-canvas-card, .idea-canvas-card, .roadmap-row, .roadmap__header, .roadmap-card, .roadmap-node, .quick-note-orb, .idea-backlog-item, .roadmap-canvas__header, .drawing-toolbar',
+  panExcludeSelector = '.milestone-canvas-card, .idea-canvas-card, .projects-row, .projects__header, .projects-card, .projects-node, .quick-note-orb, .idea-backlog-item, .projects-canvas__header, .drawing-toolbar',
   minScale = DEFAULT_MIN_SCALE,
   maxScale = DEFAULT_MAX_SCALE,
   onTransformChange,
@@ -400,7 +400,7 @@ export const ZoomCanvas = forwardRef(function ZoomCanvas({
   }, [scale, pan, paintContentTransform]);
 
   useEffect(() => {
-    // Skip parent notifications mid DOM-animation (prevents RoadmapCanvas thrash).
+    // Skip parent notifications mid DOM-animation (prevents ProjectsCanvas thrash).
     if (animatingRef.current) return;
     onTransformChange?.({ scale, pan, viewportRef });
   }, [scale, pan, onTransformChange]);

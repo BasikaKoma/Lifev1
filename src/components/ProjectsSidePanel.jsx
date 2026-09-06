@@ -9,22 +9,22 @@ function SidePanelItem({ item, onDragStart }) {
 
   return (
     <div
-      className={`roadmap-side-item roadmap-side-item--${item.type}${isMilestone ? ' roadmap-side-item--major' : ''}`}
+      className={`projects-side-item projects-side-item--${item.type}${isMilestone ? ' projects-side-item--major' : ''}`}
       onPointerDown={(e) => onDragStart?.(e, item)}
     >
-      <span className="roadmap-side-item__icon">{icon}</span>
-      <div className="roadmap-side-item__body">
-        <span className="roadmap-side-item__title">{item.title}</span>
+      <span className="projects-side-item__icon">{icon}</span>
+      <div className="projects-side-item__body">
+        <span className="projects-side-item__title">{item.title}</span>
         {item.subtitle && (
-          <span className="roadmap-side-item__subtitle">{item.subtitle}</span>
+          <span className="projects-side-item__subtitle">{item.subtitle}</span>
         )}
       </div>
-      <span className="roadmap-side-item__handle" aria-hidden="true">⠿</span>
+      <span className="projects-side-item__handle" aria-hidden="true">⠿</span>
     </div>
   );
 }
 
-export function RoadmapSidePanel({
+export function ProjectsSidePanel({
   milestoneItems,
   ideaItems,
   stickyItems = [],
@@ -62,8 +62,8 @@ export function RoadmapSidePanel({
 
   if (collapsed) {
     return (
-      <aside className="roadmap-side-panel roadmap-side-panel--collapsed">
-        <button type="button" className="roadmap-side-panel__toggle" onClick={onToggleCollapse} title="Show panel">
+      <aside className="projects-side-panel projects-side-panel--collapsed">
+        <button type="button" className="projects-side-panel__toggle" onClick={onToggleCollapse} title="Show panel">
           📋 {totalCount}
         </button>
       </aside>
@@ -71,19 +71,19 @@ export function RoadmapSidePanel({
   }
 
   return (
-    <aside className="roadmap-side-panel roadmap-side-panel--wide">
-      <div className="roadmap-side-panel__header">
-        <div className="roadmap-side-panel__main-tabs">
+    <aside className="projects-side-panel projects-side-panel--wide">
+      <div className="projects-side-panel__header">
+        <div className="projects-side-panel__main-tabs">
           <button
             type="button"
-            className={`roadmap-side-panel__main-tab${sideTab === 'palette' ? ' roadmap-side-panel__main-tab--active' : ''}`}
+            className={`projects-side-panel__main-tab${sideTab === 'palette' ? ' projects-side-panel__main-tab--active' : ''}`}
             onClick={() => setSideTab('palette')}
           >
             Palette
           </button>
           <button
             type="button"
-            className={`roadmap-side-panel__main-tab${sideTab === 'theme' ? ' roadmap-side-panel__main-tab--active' : ''}`}
+            className={`projects-side-panel__main-tab${sideTab === 'theme' ? ' projects-side-panel__main-tab--active' : ''}`}
             onClick={() => setSideTab('theme')}
           >
             Customize theme
@@ -104,13 +104,13 @@ export function RoadmapSidePanel({
         />
       ) : (
         <>
-          <p className="roadmap-side-panel__subtitle">Drag onto the board</p>
+          <p className="projects-side-panel__subtitle">Drag onto the board</p>
 
-          <section className="roadmap-side-panel__section">
-            <div className="roadmap-side-panel__section-head">
+          <section className="projects-side-panel__section">
+            <div className="projects-side-panel__section-head">
               <h4>Milestones</h4>
               {!addingMilestone && (
-                <div className="roadmap-side-panel__section-actions">
+                <div className="projects-side-panel__section-actions">
                   <button type="button" className="btn btn--text btn--sm" onClick={() => setAddingMilestone(true)}>
                     + Milestone
                   </button>
@@ -125,9 +125,9 @@ export function RoadmapSidePanel({
               />
             )}
 
-            <ul className="roadmap-side-panel__list">
+            <ul className="projects-side-panel__list">
               {milestoneItems.length === 0 && !addingMilestone && (
-                <li className="roadmap-side-panel__empty">Add a milestone, then drag it to the board</li>
+                <li className="projects-side-panel__empty">Add a milestone, then drag it to the board</li>
               )}
               {milestoneItems.map((item) => (
                 <li key={item.id}>
@@ -137,8 +137,8 @@ export function RoadmapSidePanel({
             </ul>
           </section>
 
-          <section className="roadmap-side-panel__section">
-            <div className="roadmap-side-panel__section-head">
+          <section className="projects-side-panel__section">
+            <div className="projects-side-panel__section-head">
               <h4>Ideas & nodes</h4>
               {!addingIdea && (
                 <button type="button" className="btn btn--text btn--sm" onClick={() => setAddingIdea(true)}>
@@ -165,9 +165,9 @@ export function RoadmapSidePanel({
               </form>
             )}
 
-            <ul className="roadmap-side-panel__list">
+            <ul className="projects-side-panel__list">
               {ideaItems.length === 0 && !addingIdea && (
-                <li className="roadmap-side-panel__empty">No ideas yet</li>
+                <li className="projects-side-panel__empty">No ideas yet</li>
               )}
               {ideaItems.map((item) => (
                 <li key={item.id}>
@@ -177,16 +177,16 @@ export function RoadmapSidePanel({
             </ul>
           </section>
 
-          <section className="roadmap-side-panel__section">
-            <div className="roadmap-side-panel__section-head">
+          <section className="projects-side-panel__section">
+            <div className="projects-side-panel__section-head">
               <h4>Notes</h4>
               <button type="button" className="btn btn--text btn--sm" onClick={onAddSticky}>
                 + Note
               </button>
             </div>
-            <ul className="roadmap-side-panel__list">
+            <ul className="projects-side-panel__list">
               {stickyItems.length === 0 && (
-                <li className="roadmap-side-panel__empty">No notes on palette</li>
+                <li className="projects-side-panel__empty">No notes on palette</li>
               )}
               {stickyItems.map((item) => (
                 <li key={item.id}>

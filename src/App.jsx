@@ -5,7 +5,7 @@ import { filterRegularProjects } from './utils/lifeline';
 import { mergeLiveProjectActivity } from './utils/lifelineDays';
 import { getSupabaseConfigError, isSupabaseConfigured } from './lib/supabase';
 import { Sidebar } from './components/Sidebar';
-import { RoadmapCanvas } from './components/RoadmapCanvas';
+import { ProjectsCanvas } from './components/ProjectsCanvas';
 import { LifelineWorkspace } from './components/brain/LifelineWorkspace';
 import { CurrentFocusPanel } from './components/CurrentFocusPanel';
 import { DoNotStartYet } from './components/DoNotStartYet';
@@ -31,6 +31,7 @@ import { ScaleConnectModal } from './components/ScaleConnectModal';
 import { CamerasConnectModal } from './components/CamerasConnectModal';
 import { CamerasView } from './components/CamerasView';
 import { PersonalBrandView } from './components/brand/PersonalBrandView';
+import { NutritionView } from './components/nutrition/NutritionView';
 import { PathView } from './components/path/PathView';
 import { loadPathBundle, readPathBundleLocal } from './lib/path/store';
 import { pathTabFromPathname } from './utils/appNavigation';
@@ -80,6 +81,8 @@ function MainApp({ user, onSignOut }) {
     hasUnsavedChanges,
     flushSaveNow,
     syncError,
+    syncConflict,
+    reloadFromCloud,
     projectId,
     projectList,
     projectTitle,
@@ -107,7 +110,7 @@ function MainApp({ user, onSignOut }) {
     setFocusMode,
     setActiveView,
     openStage,
-    openProjectRoadmap,
+    openProjectCanvas,
     openLifeline,
     lifelineProjectId,
     lastRegularProjectId,
@@ -134,8 +137,8 @@ function MainApp({ user, onSignOut }) {
     moveStagePosition,
     moveStageTimelineY,
     moveItemTimelineY,
-    applyRoadmapSpineMove,
-    resizeRoadmapSpine,
+    applyProjectsSpineMove,
+    resizeProjectsSpine,
     clearStageFromCanvas,
     addGoal,
     updateGoal,
@@ -351,7 +354,7 @@ function MainApp({ user, onSignOut }) {
   });
 
   const pinchZoomEnabled =
-    platform.isMobile && !canvasFullscreen && activeView !== 'roadmap';
+    platform.isMobile && !canvasFullscreen && activeView !== 'projects';
   const pinchRef = useMobilePinchZoom(pinchZoomEnabled);
 
   const handleNavigate = (view) => {
@@ -448,15 +451,15 @@ function MainApp({ user, onSignOut }) {
   };
 
   useEffect(() => {
-    if (activeView === 'whiteboard') setActiveView('roadmap');
+    if (activeView === 'whiteboard') setActiveView('projects');
   }, [activeView, setActiveView]);
 
   useEffect(() => {
-    if (isLifeline && activeView === 'workspace') setActiveView('roadmap');
+    if (isLifeline && activeView === 'workspace') setActiveView('projects');
   }, [isLifeline, activeView, setActiveView]);
 
   useEffect(() => {
-    if (activeView !== 'roadmap') setCanvasFullscreen(false);
+    if (activeView !== 'projects') setCanvasFullscreen(false);
   }, [activeView]);
 
   useEffect(() => {
@@ -490,9 +493,9 @@ function MainApp({ user, onSignOut }) {
       return;
     }
     if (source.projectId) {
-      await openProjectRoadmap(source.projectId, source.stageId || null);
+      await openProjectCanvas(source.projectId, source.stageId || null);
     }
-  }, [openLifeline, openProjectRoadmap, setActiveView]);
+  }, [openLifeline, openProjectCanvas, setActiveView]);
 
   if (loading) {
     return (
@@ -537,7 +540,7 @@ function MainApp({ user, onSignOut }) {
       );
     }
 
-    if (selectedStage && activeView === 'roadmap') {
+    if (selectedStage && activeView === 'projects') {
       return (
         <StageDetails
           stage={selectedStage}
@@ -561,9 +564,9 @@ function MainApp({ user, onSignOut }) {
     }
 
     switch (activeView) {
-      case 'roadmap': {
+      case 'projects': {
         const canvas = (
-          <RoadmapCanvas
+          <ProjectsCanvas
             stages={stages}
             backlog={backlog}
             canvasConnections={canvasConnections}
@@ -582,8 +585,8 @@ function MainApp({ user, onSignOut }) {
             onMoveStagePosition={moveStagePosition}
             onMoveStageTimelineY={moveStageTimelineY}
             onMoveItemTimelineY={moveItemTimelineY}
-            onApplyRoadmapSpine={applyRoadmapSpineMove}
-            onResizeRoadmapSpine={resizeRoadmapSpine}
+            onApplyProjectsSpine={applyProjectsSpineMove}
+            onResizeProjectsSpine={resizeProjectsSpine}
             onClearStageFromCanvas={clearStageFromCanvas}
             onMoveIdeaPosition={moveIdeaPosition}
             onMoveBacklogIdeaPosition={moveBacklogIdeaPosition}
@@ -629,7 +632,7 @@ function MainApp({ user, onSignOut }) {
             lifelineAnchors={lifelineAnchors}
             onUpdateLifelineAnchor={setLifelineAnchorDate}
             onAssignLifelineToday={assignLifelineAnchorToday}
-            onOpenLifelineProject={openProjectRoadmap}
+            onOpenLifelineProject={openProjectCanvas}
             lifelineDays={lifelineDays}
             selfHubDays={selfHubDays}
             onUpdateLifelineDay={updateLifelineDay}
@@ -639,6 +642,9 @@ function MainApp({ user, onSignOut }) {
             syncing={syncing}
             hasUnsavedChanges={hasUnsavedChanges}
             onSave={flushSaveNow}
+            syncError={syncError}
+            syncConflict={syncConflict}
+            onReloadCloud={reloadFromCloud}
             onOpenWorkspace={
               !isLifeline && !platform.isMobile ? () => handleNavigate('workspace') : undefined
             }
@@ -700,13 +706,13 @@ function MainApp({ user, onSignOut }) {
             onUpdateCheckpoint={updateCheckpoint}
             onAddTask={addCanvasTask}
             onUpdateTask={updateCanvasTask}
-            onBack={() => handleNavigate('roadmap')}
+            onBack={() => handleNavigate('projects')}
           />
         );
       case 'self':
         return (
           <SelfView
-            onNavigateHome={() => setActiveView('roadmap')}
+            onNavigateHome={() => setActiveView('projects')}
             selfData={selfData}
             ouraStatus={ouraStatus}
             ouraLoading={ouraLoading}
@@ -772,6 +778,8 @@ function MainApp({ user, onSignOut }) {
             projectList={projectList}
           />
         );
+      case 'nutrition':
+        return <NutritionView />;
       case 'devices':
         return (
           <CamerasView
@@ -818,7 +826,7 @@ function MainApp({ user, onSignOut }) {
   };
 
   return (
-    <div className={`app ${focusMode ? 'app--focus' : ''} ${selectedStage ? 'app--detail' : ''} ${activeView === 'roadmap' && !selectedStage ? 'app--roadmap' : ''} ${activeView === 'self' ? 'app--self' : ''} ${activeView === 'path' ? 'app--path' : ''} ${activeView === 'brand' ? 'app--brand' : ''} ${activeView === 'settings' ? 'app--settings' : ''} ${activeView === 'devices' ? 'app--devices' : ''} ${canvasFullscreen ? 'app--canvas-fullscreen' : ''} ${sidebarCollapsed ? 'app--sidebar-collapsed' : ''} ${platform.isMobile ? 'app--mobile' : ''}`}>
+    <div className={`app ${focusMode ? 'app--focus' : ''} ${selectedStage ? 'app--detail' : ''} ${activeView === 'projects' && !selectedStage ? 'app--projects' : ''} ${activeView === 'self' ? 'app--self' : ''} ${activeView === 'path' ? 'app--path' : ''} ${activeView === 'brand' ? 'app--brand' : ''} ${activeView === 'nutrition' ? 'app--nutrition' : ''} ${activeView === 'settings' ? 'app--settings' : ''} ${activeView === 'devices' ? 'app--devices' : ''} ${canvasFullscreen ? 'app--canvas-fullscreen' : ''} ${sidebarCollapsed ? 'app--sidebar-collapsed' : ''} ${platform.isMobile ? 'app--mobile' : ''}`}>
       {!canvasFullscreen && !platform.isMobile && (
         <Sidebar
           activeView={activeView}
@@ -836,6 +844,9 @@ function MainApp({ user, onSignOut }) {
           syncing={syncing}
           hasUnsavedChanges={hasUnsavedChanges}
           onSave={flushSaveNow}
+          syncError={syncError}
+          syncConflict={syncConflict}
+          onReloadCloud={reloadFromCloud}
           collapsed={sidebarCollapsed}
           onToggleCollapse={toggleSidebarCollapsed}
         >
@@ -923,6 +934,7 @@ function MainApp({ user, onSignOut }) {
         onSaveProfile={saveScaleProfile}
         isMobile={platform.isMobile}
         isWeb={platform.isWeb}
+        isIosWeb={platform.isIosWeb}
         backgroundCapture={scale.backgroundCapture}
         phoneCapture={scale.phoneCapture}
         debug={scale.debug}

@@ -40,7 +40,6 @@ function restore() {
     return;
   }
   fs.copyFileSync(backupPath, configPath);
-  fs.unlinkSync(backupPath);
   console.log('Restored production capacitor.config.json');
 }
 
@@ -83,6 +82,10 @@ function enableDev() {
 
   console.log('Syncing Android project...');
   execSync('npx cap sync android', { cwd: projectRoot, stdio: 'inherit', shell: true });
+  const iosDir = path.join(projectRoot, 'ios');
+  if (fs.existsSync(iosDir)) {
+    execSync('npx cap sync ios', { cwd: projectRoot, stdio: 'inherit', shell: true });
+  }
 }
 
 const mode = process.argv[2];

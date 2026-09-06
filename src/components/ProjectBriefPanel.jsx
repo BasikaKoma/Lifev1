@@ -65,7 +65,7 @@ export function ProjectBriefPanel({ projectTitle, brief, onChange }) {
           rows={4}
           value={data.purpose}
           onChange={(e) => patch({ purpose: e.target.value })}
-          placeholder="π.χ. Roadmap, Lifeline και assistant που βοηθά να προχωράς το business μέρα με τη μέρα."
+          placeholder="π.χ. Projects, Lifeline και assistant που βοηθά να προχωράς το business μέρα με τη μέρα."
         />
       </div>
 

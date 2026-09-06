@@ -866,7 +866,7 @@ export function createLifelineProject() {
     projectBrief: normalizeProjectBrief(),
     selectedStageId: null,
     focusMode: false,
-    activeView: 'roadmap',
+    activeView: 'projects',
     lifelineDays: {},
   };
 }

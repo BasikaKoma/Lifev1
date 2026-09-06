@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   createEmptyBlock,
   createEmptyGoal,
@@ -8,7 +8,8 @@ import {
   nowIso,
   startOfWeekMonday,
 } from '../lib/path/schema';
-import { loadPathBundle, savePathBundle } from '../lib/path/store';
+import { loadPathBundle, queuePathSave, subscribePathSave } from '../lib/path/store';
+import { deletePlanSourceFile, syncPlanSourceFile } from '../lib/path/planFile';
 import { blocksForDate, materializeWeekBlocks, nextBlockOrder, reorderDayBlocks } from '../lib/path/logic';
 
 export function usePath() {
@@ -16,8 +17,6 @@ export function usePath() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const saveTimer = useRef(null);
-
   useEffect(() => {
     let cancelled = false;
     loadPathBundle()
@@ -35,15 +34,13 @@ export function usePath() {
     };
   }, []);
 
+  useEffect(() => subscribePathSave((status) => {
+    setSaving(status.saving);
+    setError(status.error || '');
+  }), []);
+
   const persist = useCallback((next) => {
-    setBundle(next);
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => {
-      setSaving(true);
-      savePathBundle(next)
-        .catch((err) => setError(err.message || 'Path could not save.'))
-        .finally(() => setSaving(false));
-    }, 400);
+    queuePathSave(next);
   }, []);
 
   const updateBundle = useCallback((patchOrFn) => {
@@ -251,34 +248,61 @@ export function usePath() {
     updateBundle((prev) => ({ plan: { ...prev.plan, ...plan } }));
   }, [updateBundle]);
 
+  useEffect(() => {
+    const sourceFile = bundle?.plan?.sourceFile;
+    if (!sourceFile?.id || sourceFile.storagePath) return undefined;
+    let cancelled = false;
+    syncPlanSourceFile(sourceFile).then((next) => {
+      if (cancelled || !next?.storagePath || next.storagePath === sourceFile.storagePath) return;
+      updatePlan({ sourceFile: next });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [bundle?.plan?.sourceFile, updatePlan]);
+
   const createImportedGoals = useCallback((drafts, plan) => {
     const selected = (drafts || []).filter((draft) => draft.selected && draft.goal?.title?.trim());
     if (!selected.length) return [];
-    updateBundle((prev) => ({
-      plan: plan ? { ...prev.plan, ...plan } : prev.plan,
-      goals: [
-        ...prev.goals,
-        ...selected.map((draft) => createEmptyGoal({
-          ...draft.goal,
-          status: 'Active',
-          updatedAt: nowIso(),
-        })),
-      ],
-      metrics: [
-        ...prev.metrics,
-        ...selected.flatMap((draft) => (draft.metrics || []).map((metric) => createEmptyMetric({
-          ...metric,
-          goalId: draft.goal.id,
-        }))),
-      ],
-      templates: [
-        ...prev.templates,
-        ...selected.flatMap((draft) => (draft.templates || []).map((template) => createEmptyTemplate({
-          ...template,
-          goalId: draft.goal.id,
-        }))),
-      ],
-    }));
+    let previousFile = null;
+    updateBundle((prev) => {
+      previousFile = prev.plan?.sourceFile || null;
+      const nextPlan = plan
+        ? {
+            ...prev.plan,
+            ...plan,
+            sourceFile: plan.sourceFile || prev.plan.sourceFile || null,
+          }
+        : prev.plan;
+      return {
+        plan: nextPlan,
+        goals: [
+          ...prev.goals,
+          ...selected.map((draft) => createEmptyGoal({
+            ...draft.goal,
+            status: 'Active',
+            updatedAt: nowIso(),
+          })),
+        ],
+        metrics: [
+          ...prev.metrics,
+          ...selected.flatMap((draft) => (draft.metrics || []).map((metric) => createEmptyMetric({
+            ...metric,
+            goalId: draft.goal.id,
+          }))),
+        ],
+        templates: [
+          ...prev.templates,
+          ...selected.flatMap((draft) => (draft.templates || []).map((template) => createEmptyTemplate({
+            ...template,
+            goalId: draft.goal.id,
+          }))),
+        ],
+      };
+    });
+    if (previousFile?.id && plan?.sourceFile?.id && previousFile.id !== plan.sourceFile.id) {
+      deletePlanSourceFile(previousFile);
+    }
     return selected.map((draft) => draft.goal);
   }, [updateBundle]);
 
@@ -286,7 +310,7 @@ export function usePath() {
   const blocks = bundle?.blocks || [];
   const templates = bundle?.templates || [];
   const metrics = bundle?.metrics || [];
-  const plan = bundle?.plan || { title: '', startDate: null, endDate: null };
+  const plan = bundle?.plan || { title: '', startDate: null, endDate: null, sourceFile: null };
 
   const stats = useMemo(() => ({
     active: goals.filter((goal) => goal.status === 'Active').length,

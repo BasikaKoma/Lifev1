@@ -1,16 +1,17 @@
-export const APP_VIEWS = ['roadmap', 'workspace', 'self', 'path', 'brand', 'settings', 'devices'];
+export const APP_VIEWS = ['projects', 'workspace', 'self', 'path', 'brand', 'nutrition', 'settings', 'devices'];
 
 const VIEW_ALIASES = {
-  overview: 'roadmap',
+  overview: 'projects',
   calls: 'path',
   review: 'path',
   cameras: 'devices',
-  whiteboard: 'roadmap',
+  whiteboard: 'projects',
   goals: 'workspace',
   tasks: 'workspace',
   notes: 'workspace',
-  metrics: 'roadmap',
-  feedback: 'roadmap',
+  metrics: 'projects',
+  feedback: 'projects',
+  roadmap: 'projects',
 };
 
 const PATH_TABS = ['goals', 'week', 'metrics', 'review'];
@@ -27,9 +28,9 @@ export function pathTabFromPathname(pathname) {
 }
 
 export function normalizeActiveView(view) {
-  if (!view) return 'roadmap';
+  if (!view) return 'projects';
   const mapped = VIEW_ALIASES[view] || view;
-  return APP_VIEWS.includes(mapped) ? mapped : 'roadmap';
+  return APP_VIEWS.includes(mapped) ? mapped : 'projects';
 }
 
 export function navigationFromPath(pathname) {
@@ -42,15 +43,15 @@ export function navigationFromPath(pathname) {
 
   const [view, stageId] = parts;
 
-  if (view === 'roadmap') {
+  if (view === 'projects' || view === 'roadmap') {
     return {
-      activeView: 'roadmap',
+      activeView: 'projects',
       selectedStageId: stageId || null,
     };
   }
 
   if (view === 'whiteboard') {
-    return { activeView: 'roadmap', selectedStageId: null };
+    return { activeView: 'projects', selectedStageId: null };
   }
 
   const activeView = normalizeActiveView(view);
@@ -58,15 +59,15 @@ export function navigationFromPath(pathname) {
     return { activeView, selectedStageId: null };
   }
 
-  return { activeView: 'roadmap', selectedStageId: null };
+  return { activeView: 'projects', selectedStageId: null };
 }
 
 export function pathFromNavigation({ activeView, selectedStageId }) {
   const view = normalizeActiveView(activeView);
-  if (view === 'roadmap' && selectedStageId) {
-    return `/roadmap/${encodeURIComponent(selectedStageId)}`;
+  if (view === 'projects' && selectedStageId) {
+    return `/projects/${encodeURIComponent(selectedStageId)}`;
   }
-  if (view === 'roadmap') return '/roadmap';
+  if (view === 'projects') return '/projects';
   return `/${view}`;
 }
 
