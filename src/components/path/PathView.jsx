@@ -2,12 +2,21 @@ import { useMemo, useState } from 'react';
 import { usePath } from '../../hooks/usePath';
 import { PATH_TABS, startOfWeekMonday } from '../../lib/path/schema';
 import { collectLinkableTasks } from '../../lib/path/logic';
+import { hasImportDraft } from '../../lib/path/importPlan';
 import { filterRegularProjects } from '../../utils/lifeline';
+import { pathTabFromPathname } from '../../utils/appNavigation';
+import { CallsView } from '../CallsView';
 import { PathGoals } from './PathGoals';
 import { PathWeek } from './PathWeek';
 import { PathMetrics } from './PathMetrics';
 import { PathImportPlan } from './PathImportPlan';
 import './path.css';
+
+function initialPathTab(requested) {
+  if (PATH_TABS.some((item) => item.id === requested)) return requested;
+  const fromUrl = typeof window !== 'undefined' ? pathTabFromPathname(window.location.pathname) : null;
+  return fromUrl || 'goals';
+}
 
 export function PathView({
   projectList = [],
@@ -17,10 +26,11 @@ export function PathView({
   canvasTasks = [],
   projectActivity = [],
   onCompleteLinkedTask,
+  initialTab,
 }) {
   const path = usePath();
-  const [tab, setTab] = useState('goals');
-  const [importing, setImporting] = useState(false);
+  const [tab, setTab] = useState(() => initialPathTab(initialTab));
+  const [importing, setImporting] = useState(() => hasImportDraft());
   const [weekStart, setWeekStart] = useState(() => startOfWeekMonday());
 
   const projects = useMemo(
@@ -100,6 +110,12 @@ export function PathView({
       ) : null}
 
       {tab === 'metrics' ? <PathMetrics path={path} /> : null}
+
+      {tab === 'review' ? (
+        <div className="path-review">
+          <CallsView />
+        </div>
+      ) : null}
     </section>
   );
 }

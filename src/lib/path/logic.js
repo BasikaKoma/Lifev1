@@ -1,6 +1,8 @@
 import { localTodayIsoDate } from '../../utils/selfDateUtils';
 import {
+  WEEKDAYS,
   createEmptyBlock,
+  nowIso,
   parseLocalDate,
   roleRank,
   startOfWeekMonday,
@@ -50,12 +52,16 @@ export function resolveCurrentValue(goal, metrics = []) {
   return null;
 }
 
+function numericMetricStart(goal, metrics = []) {
+  const outcome = metricsForGoal(metrics, goal?.id).find((metric) => metric.type === 'Outcome');
+  return toNum(outcome?.baseline);
+}
+
 export function computeGoalProgress(goal, metrics = []) {
   const current = resolveCurrentValue(goal, metrics);
   const target = toNum(goal?.target);
-  const baseline = toNum(goal?.baseline);
   if (current == null || target == null) return null;
-  const start = baseline == null ? 0 : baseline;
+  const start = numericMetricStart(goal, metrics) ?? 0;
   const span = target - start;
   if (span === 0) return current === target ? 1 : 0;
   return (current - start) / span;
@@ -65,9 +71,9 @@ function inferDirection(goal, metrics = []) {
   const linked = metricsForGoal(metrics, goal?.id);
   const outcome = linked.find((metric) => metric.type === 'Outcome');
   if (outcome?.direction) return outcome.direction;
-  const baseline = toNum(goal?.baseline);
+  const start = numericMetricStart(goal, metrics);
   const target = toNum(goal?.target);
-  if (baseline != null && target != null && target < baseline) return 'Decrease';
+  if (start != null && target != null && target < start) return 'Decrease';
   return 'Increase';
 }
 
@@ -77,7 +83,6 @@ export function computeTrackStatus(goal, metrics = []) {
   if (current == null || target == null) return 'No data';
 
   const direction = inferDirection(goal, metrics);
-  const baseline = toNum(goal?.baseline);
   const startDate = parseLocalDate(goal?.createdAt?.slice(0, 10)) || parseLocalDate(goal?.deadline);
   const endDate = parseLocalDate(goal?.deadline);
   const today = parseLocalDate(localTodayIsoDate());
@@ -91,7 +96,7 @@ export function computeTrackStatus(goal, metrics = []) {
     const total = endDate.getTime() - startDate.getTime();
     const elapsed = Math.min(total, Math.max(0, today.getTime() - startDate.getTime()));
     const t = elapsed / total;
-    const startValue = baseline == null ? current : baseline;
+    const startValue = numericMetricStart(goal, metrics) ?? 0;
     const expected = startValue + (target - startValue) * t;
     const slack = Math.abs(target - startValue) * 0.05;
     if (direction === 'Decrease') {
@@ -123,10 +128,51 @@ export function blocksForDate(blocks = [], date) {
 }
 
 export function compareBlocks(a, b) {
+  const orderA = Number.isFinite(Number(a?.order)) ? Number(a.order) : 9999;
+  const orderB = Number.isFinite(Number(b?.order)) ? Number(b.order) : 9999;
+  if (orderA !== orderB) return orderA - orderB;
   const timeA = a.startTime || '99:99';
   const timeB = b.startTime || '99:99';
   if (timeA !== timeB) return timeA.localeCompare(timeB);
   return String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
+}
+
+export function nextBlockOrder(blocks = [], date) {
+  let max = -1;
+  for (const block of blocks || []) {
+    if (block.date !== date) continue;
+    const value = Number(block.order);
+    if (Number.isFinite(value) && value > max) max = value;
+  }
+  return max + 1;
+}
+
+export function reorderDayBlocks(blocks = [], { blockId, date, beforeId }) {
+  const moving = (blocks || []).find((block) => block.id === blockId);
+  if (!moving || !date) return blocks;
+  if (beforeId === blockId && moving.date === date) return blocks;
+  const others = blocksForDate(blocks, date).filter((block) => block.id !== blockId);
+  const insertAt = beforeId ? others.findIndex((block) => block.id === beforeId) : others.length;
+  const nextDay = [...others];
+  nextDay.splice(insertAt < 0 ? nextDay.length : insertAt, 0, { ...moving, date });
+  const orderById = new Map(nextDay.map((block, index) => [block.id, index]));
+  return (blocks || []).map((block) => {
+    if (block.id === blockId) {
+      return createEmptyBlock({
+        ...block,
+        date,
+        weekday: undefined,
+        order: orderById.get(blockId),
+        updatedAt: nowIso(),
+      });
+    }
+    if (block.date !== date || !orderById.has(block.id)) return block;
+    return { ...block, order: orderById.get(block.id) };
+  });
+}
+
+export function pathGoalsForDisplay(bundle) {
+  return sortGoals(bundle?.goals).filter((goal) => goal.status !== 'Archived' && goal.title?.trim());
 }
 
 export function sortGoals(goals = []) {
@@ -222,6 +268,7 @@ export function materializeWeekBlocks(bundle, weekStart) {
       title: template.title,
       date,
       weekday: weekdayFromDate(date),
+      order: nextBlockOrder([...(bundle.blocks || []), ...created], date),
       startTime: template.startTime,
       duration: template.duration,
       blockType: template.blockType,
@@ -254,6 +301,39 @@ export function formatDateLabel(isoDate) {
   const date = parseLocalDate(isoDate);
   if (!date) return isoDate || '';
   return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(date);
+}
+
+export function buildWeeklyPlanPreview(bundle, weekStart = startOfWeekMonday()) {
+  const dates = weekDates(weekStart);
+  const today = localTodayIsoDate();
+  const goals = bundle?.goals || [];
+  const colorByGoal = new Map(goals.map((goal) => [goal.id, goal.color || null]));
+  const days = dates.map((date, index) => {
+    const dayBlocks = blocksForDate(bundle?.blocks, date);
+    return {
+      date,
+      short: WEEKDAYS[index]?.short || '',
+      isToday: date === today,
+      count: dayBlocks.length,
+      done: dayBlocks.filter((block) => block.status === 'Done').length,
+      blocks: dayBlocks.map((block) => ({
+        id: block.id,
+        title: block.title,
+        startTime: block.startTime,
+        status: block.status,
+        color: colorByGoal.get(block.goalId) || null,
+      })),
+    };
+  });
+  const todayDay = days.find((day) => day.isToday) || days[0];
+  return {
+    weekLabel: formatWeekRange(weekStart),
+    planTitle: bundle?.plan?.title || null,
+    total: days.reduce((sum, day) => sum + day.count, 0),
+    done: days.reduce((sum, day) => sum + day.done, 0),
+    days,
+    todayBlocks: todayDay?.blocks || [],
+  };
 }
 
 export function formatWeekRange(weekStart) {

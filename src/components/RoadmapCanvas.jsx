@@ -1077,8 +1077,8 @@ export function RoadmapCanvas({
   onOpenWorkspace,
   onBrainContextChange,
   brainOrb = null,
-  lifelineNorthStars = [],
-  onUpdateLifelineNorthStars,
+  pathBundle = null,
+  onOpenPath,
 }) {
   const [connectFrom, setConnectFrom] = useState(null);
   const [connectPreviewPos, setConnectPreviewPos] = useState(null);
@@ -2861,8 +2861,8 @@ export function RoadmapCanvas({
           {brainOrb}
           {isLifeline ? (
             <LifelineNorthStars
-              stars={lifelineNorthStars}
-              onChange={onUpdateLifelineNorthStars}
+              pathBundle={pathBundle}
+              onOpenPath={onOpenPath}
               variant="overlay"
             />
           ) : null}

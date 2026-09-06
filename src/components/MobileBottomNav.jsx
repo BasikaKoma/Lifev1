@@ -25,17 +25,6 @@ const ITEMS = [
     ),
   },
   {
-    id: 'brand',
-    label: 'Brand',
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-        <circle cx="12" cy="8" r="3" />
-        <path d="M6 20v-1a6 6 0 0 1 12 0v1" />
-        <path d="M19 4l1.5 1.5L19 7" />
-      </svg>
-    ),
-  },
-  {
     id: 'lifeline',
     label: 'Lifeline',
     icon: (
@@ -60,13 +49,13 @@ const ITEMS = [
     ),
   },
   {
-    id: 'review',
-    label: 'Review',
+    id: 'brand',
+    label: 'Brand',
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-        <polyline points="14 2 14 8 20 8" />
-        <path d="M9 15l2 2 4-4" />
+        <circle cx="12" cy="8" r="3" />
+        <path d="M6 20v-1a6 6 0 0 1 12 0v1" />
+        <path d="M19 4l1.5 1.5L19 7" />
       </svg>
     ),
   },

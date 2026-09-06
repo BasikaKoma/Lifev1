@@ -9,7 +9,7 @@ import {
   startOfWeekMonday,
 } from '../lib/path/schema';
 import { loadPathBundle, savePathBundle } from '../lib/path/store';
-import { materializeWeekBlocks } from '../lib/path/logic';
+import { blocksForDate, materializeWeekBlocks, nextBlockOrder, reorderDayBlocks } from '../lib/path/logic';
 
 export function usePath() {
   const [bundle, setBundle] = useState(null);
@@ -91,9 +91,15 @@ export function usePath() {
   }, [updateBundle]);
 
   const upsertBlock = useCallback((block) => {
-    const nextBlock = createEmptyBlock({ ...block, updatedAt: nowIso() });
+    let nextBlock = createEmptyBlock({ ...block, updatedAt: nowIso() });
     updateBundle((prev) => {
       const exists = prev.blocks.some((item) => item.id === nextBlock.id);
+      if (!exists) {
+        nextBlock = createEmptyBlock({
+          ...nextBlock,
+          order: nextBlockOrder(prev.blocks, nextBlock.date),
+        });
+      }
       return {
         blocks: exists
           ? prev.blocks.map((item) => (item.id === nextBlock.id ? nextBlock : item))
@@ -109,20 +115,55 @@ export function usePath() {
     }));
   }, [updateBundle]);
 
-  const moveBlock = useCallback((blockId, { date, startTime }) => {
-    updateBundle((prev) => ({
-      blocks: prev.blocks.map((block) => (
-        block.id === blockId
-          ? createEmptyBlock({
-            ...block,
-            date: date || block.date,
-            startTime: startTime === undefined ? block.startTime : startTime,
-            weekday: undefined,
-            updatedAt: nowIso(),
-          })
-          : block
-      )),
-    }));
+  const moveBlock = useCallback((blockId, { date, startTime, beforeId } = {}) => {
+    updateBundle((prev) => {
+      const current = prev.blocks.find((block) => block.id === blockId);
+      if (!current) return prev;
+      let blocks = prev.blocks;
+      if (startTime !== undefined) {
+        blocks = blocks.map((block) => (
+          block.id === blockId
+            ? createEmptyBlock({ ...block, startTime, updatedAt: nowIso() })
+            : block
+        ));
+      }
+      if (date || beforeId !== undefined) {
+        blocks = reorderDayBlocks(blocks, {
+          blockId,
+          date: date || current.date,
+          beforeId: beforeId === undefined ? null : beforeId,
+        });
+      }
+      return { blocks };
+    });
+  }, [updateBundle]);
+
+  const nudgeBlock = useCallback((blockId, direction) => {
+    updateBundle((prev) => {
+      const current = prev.blocks.find((block) => block.id === blockId);
+      if (!current?.date) return prev;
+      const day = blocksForDate(prev.blocks, current.date);
+      const index = day.findIndex((block) => block.id === blockId);
+      const targetIndex = index + direction;
+      if (index < 0 || targetIndex < 0 || targetIndex >= day.length) return prev;
+      if (direction < 0) {
+        return {
+          blocks: reorderDayBlocks(prev.blocks, {
+            blockId,
+            date: current.date,
+            beforeId: day[targetIndex].id,
+          }),
+        };
+      }
+      const after = day[targetIndex + 1];
+      return {
+        blocks: reorderDayBlocks(prev.blocks, {
+          blockId,
+          date: current.date,
+          beforeId: after?.id || null,
+        }),
+      };
+    });
   }, [updateBundle]);
 
   const setBlockStatus = useCallback((blockId, status, { completeLinkedTask = false } = {}) => {
@@ -217,7 +258,11 @@ export function usePath() {
       plan: plan ? { ...prev.plan, ...plan } : prev.plan,
       goals: [
         ...prev.goals,
-        ...selected.map((draft) => createEmptyGoal({ ...draft.goal, status: 'Active', updatedAt: nowIso() })),
+        ...selected.map((draft) => createEmptyGoal({
+          ...draft.goal,
+          status: 'Active',
+          updatedAt: nowIso(),
+        })),
       ],
       metrics: [
         ...prev.metrics,
@@ -266,6 +311,7 @@ export function usePath() {
     upsertBlock,
     removeBlock,
     moveBlock,
+    nudgeBlock,
     setBlockStatus,
     upsertTemplate,
     removeTemplate,

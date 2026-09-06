@@ -14,6 +14,7 @@ import {
   SelfSummaryStrip,
   SelfProjectDayCard,
   SelfRoutinesCard,
+  SelfPathWeekCard,
   SelfHubMenu,
 } from './self/hub';
 import {
@@ -56,9 +57,9 @@ export function SelfView({
   routineTemplates: routineTemplatesProp,
   onUpdateRoutineTemplates,
   onRefreshProjectActivity,
-  northStars = [],
-  onUpdateNorthStars,
   pathBundle = null,
+  onOpenPath,
+  onOpenPathWeek,
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [focusMessage, setFocusMessage] = useState(null);
@@ -254,8 +255,8 @@ export function SelfView({
 
         <div className="self-view__hub-body">
           <LifelineNorthStars
-            stars={northStars}
-            onChange={onUpdateNorthStars}
+            pathBundle={pathBundle}
+            onOpenPath={onOpenPath}
             variant="hub"
           />
 
@@ -278,6 +279,8 @@ export function SelfView({
             onToggle={handleToggleTodayRoutine}
             onOpenDayDetails={handleOpenDayDetails}
           />
+
+          <SelfPathWeekCard pathBundle={pathBundle} onOpenPathWeek={onOpenPathWeek} />
 
           <div className="self-hub-cards">
             <SelfDeepWorkCard

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { createEmptyBlock, createEmptyGoal, nowIso, startOfWeekMonday } from '../../lib/path/schema';
+import { createEmptyBlock, createEmptyGoal, goalColorStyle, nextGoalColor, nowIso, startOfWeekMonday } from '../../lib/path/schema';
 import {
   computeGoalProgress,
   computeTrackStatus,
@@ -32,9 +32,12 @@ function GoalCard({ goal, metrics, blocks, weekStart, onOpen }) {
   const area = goal.projectTitle || goal.lifeArea;
 
   return (
-    <button type="button" className="path-card" onClick={() => onOpen(goal)}>
+    <button type="button" className={`path-card${goal.color ? ' path-card--goal' : ''}`} style={goalColorStyle(goal.color)} onClick={() => onOpen(goal)}>
       <div className="path-card__top">
-        <h3 className="path-card__title">{goal.title || 'Untitled goal'}</h3>
+        <h3 className="path-card__title">
+          {goal.color ? <span className="path-color-dot" style={{ background: goal.color }} /> : null}
+          {goal.title || 'Untitled goal'}
+        </h3>
         <span className={`path-pill ${ROLE_CLASS[goal.role] || ''}`}>{goal.role}</span>
       </div>
       <p className="path-card__meta">
@@ -75,7 +78,12 @@ export function PathGoals({
     [path.goals, includeArchived],
   );
 
-  const openNew = () => setEditor(createEmptyGoal({ title: '', role: 'Primary', status: 'Active' }));
+  const openNew = () => setEditor(createEmptyGoal({
+    title: '',
+    role: 'Primary',
+    status: 'Active',
+    color: nextGoalColor(path.goals),
+  }));
   const saveEditor = () => {
     if (!editor?.title?.trim()) return;
     path.upsertGoal(editor);
@@ -130,7 +138,7 @@ export function PathGoals({
 
       {selected ? (
         <section className="path-detail" style={{ marginTop: 20 }}>
-          <div className="path-panel">
+          <div className={`path-panel${selected.color ? ' path-card--goal' : ''}`} style={goalColorStyle(selected.color)}>
             <div className="path-card__top">
               <h2 className="path-card__title">{selected.title}</h2>
               <div className="path-view__actions">

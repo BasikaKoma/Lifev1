@@ -1205,6 +1205,129 @@
   padding: 1rem 1.05rem 1.1rem;
 }
 
+.self-hub-card--path-week {
+  min-height: 0;
+  max-height: none;
+}
+
+.self-path-week__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.self-path-week__open {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  margin-top: 0.15rem;
+  font-size: 0.75rem;
+  font-weight: 650;
+  color: rgba(52, 211, 153, 0.9);
+}
+
+.self-path-week__days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+.self-path-week__day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.4rem 0.15rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid transparent;
+  color: rgba(248, 250, 252, 0.45);
+}
+
+.self-path-week__day span {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.self-path-week__day strong {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: rgba(248, 250, 252, 0.82);
+}
+
+.self-path-week__day--has strong {
+  color: #fff;
+}
+
+.self-path-week__day--today {
+  border-color: rgba(52, 211, 153, 0.4);
+  background: rgba(52, 211, 153, 0.1);
+  color: rgba(52, 211, 153, 0.95);
+}
+
+.self-path-week__today {
+  margin-top: 0.75rem;
+}
+
+.self-path-week__meta {
+  margin: 0 0 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(248, 250, 252, 0.42);
+}
+
+.self-path-week__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.self-path-week__list li {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  font-size: 0.82rem;
+  color: rgba(248, 250, 252, 0.82);
+}
+
+.self-path-week__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  background: var(--path-goal-color, rgba(248, 250, 252, 0.45));
+}
+
+.self-path-week__time {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  color: rgba(248, 250, 252, 0.45);
+  font-size: 0.75rem;
+}
+
+.self-path-week__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.self-path-week__title--done {
+  text-decoration: line-through;
+  color: rgba(248, 250, 252, 0.4);
+}
+
 .self-routines__header {
   display: flex;
   align-items: flex-start;
@@ -2105,6 +2228,10 @@
     min-height: 150px;
   }
 
+  .self-hub-card--path-week {
+    min-height: 0;
+  }
+
   .self-summary-strip {
     width: 100%;
   }
@@ -2199,7 +2326,8 @@
     padding: 1rem 1.15rem;
   }
 
-  .self-hub-card--routines {
+  .self-hub-card--routines,
+  .self-hub-card--path-week {
     max-height: none;
     min-height: 0;
   }

@@ -1,8 +1,9 @@
-export const APP_VIEWS = ['review', 'roadmap', 'workspace', 'self', 'path', 'brand', 'settings', 'devices'];
+export const APP_VIEWS = ['roadmap', 'workspace', 'self', 'path', 'brand', 'settings', 'devices'];
 
 const VIEW_ALIASES = {
   overview: 'roadmap',
-  calls: 'review',
+  calls: 'path',
+  review: 'path',
   cameras: 'devices',
   whiteboard: 'roadmap',
   goals: 'workspace',
@@ -11,6 +12,19 @@ const VIEW_ALIASES = {
   metrics: 'roadmap',
   feedback: 'roadmap',
 };
+
+const PATH_TABS = ['goals', 'week', 'metrics', 'review'];
+
+export function pathTabFromPathname(pathname) {
+  const path = (pathname || '/').replace(/\/+$/, '') || '/';
+  const parts = path.split('/').filter(Boolean);
+  const [view, tab] = parts;
+  if (view === 'review' || view === 'calls' || (view === 'path' && tab === 'review')) {
+    return 'review';
+  }
+  if (view === 'path' && PATH_TABS.includes(tab)) return tab;
+  return null;
+}
 
 export function normalizeActiveView(view) {
   if (!view) return 'roadmap';

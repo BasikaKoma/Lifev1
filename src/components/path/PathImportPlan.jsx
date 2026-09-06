@@ -1,24 +1,48 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   analyzePlanText,
+  clearImportDraft,
   createBlankDraftGoal,
   extractPdfText,
+  loadImportDraft,
   mergeDrafts,
   refreshDraft,
+  saveImportDraft,
 } from '../../lib/path/importPlan';
+import { goalColorStyle } from '../../lib/path/schema';
 import { GoalFields } from './PathFields';
 
 export function PathImportPlan({ path, projects = [], onClose, onCreated }) {
   const inputRef = useRef(null);
-  const [phase, setPhase] = useState('pick');
+  const abortRef = useRef(null);
+  const [draft, setDraft] = useState(() => loadImportDraft());
+  const [phase, setPhase] = useState(() => (loadImportDraft() ? 'review' : 'pick'));
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
   const [over, setOver] = useState(false);
-  const [draft, setDraft] = useState(null);
   const [selectedMerge, setSelectedMerge] = useState([]);
+
+  useEffect(() => {
+    if (draft?.drafts?.length) saveImportDraft(draft);
+  }, [draft]);
+
+  useEffect(() => () => {
+    abortRef.current?.abort();
+  }, []);
+
+  const cancelAnalyze = () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setPhase(draft ? 'review' : 'pick');
+    setStatus('');
+    setError(draft ? '' : 'Η ανάλυση ακυρώθηκε.');
+  };
 
   const processFile = async (file) => {
     if (!file) return;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setError('');
     setPhase('upload');
     setStatus('Uploading PDF…');
@@ -26,16 +50,26 @@ export function PathImportPlan({ path, projects = [], onClose, onCreated }) {
       setPhase('extract');
       setStatus('Extracting text…');
       const text = await extractPdfText(file);
+      if (controller.signal.aborted) return;
       setPhase('analyze');
       setStatus('Analyzing plan with Brain…');
-      const next = await analyzePlanText(text);
+      const next = await analyzePlanText(text, { projects, signal: controller.signal });
+      if (controller.signal.aborted) return;
+      saveImportDraft(next);
       setDraft(next);
       setPhase('review');
       setStatus('');
     } catch (err) {
+      if (controller.signal.aborted || err?.name === 'AbortError') {
+        setPhase(draft ? 'review' : 'pick');
+        setStatus('');
+        return;
+      }
       setError(err.message || 'Import failed.');
-      setPhase('pick');
+      setPhase(draft ? 'review' : 'pick');
       setStatus('');
+    } finally {
+      if (abortRef.current === controller) abortRef.current = null;
     }
   };
 
@@ -52,6 +86,7 @@ export function PathImportPlan({ path, projects = [], onClose, onCreated }) {
       setError('Select at least one goal with a title.');
       return;
     }
+    clearImportDraft();
     onCreated?.();
   };
 
@@ -61,9 +96,15 @@ export function PathImportPlan({ path, projects = [], onClose, onCreated }) {
         <div className="path-card__top">
           <div>
             <h2 className="path-card__title">Import Plan</h2>
-            <p className="path-empty">Upload a PDF. Review drafts before anything is saved as a goal.</p>
+            <p className="path-empty">
+              {draft
+                ? 'A review is already saved. Continue it, or upload a new PDF to replace it.'
+                : 'Upload a PDF. The review stays saved until you create the goals.'}
+            </p>
           </div>
-          <button type="button" className="btn" onClick={onClose}>Back</button>
+          <button type="button" className="btn" onClick={phase === 'pick' ? onClose : cancelAnalyze}>
+            {phase === 'pick' ? 'Back' : 'Cancel'}
+          </button>
         </div>
         {error ? <p className="path-error">{error}</p> : null}
         {phase === 'pick' ? (
@@ -78,9 +119,14 @@ export function PathImportPlan({ path, projects = [], onClose, onCreated }) {
             }}
           >
             <p>Drop a PDF here or</p>
-            <button type="button" className="btn btn--primary" style={{ marginTop: 12 }} onClick={() => inputRef.current?.click()}>
-              Choose PDF
-            </button>
+            <div className="path-view__actions" style={{ justifyContent: 'center', marginTop: 12 }}>
+              {draft ? (
+                <button type="button" className="btn" onClick={() => setPhase('review')}>Continue review</button>
+              ) : null}
+              <button type="button" className="btn btn--primary" onClick={() => inputRef.current?.click()}>
+                Choose PDF
+              </button>
+            </div>
             <input
               ref={inputRef}
               type="file"
@@ -93,6 +139,7 @@ export function PathImportPlan({ path, projects = [], onClose, onCreated }) {
           <div className="path-import-status">
             <div className="app-loading__spinner" />
             <p>{status}</p>
+            <button type="button" className="btn" onClick={cancelAnalyze}>Cancel</button>
           </div>
         )}
       </section>
@@ -104,9 +151,10 @@ export function PathImportPlan({ path, projects = [], onClose, onCreated }) {
       <div className="path-toolbar">
         <div>
           <h2 className="path-card__title">Review imported goals</h2>
-          <p className="path-empty">Nothing is saved until you press Create Goals. Empty fields stay empty — fill only what you know.</p>
+          <p className="path-empty">This review stays saved until you press Create Goals. Refresh is safe. Empty fields stay empty — fill only what you know.</p>
         </div>
         <div className="path-view__actions">
+          <button type="button" className="btn" onClick={() => { setPhase('pick'); setError(''); }}>New PDF</button>
           <button type="button" className="btn" onClick={onClose}>Cancel</button>
           <button type="button" className="btn btn--primary" onClick={createGoals}>Create Goals</button>
         </div>
@@ -135,7 +183,10 @@ export function PathImportPlan({ path, projects = [], onClose, onCreated }) {
           <button
             type="button"
             className="btn"
-            onClick={() => setDraft((prev) => ({ ...prev, drafts: [...prev.drafts, createBlankDraftGoal()] }))}
+            onClick={() => setDraft((prev) => ({
+              ...prev,
+              drafts: [...prev.drafts, createBlankDraftGoal(prev.drafts.map((item) => item.goal))],
+            }))}
           >
             Add goal
           </button>
@@ -155,7 +206,11 @@ export function PathImportPlan({ path, projects = [], onClose, onCreated }) {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 14 }}>
         {draft.drafts.map((item) => (
-          <article key={item.draftId} className={`path-import-card${item.selected ? '' : ' path-import-card--off'}`}>
+          <article
+            key={item.draftId}
+            className={`path-import-card${item.selected ? '' : ' path-import-card--off'}${item.goal.color ? ' path-card--goal' : ''}`}
+            style={goalColorStyle(item.goal.color)}
+          >
             <div className="path-import-card__head">
               <label className="path-check">
                 <input
@@ -201,6 +256,7 @@ export function PathImportPlan({ path, projects = [], onClose, onCreated }) {
               projects={projects}
               highlightMissing
               showStatus={false}
+              showCurrent={false}
               onChange={(patch) => updateDraftGoal(item.draftId, patch)}
             />
             {item.metrics.length ? (

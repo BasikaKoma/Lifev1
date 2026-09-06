@@ -10837,6 +10837,22 @@ to {
   text-align:left
 }
 
+.lifeline-north-stars__chip--goal {
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  border-color:var(--path-goal-border, rgba(255,255,255,.12));
+  background:var(--path-goal-soft, rgba(255,255,255,.04))
+}
+
+.lifeline-north-stars__dot {
+  width:7px;
+  height:7px;
+  border-radius:999px;
+  background:var(--path-goal-color, #38bdf8);
+  flex-shrink:0
+}
+
 .lifeline-north-stars__empty {
   max-width:none;
   color:#ffffffa6;
@@ -10895,7 +10911,7 @@ to {
   z-index:28;
   max-width:min(640px,calc(100% - 160px));
   padding:8px 12px;
-  border-radius:999px;
+  border-radius:16px;
   border:1px solid rgba(255,255,255,.12);
   background:#0a0a0aeb;
   -webkit-backdrop-filter:blur(10px);

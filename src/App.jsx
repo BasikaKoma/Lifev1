@@ -13,7 +13,6 @@ import { StageDetails } from './components/StageDetails';
 import { WorkspaceView } from './components/WorkspaceView';
 import { SettingsView } from './components/SettingsView';
 import { SelfView } from './components/SelfView';
-import { CallsView } from './components/CallsView';
 import { OuraConnectModal } from './components/OuraConnectModal';
 import { AssistantOrb } from './components/AssistantOrb';
 import { QuickNoteOrb } from './components/QuickNoteOrb';
@@ -34,6 +33,7 @@ import { CamerasView } from './components/CamerasView';
 import { PersonalBrandView } from './components/brand/PersonalBrandView';
 import { PathView } from './components/path/PathView';
 import { loadPathBundle, readPathBundleLocal } from './lib/path/store';
+import { pathTabFromPathname } from './utils/appNavigation';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { platform } from './platform';
 import { useMobilePinchZoom } from './hooks/useMobilePinchZoom';
@@ -70,6 +70,7 @@ export default function App() {
 function MainApp({ user, onSignOut }) {
   const [brainMode, setBrainMode] = useState('closed');
   const [pathBundle, setPathBundle] = useState(() => readPathBundleLocal());
+  const [pathTab, setPathTab] = useState(() => pathTabFromPathname(window.location.pathname) || 'goals');
 
   const {
     loading,
@@ -97,8 +98,6 @@ function MainApp({ user, onSignOut }) {
     updateMapTheme,
     lifelineRoutineTemplates,
     updateLifelineRoutineTemplates,
-    lifelineNorthStars,
-    updateLifelineNorthStars,
     selectedStageId,
     focusMode,
     activeView,
@@ -358,7 +357,7 @@ function MainApp({ user, onSignOut }) {
   const handleNavigate = (view) => {
     setFocusMode(false);
     const keepsLifelineProject =
-      view === 'self' || view === 'path' || view === 'brand' || view === 'settings' || view === 'review' || view === 'devices';
+      view === 'self' || view === 'path' || view === 'brand' || view === 'settings' || view === 'devices';
     if (isLifeline && !keepsLifelineProject) {
       const regular = filterRegularProjects(projectList);
       const target = regular.find((p) => p.id === projectId && !p.isLifeline) || regular[0];
@@ -369,6 +368,11 @@ function MainApp({ user, onSignOut }) {
       if (!target && view === 'workspace') return;
     }
     setActiveView(view);
+  };
+
+  const openPath = (tab = 'goals') => {
+    setPathTab(tab);
+    handleNavigate('path');
   };
 
   useEffect(() => {
@@ -638,8 +642,8 @@ function MainApp({ user, onSignOut }) {
             onOpenWorkspace={
               !isLifeline && !platform.isMobile ? () => handleNavigate('workspace') : undefined
             }
-            lifelineNorthStars={lifelineNorthStars}
-            onUpdateLifelineNorthStars={updateLifelineNorthStars}
+            pathBundle={pathBundle}
+            onOpenPath={openPath}
           />
         );
         return (
@@ -658,7 +662,9 @@ function MainApp({ user, onSignOut }) {
               stages,
               goals,
               notes,
-              northStars: lifelineNorthStars,
+              northStars: (pathBundle?.goals || [])
+                .filter((goal) => goal.status !== 'Archived' && goal.title)
+                .map((goal) => ({ title: goal.title })),
             }}
             contextExtras={{
               projectTitle,
@@ -726,9 +732,9 @@ function MainApp({ user, onSignOut }) {
             routineTemplates={lifelineRoutineTemplates}
             onUpdateRoutineTemplates={updateLifelineRoutineTemplates}
             onRefreshProjectActivity={refreshProjectActivity}
-            northStars={lifelineNorthStars}
-            onUpdateNorthStars={updateLifelineNorthStars}
             pathBundle={pathBundle}
+            onOpenPath={openPath}
+            onOpenPathWeek={() => openPath('week')}
           />
         );
       case 'path':
@@ -740,6 +746,7 @@ function MainApp({ user, onSignOut }) {
             stages={stages}
             canvasTasks={canvasTasks}
             projectActivity={hubProjectActivity}
+            initialTab={pathTab}
             onCompleteLinkedTask={(linked) => {
               if (!linked?.taskId) return;
               for (const stage of stages || []) {
@@ -765,8 +772,6 @@ function MainApp({ user, onSignOut }) {
             projectList={projectList}
           />
         );
-      case 'review':
-        return <CallsView />;
       case 'devices':
         return (
           <CamerasView
@@ -813,7 +818,7 @@ function MainApp({ user, onSignOut }) {
   };
 
   return (
-    <div className={`app ${focusMode ? 'app--focus' : ''} ${selectedStage ? 'app--detail' : ''} ${activeView === 'roadmap' && !selectedStage ? 'app--roadmap' : ''} ${activeView === 'self' ? 'app--self' : ''} ${activeView === 'path' ? 'app--path' : ''} ${activeView === 'brand' ? 'app--brand' : ''} ${activeView === 'settings' ? 'app--settings' : ''} ${activeView === 'review' ? 'app--review' : ''} ${activeView === 'devices' ? 'app--devices' : ''} ${canvasFullscreen ? 'app--canvas-fullscreen' : ''} ${sidebarCollapsed ? 'app--sidebar-collapsed' : ''} ${platform.isMobile ? 'app--mobile' : ''}`}>
+    <div className={`app ${focusMode ? 'app--focus' : ''} ${selectedStage ? 'app--detail' : ''} ${activeView === 'roadmap' && !selectedStage ? 'app--roadmap' : ''} ${activeView === 'self' ? 'app--self' : ''} ${activeView === 'path' ? 'app--path' : ''} ${activeView === 'brand' ? 'app--brand' : ''} ${activeView === 'settings' ? 'app--settings' : ''} ${activeView === 'devices' ? 'app--devices' : ''} ${canvasFullscreen ? 'app--canvas-fullscreen' : ''} ${sidebarCollapsed ? 'app--sidebar-collapsed' : ''} ${platform.isMobile ? 'app--mobile' : ''}`}>
       {!canvasFullscreen && !platform.isMobile && (
         <Sidebar
           activeView={activeView}

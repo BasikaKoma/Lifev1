@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { localTodayIsoDate } from '../../utils/selfDateUtils';
-import { createEmptyMetric } from '../../lib/path/schema';
+import { createEmptyMetric, goalColorStyle } from '../../lib/path/schema';
 import { latestMetricValue, progressPercent } from '../../lib/path/logic';
 import { MetricFields, PathModal } from './PathFields';
 
@@ -74,7 +74,7 @@ export function PathMetrics({ path }) {
                 const goal = path.goals.find((item) => item.id === metric.goalId);
                 const bars = trendBars(metric.entries);
                 return (
-                  <article key={metric.id} className="path-panel">
+                  <article key={metric.id} className={`path-panel${goal?.color ? ' path-card--goal' : ''}`} style={goalColorStyle(goal?.color)}>
                     <div className="path-card__top">
                       <h3 className="path-card__title">{metric.name}</h3>
                       <span className="path-pill">{metric.direction}</span>

@@ -4,6 +4,7 @@ import {
   createEmptyBlock,
   createEmptyTemplate,
   WEEKDAYS,
+  goalColorStyle,
   shiftWeek,
   startOfWeekMonday,
   weekDates,
@@ -17,23 +18,72 @@ const STATUS_CLASS = {
   Skipped: 'path-pill--skipped',
 };
 
-function BlockCard({ block, onOpen, onStatus, onDragStart }) {
+function BlockCard({
+  block,
+  color,
+  isOver,
+  canMoveUp,
+  canMoveDown,
+  onOpen,
+  onStatus,
+  onNudge,
+  onDropOnBlock,
+  onDragOverBlock,
+}) {
   return (
     <article
-      className="path-block"
+      className={`path-block${color ? ' path-block--goal' : ''}${isOver ? ' path-block--over' : ''}`}
+      style={goalColorStyle(color)}
       draggable
       onDragStart={(event) => {
         event.dataTransfer.setData('text/plain', block.id);
         event.dataTransfer.effectAllowed = 'move';
-        onDragStart?.(block.id);
+      }}
+      onDragOver={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        event.dataTransfer.dropEffect = 'move';
+        onDragOverBlock?.(block);
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const id = event.dataTransfer.getData('text/plain');
+        if (id) onDropOnBlock?.(id, block);
       }}
     >
-      <button type="button" onClick={() => onOpen(block)} style={{ all: 'unset', cursor: 'pointer' }}>
-        <div className="path-block__title">{block.title}</div>
-        <div className="path-block__time">
-          {[block.startTime, formatDuration(block.duration), block.blockType].filter(Boolean).join(' · ')}
+      <div className="path-block__top">
+        <button type="button" onClick={() => onOpen(block)} style={{ all: 'unset', cursor: 'pointer', flex: 1, minWidth: 0 }}>
+          <div className="path-block__title">{block.title}</div>
+          <div className="path-block__time">
+            {[block.startTime, formatDuration(block.duration), block.blockType].filter(Boolean).join(' · ')}
+          </div>
+        </button>
+        <div className="path-block__reorder" onMouseDown={(event) => event.stopPropagation()}>
+          <button
+            type="button"
+            aria-label="Move up"
+            disabled={!canMoveUp}
+            onClick={(event) => {
+              event.stopPropagation();
+              onNudge?.(block.id, -1);
+            }}
+          >
+            ↑
+          </button>
+          <button
+            type="button"
+            aria-label="Move down"
+            disabled={!canMoveDown}
+            onClick={(event) => {
+              event.stopPropagation();
+              onNudge?.(block.id, 1);
+            }}
+          >
+            ↓
+          </button>
         </div>
-      </button>
+      </div>
       <div className="path-pills">
         <span className={`path-pill ${STATUS_CLASS[block.status] || ''}`}>{block.status}</span>
       </div>
@@ -52,6 +102,7 @@ export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteL
   const [templateEditor, setTemplateEditor] = useState(null);
   const [completePrompt, setCompletePrompt] = useState(null);
   const [overDate, setOverDate] = useState(null);
+  const [overBlockId, setOverBlockId] = useState(null);
   const today = localTodayIsoDate();
   const dates = useMemo(() => weekDates(weekStart), [weekStart]);
 
@@ -122,25 +173,41 @@ export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteL
               onDragOver={(event) => {
                 event.preventDefault();
                 setOverDate(date);
+                setOverBlockId(null);
               }}
               onDragLeave={() => setOverDate((prev) => (prev === date ? null : prev))}
               onDrop={(event) => {
                 event.preventDefault();
                 const id = event.dataTransfer.getData('text/plain');
-                if (id) path.moveBlock(id, { date });
+                if (id) path.moveBlock(id, { date, beforeId: null });
                 setOverDate(null);
+                setOverBlockId(null);
               }}
             >
               <div className="path-day__head">
                 <span>{day.short}</span>
                 <span>{date.slice(8)}</span>
               </div>
-              {dayBlocks.map((block) => (
+              {dayBlocks.map((block, blockIndex) => (
                 <BlockCard
                   key={block.id}
                   block={block}
+                  color={path.goals.find((goal) => goal.id === block.goalId)?.color}
+                  isOver={overBlockId === block.id}
+                  canMoveUp={blockIndex > 0}
+                  canMoveDown={blockIndex < dayBlocks.length - 1}
                   onOpen={setEditor}
                   onStatus={requestStatus}
+                  onNudge={path.nudgeBlock}
+                  onDragOverBlock={() => {
+                    setOverDate(date);
+                    setOverBlockId(block.id);
+                  }}
+                  onDropOnBlock={(id, target) => {
+                    path.moveBlock(id, { date: target.date, beforeId: target.id });
+                    setOverDate(null);
+                    setOverBlockId(null);
+                  }}
                 />
               ))}
               <button type="button" className="path-day__add" onClick={() => openNew(date)}>
@@ -155,15 +222,19 @@ export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteL
         <section className="path-panel" style={{ marginTop: 18 }}>
           <p className="path-card__meta">Weekly templates</p>
           <ul className="path-side-list">
-            {path.templates.map((template) => (
+            {path.templates.map((template) => {
+              const templateGoal = path.goals.find((goal) => goal.id === template.goalId);
+              return (
               <li key={template.id}>
                 <button type="button" className="path-day__add" onClick={() => setTemplateEditor(template)}>
+                  {templateGoal?.color ? <span className="path-color-dot" style={{ background: templateGoal.color }} /> : null}
                   {WEEKDAYS.find((day) => day.id === template.weekday)?.label} · {template.title}
                 </button>
                 {' '}
                 <button type="button" className="path-day__add" onClick={() => path.removeTemplate(template.id)}>Remove</button>
               </li>
-            ))}
+              );
+            })}
           </ul>
         </section>
       ) : null}

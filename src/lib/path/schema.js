@@ -2,6 +2,7 @@ export const PATH_TABS = [
   { id: 'goals', label: 'Goals' },
   { id: 'week', label: 'Week' },
   { id: 'metrics', label: 'Metrics' },
+  { id: 'review', label: 'Review' },
 ];
 
 export const GOAL_ROLES = ['Primary', 'Growth', 'Maintenance'];
@@ -29,6 +30,59 @@ export const WEEKDAYS = [
   { id: 6, label: 'Saturday', short: 'Sat' },
   { id: 7, label: 'Sunday', short: 'Sun' },
 ];
+
+export const GOAL_COLORS = [
+  '#38bdf8',
+  '#34d399',
+  '#fbbf24',
+  '#fb7185',
+  '#a78bfa',
+  '#22d3ee',
+  '#fb923c',
+  '#f472b6',
+  '#4ade80',
+  '#60a5fa',
+  '#c084fc',
+  '#facc15',
+];
+
+export function normalizeGoalColor(value) {
+  if (value == null) return null;
+  const match = String(value).trim().match(/^#?([0-9a-fA-F]{6})$/);
+  return match ? `#${match[1].toLowerCase()}` : null;
+}
+
+export function nextGoalColor(goals = []) {
+  const taken = new Set((goals || []).map((goal) => normalizeGoalColor(goal?.color)).filter(Boolean));
+  return GOAL_COLORS.find((color) => !taken.has(color)) || GOAL_COLORS[(goals || []).length % GOAL_COLORS.length];
+}
+
+export function assignMissingGoalColors(goals = []) {
+  const used = new Set();
+  return (goals || []).map((goal, index) => {
+    const existing = normalizeGoalColor(goal?.color);
+    if (existing) {
+      used.add(existing);
+      return goal.color === existing ? goal : { ...goal, color: existing };
+    }
+    const color = GOAL_COLORS.find((item) => !used.has(item)) || GOAL_COLORS[index % GOAL_COLORS.length];
+    used.add(color);
+    return { ...goal, color };
+  });
+}
+
+export function goalColorStyle(color) {
+  const hex = normalizeGoalColor(color);
+  if (!hex) return undefined;
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return {
+    '--path-goal-color': hex,
+    '--path-goal-soft': `rgba(${r}, ${g}, ${b}, 0.16)`,
+    '--path-goal-border': `rgba(${r}, ${g}, ${b}, 0.48)`,
+  };
+}
 
 export function createPathId(prefix = 'path') {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -83,7 +137,7 @@ export function createEmptyGoal(overrides = {}) {
     projectTitle: asNullableString(overrides.projectTitle || overrides.project_title),
     lifeArea: asNullableString(overrides.lifeArea || overrides.life_area),
     role: overrides.role === null ? null : pick(GOAL_ROLES, overrides.role, 'Growth'),
-    baseline: asNullableNumber(overrides.baseline),
+    baseline: asNullableString(overrides.baseline),
     target: asNullableNumber(overrides.target),
     currentValue: asNullableNumber(overrides.currentValue || overrides.current_value),
     unit: asNullableString(overrides.unit),
@@ -92,6 +146,7 @@ export function createEmptyGoal(overrides = {}) {
     weeklyAllocation: asNullableString(overrides.weeklyAllocation || overrides.weekly_allocation),
     minimumAction: asNullableString(overrides.minimumAction || overrides.minimum_action),
     status: pick(GOAL_STATUSES, overrides.status, 'Active'),
+    color: normalizeGoalColor(overrides.color) || null,
     notes: asNullableString(overrides.notes),
     createdAt: overrides.createdAt || overrides.created_at || now,
     updatedAt: overrides.updatedAt || overrides.updated_at || now,
@@ -114,6 +169,7 @@ export function createEmptyBlock(overrides = {}) {
     date: asNullableString(overrides.date),
     weekday: Number.isInteger(overrides.weekday) ? overrides.weekday : weekdayFromDate(overrides.date),
     startTime: asNullableString(overrides.startTime || overrides.start_time),
+    order: Number.isFinite(Number(overrides.order)) ? Number(overrides.order) : 0,
     duration: asNullableNumber(overrides.duration),
     blockType: pick(BLOCK_TYPES, overrides.blockType || overrides.block_type, 'Deep Work'),
     normalDuration: asNullableNumber(overrides.normalDuration || overrides.normal_duration),
@@ -208,7 +264,7 @@ export function normalizeBundle(raw) {
   const source = raw && typeof raw === 'object' ? raw : {};
   return {
     plan: normalizePlan(source.plan),
-    goals: (Array.isArray(source.goals) ? source.goals : []).map(normalizeGoal),
+    goals: assignMissingGoalColors((Array.isArray(source.goals) ? source.goals : []).map(normalizeGoal)),
     blocks: (Array.isArray(source.blocks) ? source.blocks : []).map(normalizeBlock),
     templates: (Array.isArray(source.templates) ? source.templates : []).map(normalizeTemplate),
     metrics: (Array.isArray(source.metrics) ? source.metrics : []).map(normalizeMetric),
@@ -270,7 +326,7 @@ export function missingGoalFields(goal) {
   if (!goal?.title?.trim()) missing.push('title');
   if (!goal?.role) missing.push('role');
   if (!goal?.projectTitle && !goal?.lifeArea) missing.push('project or life area');
-  if (goal?.baseline == null) missing.push('baseline');
+  if (!goal?.baseline) missing.push('baseline');
   if (goal?.target == null) missing.push('target');
   if (!goal?.unit) missing.push('unit');
   if (!goal?.deadline) missing.push('deadline');

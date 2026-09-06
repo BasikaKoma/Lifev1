@@ -1,12 +1,14 @@
 import {
   BLOCK_STATUSES,
   BLOCK_TYPES,
+  GOAL_COLORS,
   GOAL_ROLES,
   GOAL_STATUSES,
   METRIC_DIRECTIONS,
   METRIC_FREQUENCIES,
   METRIC_TYPES,
   WEEKDAYS,
+  normalizeGoalColor,
 } from '../../lib/path/schema';
 
 export function PathField({ label, hint, needs, wide, children }) {
@@ -19,13 +21,13 @@ export function PathField({ label, hint, needs, wide, children }) {
   );
 }
 
-export function GoalFields({ goal, onChange, projects = [], showStatus = true, highlightMissing = false }) {
+export function GoalFields({ goal, onChange, projects = [], showStatus = true, showCurrent = true, highlightMissing = false }) {
   const missing = new Set(highlightMissing ? (goal.missing || []) : []);
   const needs = (key) => highlightMissing && (
     (key === 'title' && !goal.title?.trim())
     || (key === 'role' && !goal.role)
     || (key === 'area' && !goal.projectTitle && !goal.lifeArea)
-    || (key === 'baseline' && goal.baseline == null)
+    || (key === 'baseline' && !goal.baseline)
     || (key === 'target' && goal.target == null)
     || (key === 'unit' && !goal.unit)
     || (key === 'deadline' && !goal.deadline)
@@ -80,15 +82,46 @@ export function GoalFields({ goal, onChange, projects = [], showStatus = true, h
           </select>
         </PathField>
       ) : null}
-      <PathField label="Baseline" needs={needs('baseline')}>
-        <input className="input" type="number" value={goal.baseline ?? ''} onChange={(event) => onChange({ baseline: event.target.value === '' ? null : Number(event.target.value) })} />
+      <PathField label="Color" wide>
+        <div className="path-color-picker">
+          {GOAL_COLORS.map((color) => (
+            <button
+              key={color}
+              type="button"
+              className={`path-color-swatch${goal.color === color ? ' path-color-swatch--active' : ''}`}
+              style={{ background: color }}
+              aria-label={`Color ${color}`}
+              aria-pressed={goal.color === color}
+              onClick={() => onChange({ color })}
+            />
+          ))}
+          <label className="path-color-custom">
+            <input
+              type="color"
+              value={normalizeGoalColor(goal.color) || '#38bdf8'}
+              onChange={(event) => onChange({ color: event.target.value })}
+              aria-label="Custom color"
+            />
+            Custom
+          </label>
+        </div>
+      </PathField>
+      <PathField label="Baseline — where you are now" needs={needs('baseline')}>
+        <input
+          className="input"
+          value={goal.baseline || ''}
+          onChange={(event) => onChange({ baseline: event.target.value || null })}
+          placeholder="π.χ. 80 κιλά, μέση 92 cm"
+        />
       </PathField>
       <PathField label="Target" needs={needs('target')}>
         <input className="input" type="number" value={goal.target ?? ''} onChange={(event) => onChange({ target: event.target.value === '' ? null : Number(event.target.value) })} />
       </PathField>
-      <PathField label="Current">
-        <input className="input" type="number" value={goal.currentValue ?? ''} onChange={(event) => onChange({ currentValue: event.target.value === '' ? null : Number(event.target.value) })} />
-      </PathField>
+      {showCurrent ? (
+        <PathField label="Current">
+          <input className="input" type="number" value={goal.currentValue ?? ''} onChange={(event) => onChange({ currentValue: event.target.value === '' ? null : Number(event.target.value) })} />
+        </PathField>
+      ) : null}
       <PathField label="Unit" needs={needs('unit')}>
         <input className="input" value={goal.unit || ''} onChange={(event) => onChange({ unit: event.target.value || null })} placeholder="e.g. kg, €, calls" />
       </PathField>
