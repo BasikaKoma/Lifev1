@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const https = require('https');
 const { loadEnv } = require('./load-env.cjs');
 const { getUpdateFeedUrl, getGitHubToken } = require('../electron/updateConfig.cjs');
 
@@ -29,17 +30,49 @@ function githubHeaders(token, extra = {}) {
   return {
     Accept: 'application/vnd.github+json',
     'X-GitHub-Api-Version': '2022-11-28',
+    'User-Agent': 'lifev1-publish',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...extra,
   };
 }
 
+function formatFetchError(err) {
+  const parts = [err.message || String(err)];
+  if (err.cause) {
+    const cause = err.cause;
+    parts.push(cause.code || cause.errno || cause.message || String(cause));
+  }
+  return parts.join(' — ');
+}
+
+async function withRetries(label, fn, attempts = 4) {
+  let lastErr;
+  for (let i = 1; i <= attempts; i += 1) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      const retryable =
+        /fetch failed|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|UND_ERR|socket|network|502|503|504/i.test(
+          `${err.message} ${err.cause?.code || ''} ${err.cause?.message || ''} ${err.status || ''}`
+        );
+      if (!retryable || i === attempts) throw err;
+      const waitMs = 2000 * i;
+      console.warn(`  ⚠ ${label} failed (${formatFetchError(err)}). Retry ${i}/${attempts - 1} in ${waitMs / 1000}s…`);
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+    }
+  }
+  throw lastErr;
+}
+
 async function githubJson(pathname, { method = 'GET', token, body } = {}) {
-  const res = await fetch(`${GITHUB_API}${pathname}`, {
-    method,
-    headers: githubHeaders(token, body ? { 'Content-Type': 'application/json' } : {}),
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  const res = await withRetries(`GitHub ${method} ${pathname}`, () =>
+    fetch(`${GITHUB_API}${pathname}`, {
+      method,
+      headers: githubHeaders(token, body ? { 'Content-Type': 'application/json' } : {}),
+      body: body ? JSON.stringify(body) : undefined,
+    })
+  );
 
   if (res.status === 204) return null;
 
@@ -137,24 +170,46 @@ async function deleteAsset(owner, repo, assetId, token) {
 
 async function uploadAsset(uploadUrl, filePath, token) {
   const name = path.basename(filePath);
-  const body = fs.readFileSync(filePath);
+  const size = fs.statSync(filePath).size;
   const endpoint = `${uploadUrl.replace(/\{.*$/, '')}?name=${encodeURIComponent(name)}`;
 
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: githubHeaders(token, {
-      'Content-Type': 'application/octet-stream',
-      'Content-Length': String(body.length),
-    }),
-    body,
-  });
+  const data = await withRetries(`upload ${name}`, () =>
+    new Promise((resolve, reject) => {
+      const url = new URL(endpoint);
+      const req = https.request(
+        {
+          hostname: url.hostname,
+          path: `${url.pathname}${url.search}`,
+          method: 'POST',
+          headers: githubHeaders(token, {
+            'Content-Type': 'application/octet-stream',
+            'Content-Length': String(size),
+          }),
+        },
+        (res) => {
+          const chunks = [];
+          res.on('data', (chunk) => chunks.push(chunk));
+          res.on('end', () => {
+            const text = Buffer.concat(chunks).toString('utf8');
+            if (res.statusCode < 200 || res.statusCode >= 300) {
+              const err = new Error(`Upload failed for ${name}: ${res.statusCode} ${text}`);
+              err.status = res.statusCode;
+              reject(err);
+              return;
+            }
+            try {
+              resolve(JSON.parse(text));
+            } catch (parseErr) {
+              reject(parseErr);
+            }
+          });
+        }
+      );
+      req.on('error', reject);
+      fs.createReadStream(filePath).pipe(req);
+    })
+  );
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Upload failed for ${name}: ${res.status} ${text}`);
-  }
-
-  const data = await res.json();
   return data.name || name;
 }
 
@@ -196,10 +251,7 @@ async function main() {
   console.log(`Publishing ${files.length} file(s) to GitHub ${owner}/${repo} (${tag})…`);
 
   const release = await getOrCreateRelease(owner, repo, tag, version, token);
-
-  for (const asset of release.assets || []) {
-    await deleteAsset(owner, repo, asset.id, token);
-  }
+  const existing = new Map((release.assets || []).map((asset) => [asset.name, asset]));
 
   const ymlPath = files.find((filePath) => path.basename(filePath) === 'latest.yml');
   const binaryPaths = files.filter((filePath) => path.basename(filePath) !== 'latest.yml');
@@ -207,10 +259,24 @@ async function main() {
 
   for (const filePath of binaryPaths) {
     const localName = path.basename(filePath);
-    const sizeMb = (fs.statSync(filePath).size / (1024 * 1024)).toFixed(1);
+    const size = fs.statSync(filePath).size;
+    const sizeMb = (size / (1024 * 1024)).toFixed(1);
+    const current = existing.get(localName);
+
+    if (current && current.size === size) {
+      githubNames.set(localName, current.name);
+      console.log(`  • ${localName} already on GitHub (${sizeMb} MB)`);
+      continue;
+    }
+
+    if (current) {
+      await deleteAsset(owner, repo, current.id, token);
+      existing.delete(localName);
+    }
 
     const githubName = await uploadAsset(release.upload_url, filePath, token);
     githubNames.set(localName, githubName);
+    existing.set(githubName, { name: githubName, size });
     if (githubName !== localName) {
       console.log(`  ✓ ${localName} → ${githubName} (${sizeMb} MB)`);
     } else {
@@ -224,8 +290,17 @@ async function main() {
       patchLatestYml(ymlPath, githubNames);
     }
 
-    await uploadAsset(release.upload_url, ymlPath, token);
-    console.log(`  ✓ ${localYmlName} (patched for GitHub asset names)`);
+    const ymlSize = fs.statSync(ymlPath).size;
+    const currentYml = existing.get(localYmlName);
+    if (currentYml && currentYml.size === ymlSize) {
+      console.log(`  • ${localYmlName} already on GitHub`);
+    } else {
+      if (currentYml) {
+        await deleteAsset(owner, repo, currentYml.id, token);
+      }
+      await uploadAsset(release.upload_url, ymlPath, token);
+      console.log(`  ✓ ${localYmlName} (patched for GitHub asset names)`);
+    }
   }
 
   console.log('\nPublished. Installed apps will pick this up on next update check.');
@@ -234,6 +309,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(err.message || err);
+  console.error(formatFetchError(err));
   process.exit(1);
 });

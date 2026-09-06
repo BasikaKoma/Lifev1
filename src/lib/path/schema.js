@@ -174,6 +174,40 @@ export function normalizeGoal(raw = {}) {
   return createEmptyGoal(raw);
 }
 
+export function createEmptyBlockStatusEvent(overrides = {}) {
+  return {
+    status: pick(BLOCK_STATUSES, overrides.status, 'Planned'),
+    at: asNullableString(overrides.at) || nowIso(),
+    from: asNullableString(overrides.from),
+  };
+}
+
+export function applyBlockStatus(block, status, at = nowIso()) {
+  const current = createEmptyBlock(block || {});
+  const nextStatus = pick(BLOCK_STATUSES, status, current.status);
+  if (nextStatus === current.status) return current;
+
+  const history = [
+    ...(current.statusHistory || []),
+    createEmptyBlockStatusEvent({
+      status: nextStatus,
+      at,
+      from: current.status,
+    }),
+  ].slice(-30);
+
+  return createEmptyBlock({
+    ...current,
+    status: nextStatus,
+    statusAt: nextStatus === 'Planned' ? null : at,
+    completedAt: nextStatus === 'Done' ? at : (nextStatus === 'Planned' ? null : current.completedAt),
+    skippedAt: nextStatus === 'Skipped' ? at : (nextStatus === 'Planned' ? null : current.skippedAt),
+    movedAt: nextStatus === 'Moved' ? at : (nextStatus === 'Planned' ? null : current.movedAt),
+    statusHistory: history,
+    updatedAt: at,
+  });
+}
+
 export function createEmptyBlock(overrides = {}) {
   const now = nowIso();
   return {
@@ -202,6 +236,13 @@ export function createEmptyBlock(overrides = {}) {
     resultSummary: asNullableString(overrides.resultSummary || overrides.result_summary),
     remaining: asNullableString(overrides.remaining),
     nextStep: asNullableString(overrides.nextStep || overrides.next_step),
+    statusAt: asNullableString(overrides.statusAt || overrides.status_at),
+    completedAt: asNullableString(overrides.completedAt || overrides.completed_at),
+    skippedAt: asNullableString(overrides.skippedAt || overrides.skipped_at),
+    movedAt: asNullableString(overrides.movedAt || overrides.moved_at),
+    statusHistory: (Array.isArray(overrides.statusHistory) ? overrides.statusHistory : [])
+      .map(createEmptyBlockStatusEvent)
+      .filter((item) => item.at),
     actions: sortBlockActions(
       Array.isArray(overrides.actions)
         ? overrides.actions.map(createEmptyBlockAction)
@@ -221,6 +262,9 @@ export function createEmptyBlockAction(overrides = {}) {
     id: overrides.id || createPathId('bact'),
     text: asString(overrides.text),
     completed: Boolean(overrides.completed),
+    completedAt: Boolean(overrides.completed)
+      ? asNullableString(overrides.completedAt || overrides.completed_at)
+      : null,
     position: Number.isFinite(Number(overrides.position)) ? Number(overrides.position) : 0,
     createdAt: overrides.createdAt || overrides.created_at || now,
     updatedAt: overrides.updatedAt || overrides.updated_at || now,
@@ -314,8 +358,19 @@ export function createEmptyBundle() {
     blocks: [],
     templates: [],
     metrics: [],
-    updatedAt: nowIso(),
+    updatedAt: null,
   };
+}
+
+export function pathBundleHasContent(bundle) {
+  if (!bundle) return false;
+  if ((bundle.goals || []).length) return true;
+  if ((bundle.blocks || []).length) return true;
+  if ((bundle.templates || []).length) return true;
+  if ((bundle.metrics || []).length) return true;
+  if (String(bundle.plan?.title || '').trim()) return true;
+  if (bundle.plan?.sourceFile) return true;
+  return false;
 }
 
 export function normalizeBundle(raw) {
@@ -326,7 +381,7 @@ export function normalizeBundle(raw) {
     blocks: (Array.isArray(source.blocks) ? source.blocks : []).map(normalizeBlock),
     templates: (Array.isArray(source.templates) ? source.templates : []).map(normalizeTemplate),
     metrics: (Array.isArray(source.metrics) ? source.metrics : []).map(normalizeMetric),
-    updatedAt: source.updatedAt || source.updated_at || nowIso(),
+    updatedAt: source.updatedAt || source.updated_at || null,
   };
 }
 

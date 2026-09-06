@@ -21,7 +21,7 @@ import {
   mergeCompletedItems,
 } from './lifelineDays';
 import { getSelfHubDayEntry } from './selfHubDays';
-import { buildNextActionFromPath, buildTodayThreeFromPath } from '../lib/path/logic';
+import { buildNextActionFromPath, buildTodayThreeFromPath, collectPathResolvedForDate } from '../lib/path/logic';
 
 function formatRelativeAgo(isoString) {
   if (!isoString) return null;
@@ -95,13 +95,14 @@ function resolveDayJournalText(selfHubDays, lifelineDays, date) {
   return stored.journal?.notes || life.notes || '';
 }
 
-function buildProjectDayActivity(projectActivity, selfHubDays, stages, lifelineDays) {
+function buildProjectDayActivity(projectActivity, selfHubDays, stages, lifelineDays, pathBundle) {
   const today = localTodayIsoDate();
   const stored = getSelfHubDayEntry(selfHubDays, today);
   const completed = mergeCompletedItems(
     stored.projects?.completed,
     collectCompletedItemsForDate(projectActivity, today),
     collectCompletedCheckpointsFromStages(stages, today),
+    collectPathResolvedForDate(pathBundle, today),
   );
   const notes = mergeCompletedItems(
     stored.projects?.notes,
@@ -112,8 +113,9 @@ function buildProjectDayActivity(projectActivity, selfHubDays, stages, lifelineD
     stored.projects?.scheduled,
     collectScheduledItemsForDate(projectActivity, today),
   );
+  completed.sort((a, b) => String(b.completedAt || b.timestamp || '').localeCompare(String(a.completedAt || a.timestamp || '')));
   return {
-    source: stored.projects ? 'merged' : projectActivity?.length || stages?.length ? 'computed' : 'none',
+    source: stored.projects ? 'merged' : projectActivity?.length || stages?.length || pathBundle?.blocks?.length ? 'computed' : 'none',
     completed,
     notes,
     scheduled,
@@ -409,7 +411,7 @@ function buildFromSelfData(selfData, { displayName, stages, ouraRow, projectActi
       tempDev,
       updatedAt: referenceTime,
     }),
-    projectDay: buildProjectDayActivity(projectActivity, selfHubDays, stages, lifelineDays),
+    projectDay: buildProjectDayActivity(projectActivity, selfHubDays, stages, lifelineDays, pathBundle),
   };
 }
 
@@ -471,7 +473,7 @@ function buildEmptyView({ displayName, ouraStatus, scaleConnected, projectActivi
       tempDev: null,
       updatedAt: referenceTime,
     }),
-    projectDay: buildProjectDayActivity(projectActivity, selfHubDays, stages, lifelineDays),
+    projectDay: buildProjectDayActivity(projectActivity, selfHubDays, stages, lifelineDays, pathBundle),
   };
 }
 

@@ -201,7 +201,13 @@ export function mergeCompletedItems(...lists) {
         ? `${item.kind}:${String(item.id).split(':').pop()}`
         : item.id;
       const prev = byKey.get(key);
-      if (!prev || (item.completedAt && !prev.completedAt)) byKey.set(key, item);
+      if (!prev) {
+        byKey.set(key, item);
+        continue;
+      }
+      const prevAt = prev.completedAt || prev.timestamp || '';
+      const nextAt = item.completedAt || item.timestamp || '';
+      if (nextAt && nextAt >= prevAt) byKey.set(key, item);
     }
   }
   return [...byKey.values()];
@@ -693,6 +699,6 @@ export function kindLabel(kind) {
   if (kind === 'idea') return 'Ιδέα';
   if (kind === 'image') return 'Εικόνα';
   if (kind === 'sticky') return 'Σημείωση';
-  if (kind === 'note') return 'Σημείωση';
+  if (kind === 'path') return 'Path';
   return 'Item';
 }

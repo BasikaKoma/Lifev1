@@ -320,6 +320,7 @@ export function SelfView({
         routineTemplates={routineTemplates}
         projectActivity={projectActivity}
         stages={stages}
+        pathBundle={pathBundle}
         onUpdateDay={onUpdateLifelineDay}
         onUpdateRoutineTemplates={handleUpdateRoutineTemplates}
         onClose={handleCloseDayDetails}

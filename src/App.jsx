@@ -33,7 +33,7 @@ import { CamerasView } from './components/CamerasView';
 import { PersonalBrandView } from './components/brand/PersonalBrandView';
 import { NutritionView } from './components/nutrition/NutritionView';
 import { PathView } from './components/path/PathView';
-import { loadPathBundle, readPathBundleLocal } from './lib/path/store';
+import { loadPathBundle, readPathBundleLocal, subscribePathBundle } from './lib/path/store';
 import { pathTabFromPathname } from './utils/appNavigation';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { platform } from './platform';
@@ -330,6 +330,8 @@ function MainApp({ user, onSignOut }) {
     ],
   );
 
+  useEffect(() => subscribePathBundle(setPathBundle), []);
+
   useEffect(() => {
     let cancelled = false;
     loadPathBundle()
@@ -340,7 +342,7 @@ function MainApp({ user, onSignOut }) {
     return () => {
       cancelled = true;
     };
-  }, [activeView]);
+  }, [activeView, user?.id]);
 
   useSelfHubLiveCapture({
     enabled: Boolean(user),
@@ -350,6 +352,7 @@ function MainApp({ user, onSignOut }) {
     projectActivity: hubProjectActivity,
     healthMetrics,
     ouraRow: ouraMetricsRow,
+    pathBundle,
     onCapture: captureSelfHubLiveDay,
   });
 

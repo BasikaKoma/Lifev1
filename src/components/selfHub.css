@@ -1270,6 +1270,11 @@
   color: rgba(52, 211, 153, 0.95);
 }
 
+.self-path-week__day--past {
+  opacity: 0.42;
+  filter: saturate(0.55);
+}
+
 .self-path-week__today {
   margin-top: 0.75rem;
 }
@@ -1666,6 +1671,11 @@
 .self-project-day__dot--task {
   background: #93c5fd;
   box-shadow: 0 0 8px rgba(147, 197, 253, 0.35);
+}
+
+.self-project-day__dot--path {
+  background: #34d399;
+  box-shadow: 0 0 8px rgba(52, 211, 153, 0.4);
 }
 
 .self-project-day__dot--done {

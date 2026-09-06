@@ -10,6 +10,7 @@ import {
   resolveCurrentValue,
   sortGoals,
   weekBlockStats,
+  formatBlockStatusStamp,
 } from '../../lib/path/logic';
 import { BlockFields, GoalFields, PathModal } from './PathFields';
 
@@ -204,7 +205,10 @@ export function PathGoals({
               {selectedBlocks.length ? (
                 <ul className="path-side-list">
                   {selectedBlocks.slice(0, 8).map((block) => (
-                    <li key={block.id}>{block.date} · {block.title} · {block.status}</li>
+                    <li key={block.id}>
+                      {block.date} · {block.title} · {block.status}
+                      {formatBlockStatusStamp(block) ? ` · ${formatBlockStatusStamp(block)}` : ''}
+                    </li>
                   ))}
                 </ul>
               ) : (

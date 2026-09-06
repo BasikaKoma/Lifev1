@@ -1,6 +1,5 @@
 import { getSupabaseClient, isSupabaseConfigured } from './supabase';
 import { clearStoredProjectId } from '../utils/projectSession';
-import { claimExclusiveSession } from './singleSession';
 
 export function requiresAuth() {
   return isSupabaseConfigured();
@@ -64,7 +63,6 @@ export async function signUpWithEmail(email, password, displayName) {
   });
 
   if (error) throw error;
-  if (data.session) await claimExclusiveSession(data.session);
   return data;
 }
 
@@ -78,7 +76,6 @@ export async function signInWithEmail(email, password) {
   });
 
   if (error) throw error;
-  if (data.session) await claimExclusiveSession(data.session);
   return data;
 }
 

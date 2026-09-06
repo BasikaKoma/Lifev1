@@ -9,7 +9,7 @@ import {
   startOfWeekMonday,
   weekDates,
 } from '../../lib/path/schema';
-import { blocksForDate, blockActionProgress, formatDuration, formatWeekRange } from '../../lib/path/logic';
+import { blocksForDate, blockActionProgress, formatBlockStatusStamp, formatDuration, formatWeekRange } from '../../lib/path/logic';
 import { BlockFields, PathModal, TemplateFields } from './PathFields';
 import { PathBlockWorkspace } from './PathBlockWorkspace';
 
@@ -33,6 +33,7 @@ function BlockCard({
   onDragOverBlock,
 }) {
   const progress = blockActionProgress(block);
+  const statusStamp = formatBlockStatusStamp(block);
   return (
     <article
       className={`path-block${color ? ' path-block--goal' : ''}${isOver ? ' path-block--over' : ''}`}
@@ -99,7 +100,10 @@ function BlockCard({
         </div>
       </div>
       <div className="path-pills">
-        <span className={`path-pill ${STATUS_CLASS[block.status] || ''}`}>{block.status}</span>
+        <span className={`path-pill ${STATUS_CLASS[block.status] || ''}`}>
+          {block.status}
+          {statusStamp ? ` · ${statusStamp}` : ''}
+        </span>
         {progress ? <span className="path-pill path-pill--actions">{progress.done}/{progress.total} actions</span> : null}
       </div>
       <div className="path-block__actions">
@@ -195,7 +199,7 @@ export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteL
           return (
             <section
               key={date}
-              className={`path-day${date === today ? ' path-day--today' : ''}${overDate === date ? ' path-day--over' : ''}`}
+              className={`path-day${date === today ? ' path-day--today' : ''}${date < today ? ' path-day--past' : ''}${overDate === date ? ' path-day--over' : ''}`}
               onDragOver={(event) => {
                 event.preventDefault();
                 setOverDate(date);

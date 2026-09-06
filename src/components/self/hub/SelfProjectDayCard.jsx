@@ -87,7 +87,7 @@ function ProjectDayPanel({ title, icon, count, emptyLabel, items, showKind = fal
                     {item.title}
                   </span>
                   <span className="self-project-day__item-meta">
-                    {[timeLabel, item.projectTitle, item.stageTitle].filter(Boolean).join(' · ')}
+                    {[timeLabel, item.status, item.projectTitle, item.stageTitle].filter(Boolean).join(' · ')}
                     {showKind && item.kind ? ` · ${kindLabel(item.kind)}` : ''}
                   </span>
                 </div>

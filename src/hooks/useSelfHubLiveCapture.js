@@ -15,6 +15,7 @@ export function useSelfHubLiveCapture({
   projectActivity,
   healthMetrics = [],
   ouraRow = null,
+  pathBundle = null,
   onCapture,
 }) {
   const timerRef = useRef(null);
@@ -30,12 +31,13 @@ export function useSelfHubLiveCapture({
       projectActivity,
       healthMetrics,
       ouraRow,
+      pathBundle,
     });
     const signature = JSON.stringify(patch);
     if (signature === lastSignatureRef.current) return;
     lastSignatureRef.current = signature;
     onCapture(date, patch);
-  }, [enabled, onCapture, selfData, hubView, projectActivity, healthMetrics, ouraRow]);
+  }, [enabled, onCapture, selfData, hubView, projectActivity, healthMetrics, ouraRow, pathBundle]);
 
   useEffect(() => {
     if (!enabled || activeView !== 'self') return undefined;

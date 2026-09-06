@@ -40,7 +40,7 @@ export function SelfPathWeekCard({ pathBundle, onOpenPathWeek }) {
         {week.days.map((day) => (
           <div
             key={day.date}
-            className={`self-path-week__day${day.isToday ? ' self-path-week__day--today' : ''}${day.count ? ' self-path-week__day--has' : ''}`}
+            className={`self-path-week__day${day.isToday ? ' self-path-week__day--today' : ''}${day.isPast ? ' self-path-week__day--past' : ''}${day.count ? ' self-path-week__day--has' : ''}`}
           >
             <span>{day.short}</span>
             <strong>{day.count}</strong>

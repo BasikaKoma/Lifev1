@@ -334,6 +334,22 @@
   border-color: var(--path-accent);
 }
 
+.path-day--past {
+  opacity: 0.46;
+  filter: saturate(0.55);
+}
+
+.path-day--past .path-day__head {
+  color: var(--path-muted);
+}
+
+.path-day--past:hover,
+.path-day--past:focus-within,
+.path-day--past.path-day--over {
+  opacity: 0.72;
+  filter: saturate(0.8);
+}
+
 .path-day--over {
   outline: 2px dashed var(--path-accent);
 }
@@ -779,6 +795,13 @@
 .path-workspace__action--done .input {
   text-decoration: line-through;
   opacity: 0.7;
+}
+
+.path-workspace__action-time {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  color: var(--muted, rgba(148, 163, 184, 0.95));
+  font-variant-numeric: tabular-nums;
 }
 
 .path-workspace__drag {

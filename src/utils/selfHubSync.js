@@ -10,6 +10,7 @@ import {
   patchDayEntry,
 } from './lifelineDays';
 import { getSelfHubDayEntry, normalizeSelfHubDayEntry, patchSelfHubDayEntry } from './selfHubDays';
+import { collectPathResolvedForDate } from '../lib/path/logic';
 import { healthMetricsToLifelinePatch } from '../lib/health/healthToLifeline';
 import { ouraRowToLifelineMetrics } from './lifelineSelfMetrics';
 import { buildSelfHubTimelineEvents, normalizeTimelineSnapshot } from './selfHubTimelineEvents';
@@ -24,6 +25,7 @@ export function buildSelfHubLivePatch({
   projectActivity,
   healthMetrics = [],
   ouraRow = null,
+  pathBundle = null,
 }) {
   const day = date || localTodayIsoDate();
   const now = new Date().toISOString();
@@ -39,7 +41,10 @@ export function buildSelfHubLivePatch({
   }
 
   const projects = {
-    completed: collectCompletedItemsForDate(projectActivity, day),
+    completed: mergeCompletedItems(
+      collectCompletedItemsForDate(projectActivity, day),
+      collectPathResolvedForDate(pathBundle, day),
+    ),
     notes: collectNotesCreatedForDate(projectActivity, day),
     scheduled: collectScheduledItemsForDate(projectActivity, day),
     syncedAt: now,
@@ -152,6 +157,7 @@ export function resolveProjectDayForView({
   date,
   projectActivity,
   stages = [],
+  pathBundle = null,
 }) {
   const day = date || localTodayIsoDate();
   const today = localTodayIsoDate();
@@ -163,6 +169,7 @@ export function resolveProjectDayForView({
     lifelineEntry.projectSnapshot?.completed,
     collectCompletedItemsForDate(projectActivity, day),
     collectCompletedCheckpointsFromStages(stages, day),
+    collectPathResolvedForDate(pathBundle, day),
   );
   const notes = mergeCompletedItems(
     selfEntry.projects?.notes,
@@ -175,6 +182,8 @@ export function resolveProjectDayForView({
     lifelineEntry.projectSnapshot?.scheduled,
     collectScheduledItemsForDate(projectActivity, day),
   );
+
+  completed.sort((a, b) => String(b.completedAt || b.timestamp || '').localeCompare(String(a.completedAt || a.timestamp || '')));
 
   return {
     source: completed.length || notes.length || scheduled.length

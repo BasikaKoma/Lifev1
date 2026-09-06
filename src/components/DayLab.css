@@ -434,6 +434,11 @@
   background: rgba(5, 150, 105, 0.22);
 }
 
+.day-lab__kind--path {
+  color: #a7f3d0;
+  background: rgba(16, 185, 129, 0.22);
+}
+
 .day-lab__kind--note {
   color: #fde68a;
   background: rgba(146, 64, 14, 0.35);

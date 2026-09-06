@@ -5,6 +5,7 @@ import {
   createEmptyMetric,
   createEmptyMetricEntry,
   createEmptyTemplate,
+  applyBlockStatus,
   nowIso,
   startOfWeekMonday,
 } from '../lib/path/schema';
@@ -90,11 +91,30 @@ export function usePath() {
   const upsertBlock = useCallback((block) => {
     let nextBlock = createEmptyBlock({ ...block, updatedAt: nowIso() });
     updateBundle((prev) => {
-      const exists = prev.blocks.some((item) => item.id === nextBlock.id);
+      const current = prev.blocks.find((item) => item.id === nextBlock.id) || null;
+      const exists = Boolean(current);
       if (!exists) {
         nextBlock = createEmptyBlock({
           ...nextBlock,
           order: nextBlockOrder(prev.blocks, nextBlock.date),
+        });
+        if (nextBlock.status !== 'Planned') {
+          nextBlock = applyBlockStatus(createEmptyBlock({ ...nextBlock, status: 'Planned' }), nextBlock.status);
+        }
+      } else if (current.status !== nextBlock.status) {
+        nextBlock = applyBlockStatus(
+          createEmptyBlock({ ...current, ...nextBlock, status: current.status }),
+          nextBlock.status,
+        );
+      } else {
+        nextBlock = createEmptyBlock({
+          ...current,
+          ...nextBlock,
+          statusAt: current.statusAt,
+          completedAt: current.completedAt,
+          skippedAt: current.skippedAt,
+          movedAt: current.movedAt,
+          statusHistory: current.statusHistory,
         });
       }
       return {
@@ -176,10 +196,8 @@ export function usePath() {
           };
         }
         return createEmptyBlock({
-          ...block,
-          status,
+          ...applyBlockStatus(block, status),
           completeLinkedTask: Boolean(completeLinkedTask),
-          updatedAt: nowIso(),
         });
       }),
     }));

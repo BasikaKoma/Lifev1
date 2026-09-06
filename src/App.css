@@ -7067,8 +7067,52 @@ html:has(.app--projects) body {
   min-height:0;
   object-fit:contain;
   border-radius:calc(var(--radius-sm, 6px) - 2px);
-  pointer-events:none;
+  pointer-events:auto;
+  cursor:zoom-in;
   background:#0f172a0a
+}
+
+.sticky-image-lightbox {
+  position:fixed;
+  inset:0;
+  z-index:10050;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:28px;
+  background:#020617d9;
+  cursor:zoom-out
+}
+
+.sticky-image-lightbox__image {
+  max-width:min(100%, 1600px);
+  max-height:100%;
+  width:auto;
+  height:auto;
+  object-fit:contain;
+  border-radius:10px;
+  box-shadow:0 24px 80px #00000080;
+  cursor:default;
+  background:#0b1220
+}
+
+.sticky-image-lightbox__close {
+  position:absolute;
+  top:16px;
+  right:16px;
+  width:40px;
+  height:40px;
+  border:none;
+  border-radius:999px;
+  background:#ffffff1f;
+  color:#f8fafc;
+  font-size:28px;
+  line-height:1;
+  cursor:pointer
+}
+
+.sticky-image-lightbox__close:hover {
+  background:#ffffff33
 }
 
 .sticky-note-card--size-locked .sticky-note-card__input {

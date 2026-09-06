@@ -97,58 +97,10 @@ export async function getUser({ refresh = false, timeoutMs = 10000 } = {}) {
   return session?.user ?? null;
 }
 
-function decodeJwtPayload(token) {
-  try {
-    const part = token.split('.')[1];
-    if (!part) return null;
-    const padded = part.replace(/-/g, '+').replace(/_/g, '/');
-    const pad = padded.length % 4 === 0 ? '' : '='.repeat(4 - (padded.length % 4));
-    const json = atob(padded + pad);
-    return JSON.parse(json);
-  } catch {
-    return null;
-  }
-}
-
-function getAuthSessionId(session) {
-  const payload = decodeJwtPayload(session?.access_token);
-  return typeof payload?.session_id === 'string' && payload.session_id
-    ? payload.session_id
-    : null;
-}
-
-export async function claimExclusiveSession(session) {
-  const supabase = getSupabase();
-  const sessionId = getAuthSessionId(session);
-  const userId = session?.user?.id;
-  if (!sessionId || !userId) return;
-
-  await supabase
-    .from('profiles')
-    .update({
-      active_session_id: sessionId,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', userId);
-
-  await supabase.auth.signOut({ scope: 'others' });
-}
+export async function claimExclusiveSession() {}
 
 export async function isExclusiveSessionActive(session) {
-  const supabase = getSupabase();
-  const sessionId = getAuthSessionId(session);
-  const userId = session?.user?.id;
-  if (!sessionId || !userId) return Boolean(session?.user);
-
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('active_session_id')
-    .eq('id', userId)
-    .maybeSingle();
-
-  if (error) return true;
-  if (!data?.active_session_id) return true;
-  return data.active_session_id === sessionId;
+  return Boolean(session?.user);
 }
 
 export async function signOutLocallyTaken() {
@@ -157,46 +109,8 @@ export async function signOutLocallyTaken() {
   if (error) throw error;
 }
 
-export function watchExclusiveSession(session, onTaken) {
-  const supabase = getSupabase();
-  const sessionId = getAuthSessionId(session);
-  const userId = session?.user?.id;
-  if (!sessionId || !userId || typeof onTaken !== 'function') return () => {};
-
-  let stopped = false;
-  let handling = false;
-
-  const takeOver = async () => {
-    if (stopped || handling) return;
-    handling = true;
-    try {
-      await onTaken();
-    } finally {
-      handling = false;
-    }
-  };
-
-  const channel = supabase
-    .channel(`single-session:${userId}`)
-    .on(
-      'postgres_changes',
-      {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'profiles',
-        filter: `id=eq.${userId}`,
-      },
-      (payload) => {
-        const nextId = payload.new?.active_session_id;
-        if (nextId && nextId !== sessionId) takeOver();
-      }
-    )
-    .subscribe();
-
-  return () => {
-    stopped = true;
-    supabase.removeChannel(channel);
-  };
+export function watchExclusiveSession() {
+  return () => {};
 }
 
 export async function signIn(email, password) {
@@ -206,7 +120,6 @@ export async function signIn(email, password) {
     password,
   });
   if (error) throw error;
-  if (data.session) await claimExclusiveSession(data.session);
   return data;
 }
 
@@ -220,7 +133,6 @@ export async function signUp(email, password) {
     },
   });
   if (error) throw error;
-  if (data.session) await claimExclusiveSession(data.session);
   return data;
 }
 

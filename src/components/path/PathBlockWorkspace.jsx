@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { createEmptyBlockAction, createEmptyBlockResource, goalColorStyle, sortBlockActions } from '../../lib/path/schema';
-import { blockActionProgress, blockLinkedProject, formatDuration, reorderBlockActions, tasksForBlockProject } from '../../lib/path/logic';
+import { blockActionProgress, blockLinkedProject, formatBlockClock, formatBlockStatusStamp, formatDuration, reorderBlockActions, tasksForBlockProject } from '../../lib/path/logic';
 
 function normalizeUrl(value) {
   const text = String(value || '').trim();
@@ -68,6 +68,9 @@ function ActionRow({
         onChange={(event) => onText(action.id, event.target.value)}
         placeholder="Action"
       />
+      {action.completed && formatBlockClock(action.completedAt) ? (
+        <span className="path-workspace__action-time">{formatBlockClock(action.completedAt)}</span>
+      ) : null}
       <button type="button" className="path-day__add" onClick={() => onDelete(action.id)}>
         Delete
       </button>
@@ -146,6 +149,10 @@ export function PathBlockWorkspace({
           <MetaItem label="Start" value={block.startTime} />
           <MetaItem label="Duration" value={formatDuration(block.duration)} />
           <MetaItem label="Status" value={block.status} />
+          <MetaItem
+            label={block.status === 'Done' ? 'Done at' : block.status === 'Skipped' ? 'Skipped at' : block.status === 'Moved' ? 'Moved at' : 'Updated'}
+            value={formatBlockStatusStamp(block)}
+          />
         </div>
 
         <div className="path-workspace__status">
@@ -154,6 +161,11 @@ export function PathBlockWorkspace({
           {block.status !== 'Skipped' ? <button type="button" className="btn" onClick={() => onStatus(block, 'Skipped')}>Skipped</button> : null}
           {block.status !== 'Planned' ? <button type="button" className="btn" onClick={() => onStatus(block, 'Planned')}>Plan</button> : null}
         </div>
+        {block.statusHistory?.length ? (
+          <p className="path-card__meta">
+            {block.statusHistory.map((event) => `${event.status} ${formatBlockClock(event.at)}`).join(' → ')}
+          </p>
+        ) : null}
 
         <section className="path-workspace__section">
           <h3>Desired outcome</h3>
@@ -180,7 +192,14 @@ export function PathBlockWorkspace({
                   action={action}
                   isOver={overActionId === action.id}
                   onToggle={(id, completed) => patchActions(actions.map((item) => (
-                    item.id === id ? { ...item, completed, updatedAt: new Date().toISOString() } : item
+                    item.id === id
+                      ? {
+                          ...item,
+                          completed,
+                          completedAt: completed ? new Date().toISOString() : null,
+                          updatedAt: new Date().toISOString(),
+                        }
+                      : item
                   )))}
                   onText={(id, text) => patchActions(actions.map((item) => (
                     item.id === id ? { ...item, text, updatedAt: new Date().toISOString() } : item

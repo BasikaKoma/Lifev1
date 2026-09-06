@@ -10,7 +10,7 @@ import {
   WEEKDAYS,
   normalizeGoalColor,
 } from '../../lib/path/schema';
-import { blockLinkedProject, tasksForBlockProject } from '../../lib/path/logic';
+import { blockLinkedProject, formatBlockStatusStamp, tasksForBlockProject } from '../../lib/path/logic';
 
 export function PathField({ label, hint, needs, wide, children }) {
   return (
@@ -210,6 +210,9 @@ export function BlockFields({ block, onChange, goals = [], tasks = [], showCompl
         <select className="input" value={block.status || 'Planned'} onChange={(event) => onChange({ status: event.target.value })}>
           {BLOCK_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
         </select>
+        {formatBlockStatusStamp(block) ? (
+          <span className="path-field__hint">{block.status} at {formatBlockStatusStamp(block)}</span>
+        ) : null}
       </PathField>
       <PathField label="Linked task">
         <select

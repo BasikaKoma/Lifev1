@@ -1,6 +1,6 @@
 import { getSupabaseClient, isSupabaseConfigured } from '../supabase';
 import { waitForAuthSession } from '../auth';
-import { createEmptyBundle, normalizeBundle, nowIso } from './schema';
+import { createEmptyBundle, normalizeBundle, nowIso, pathBundleHasContent } from './schema';
 
 const STORAGE_KEY = 'lifev1-path';
 const SAVE_DEBOUNCE_MS = 400;
@@ -13,9 +13,10 @@ function isMissingTable(error) {
 function readLocal() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return normalizeBundle(raw ? JSON.parse(raw) : null);
+    if (!raw) return null;
+    return normalizeBundle(JSON.parse(raw));
   } catch {
-    return createEmptyBundle();
+    return null;
   }
 }
 
@@ -27,7 +28,7 @@ function writeLocal(bundle) {
 
 async function getSessionUser() {
   if (!isSupabaseConfigured()) return null;
-  const session = await waitForAuthSession();
+  const session = await waitForAuthSession(40, 50);
   return session?.user || null;
 }
 
@@ -38,8 +39,12 @@ function requireClient() {
 }
 
 function mergeBundles(local, cloud) {
+  const localHas = pathBundleHasContent(local);
+  const cloudHas = pathBundleHasContent(cloud);
+  if (cloudHas && !localHas) return cloud;
+  if (localHas && !cloudHas) return local;
+  if (!local) return cloud || createEmptyBundle();
   if (!cloud) return local;
-  if (!local) return cloud;
   return String(local.updatedAt || '') >= String(cloud.updatedAt || '') ? local : cloud;
 }
 
@@ -96,11 +101,15 @@ export async function loadPathBundle() {
   const local = readLocal();
   try {
     const cloud = await pullPathBundle();
-    const merged = mergeBundles(local, cloud);
+    const merged = mergeBundles(local, cloud) || createEmptyBundle();
     writeLocal(merged);
+    notifyPathBundle(merged);
+    if (pathBundleHasContent(merged) && !pathBundleHasContent(cloud) && pathBundleHasContent(local)) {
+      await pushPathBundle(merged).catch(() => {});
+    }
     return merged;
   } catch {
-    return local;
+    return local || createEmptyBundle();
   }
 }
 
@@ -111,6 +120,7 @@ let pendingCloud = false;
 let saving = false;
 let lastError = '';
 const listeners = new Set();
+const bundleListeners = new Set();
 
 function pathSaveSnapshot() {
   return {
@@ -131,6 +141,16 @@ export function subscribePathSave(listener) {
   return () => listeners.delete(listener);
 }
 
+export function subscribePathBundle(listener) {
+  bundleListeners.add(listener);
+  return () => bundleListeners.delete(listener);
+}
+
+function notifyPathBundle(bundle) {
+  if (!bundle) return;
+  bundleListeners.forEach((listener) => listener(bundle));
+}
+
 export function hasPendingPathSave() {
   return pendingCloud || Boolean(pendingBundle) || Boolean(saveTimer);
 }
@@ -144,6 +164,7 @@ export function queuePathSave(bundle) {
   pendingCloud = true;
   lastError = '';
   notifyPathSave();
+  notifyPathBundle(next);
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     saveTimer = null;
@@ -167,6 +188,10 @@ export async function flushPathNow() {
       while (pendingBundle || pendingCloud) {
         const next = pendingBundle || readLocal();
         pendingBundle = null;
+        if (!next) {
+          pendingCloud = false;
+          return { ok: true };
+        }
         writeLocal(next);
         const result = await pushPathBundle(next);
         if (result?.ok === false && (result.reason === 'missing-table' || result.reason === 'offline-or-signed-out')) {
@@ -202,5 +227,5 @@ export async function savePathBundle(bundle) {
 }
 
 export function readPathBundleLocal() {
-  return readLocal();
+  return readLocal() || createEmptyBundle();
 }

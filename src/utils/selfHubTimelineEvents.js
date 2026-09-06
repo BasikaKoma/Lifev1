@@ -6,7 +6,7 @@ import { localTodayIsoDate } from './selfDateUtils';
  * Builds small "event cards" placed along the Self hub day timeline.
  * Each event is positioned by its hour of the day and carries an icon + label.
  *
- * @typedef {'meal'|'routine'|'pulse'|'note'|'idea'|'done'|'checkpoint'|'milestone'|'task'|'obstacle'|'resource'|'image'|'sticky'|'sleep'|'wake'|'workout'|'session'|'tag'} SelfTimelineEventType
+ * @typedef {'meal'|'routine'|'pulse'|'note'|'idea'|'done'|'checkpoint'|'milestone'|'task'|'obstacle'|'resource'|'image'|'sticky'|'sleep'|'wake'|'workout'|'session'|'tag'|'path'} SelfTimelineEventType
  * @typedef {Object} SelfTimelineEvent
  * @property {string} id
  * @property {number} hour
@@ -38,6 +38,7 @@ export const SELF_TIMELINE_EVENT_TYPES = {
   workout: { icon: 'workout', tone: 'orange', typeLabel: 'Προπόνηση', priority: 3 },
   session: { icon: 'aura', tone: 'violet', typeLabel: 'Session', priority: 4 },
   tag: { icon: 'tag', tone: 'sky', typeLabel: 'Tag', priority: 8 },
+  path: { icon: 'checkCircle', tone: 'emerald', typeLabel: 'Path', priority: 3 },
 };
 
 const WORKOUT_LABELS = {
@@ -110,7 +111,7 @@ function humanizeKey(value, map, fallback) {
   return String(value).replace(/[_-]+/g, ' ');
 }
 
-function makeEvent(type, { id, hour, label, timeLabel }) {
+function makeEvent(type, { id, hour, label, timeLabel, typeLabel }) {
   const config = SELF_TIMELINE_EVENT_TYPES[type];
   if (!config || hour == null || !Number.isFinite(hour)) return null;
   return {
@@ -118,7 +119,7 @@ function makeEvent(type, { id, hour, label, timeLabel }) {
     hour: Math.max(0, Math.min(24, hour)),
     type,
     label: truncate(label || config.typeLabel),
-    typeLabel: config.typeLabel,
+    typeLabel: typeLabel || config.typeLabel,
     icon: config.icon,
     tone: config.tone,
     timeLabel: timeLabel ?? hmFromHour(hour),
@@ -213,6 +214,7 @@ function completedEvents(completed, dateStr) {
       hour,
       label: item.title,
       timeLabel: item.timeLabel || hmFromHour(hour),
+      typeLabel: item.kind === 'path' && item.status ? item.status : undefined,
     });
     if (event) events.push(event);
   }

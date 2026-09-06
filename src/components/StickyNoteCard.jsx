@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { canvasStyleClasses } from '../utils/canvasNodes';
 import { resolveNodeThemeStyle } from '../utils/mapTheme';
 import { useCanvasNodeCard } from '../hooks/useCanvasNodeCard';
@@ -6,6 +7,57 @@ import { useCanvasNodeResize, STICKY_RESIZE_HANDLES } from '../hooks/useCanvasNo
 import { formatArchiveDate } from '../utils/archive';
 import { getNotePreviewLine, STICKY_CHIP_W } from '../utils/noteSettle';
 import { PrioritySelect } from './PrioritySelect';
+
+const IMAGE_CLICK_SLOP_PX = 6;
+
+function StickyImageLightbox({ src, alt, onClose }) {
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      onClose();
+    };
+    document.addEventListener('keydown', onKey, true);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey, true);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [onClose]);
+
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div
+      className="sticky-image-lightbox"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Προεπισκόπηση εικόνας"
+      onClick={onClose}
+      onPointerDown={(e) => e.stopPropagation()}
+    >
+      <button
+        type="button"
+        className="sticky-image-lightbox__close"
+        onClick={onClose}
+        title="Κλείσιμο"
+        aria-label="Κλείσιμο"
+      >
+        ×
+      </button>
+      <img
+        className="sticky-image-lightbox__image"
+        src={src}
+        alt={alt || ''}
+        draggable={false}
+        onClick={(e) => e.stopPropagation()}
+      />
+    </div>,
+    document.body
+  );
+}
 
 export function StickyNoteCard({
   sticky,
@@ -31,11 +83,13 @@ export function StickyNoteCard({
   const themeVars = resolveNodeThemeStyle(sticky, mapTheme, nodeLevel, 'sticky');
   const [editing, setEditing] = useState(Boolean(autoEdit));
   const [peeked, setPeeked] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [draftText, setDraftText] = useState(sticky.text || '');
   const inputRef = useRef(null);
   const cardRef = useRef(null);
   const stickyRef = useRef(sticky);
   const onUpdateRef = useRef(onUpdate);
+  const imagePressRef = useRef(null);
   stickyRef.current = sticky;
   onUpdateRef.current = onUpdate;
   const hasImage = Boolean(sticky.imageSrc);
@@ -165,11 +219,29 @@ export function StickyNoteCard({
     return () => ro.disconnect();
   }, [chip, sizeLocked, sticky.id, sticky.text, sticky.width, sticky.imageSrc, editing, onUpdate, sticky.height]);
 
-  const startEditing = () => {
+  const startEditing = (e) => {
     if (readOnly) return;
+    if (e?.target?.closest?.('.sticky-note-card__image')) return;
     setEditing(true);
     setPeeked(true);
     onNodeSelect?.(nodeRef);
+  };
+
+  const closePreview = useCallback(() => setPreviewOpen(false), []);
+
+  const handleImagePointerDown = (e) => {
+    imagePressRef.current = { x: e.clientX, y: e.clientY };
+  };
+
+  const handleImageClick = (e) => {
+    if (connectModeActive || editing || chip) return;
+    const start = imagePressRef.current;
+    imagePressRef.current = null;
+    if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > IMAGE_CLICK_SLOP_PX) {
+      return;
+    }
+    e.stopPropagation();
+    setPreviewOpen(true);
   };
 
   const placeholder = hasImage ? 'Add a caption…' : 'Double-click to edit…';
@@ -213,6 +285,9 @@ export function StickyNoteCard({
               src={sticky.imageSrc}
               alt=""
               draggable={false}
+              title="Κλικ για κανονικό μέγεθος"
+              onPointerDown={handleImagePointerDown}
+              onClick={handleImageClick}
             />
           )}
           {editing ? (
@@ -276,6 +351,13 @@ export function StickyNoteCard({
             />
           ))}
         </div>
+      )}
+      {previewOpen && hasImage && (
+        <StickyImageLightbox
+          src={sticky.imageSrc}
+          alt={sticky.text || ''}
+          onClose={closePreview}
+        />
       )}
     </article>
   );

@@ -56,6 +56,7 @@ export function LifelineDayModal({
   routineTemplates = [],
   projectActivity = [],
   stages = [],
+  pathBundle = null,
   onUpdateDay,
   onUpdateRoutineTemplates,
   onClose,
@@ -113,9 +114,9 @@ export function LifelineDayModal({
   const projectDay = useMemo(
     () =>
       date
-        ? resolveProjectDayForView({ selfHubDays, lifelineDays, date, projectActivity, stages })
+        ? resolveProjectDayForView({ selfHubDays, lifelineDays, date, projectActivity, stages, pathBundle })
         : { completed: [], notes: [], scheduled: [] },
-    [selfHubDays, lifelineDays, projectActivity, stages, date],
+    [selfHubDays, lifelineDays, projectActivity, stages, pathBundle, date],
   );
   const completed = projectDay.completed;
 
@@ -516,6 +517,7 @@ export function LifelineDayModal({
                         <span className="day-lab__completed-meta">
                           {[
                             item.timeLabel || (item.completedAt ? formatNoteClock(item.completedAt) : ''),
+                            item.status,
                             item.projectTitle,
                             item.stageTitle,
                           ].filter(Boolean).join(' · ')}

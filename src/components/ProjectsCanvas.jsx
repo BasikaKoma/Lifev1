@@ -3155,6 +3155,7 @@ export function ProjectsCanvas({
         routineTemplates={(mapTheme || activeTheme)?.lifeline?.routineTemplates ?? []}
         projectActivity={projectActivity}
         stages={stages}
+        pathBundle={pathBundle}
         onUpdateDay={onUpdateLifelineDay}
         onUpdateRoutineTemplates={(templates) => {
           handleMapThemeChange({

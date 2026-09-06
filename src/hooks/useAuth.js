@@ -7,12 +7,6 @@ import {
   signOut as authSignOut,
   subscribeToAuthChanges,
 } from '../lib/auth';
-import {
-  claimExclusiveSession,
-  isExclusiveSessionActive,
-  signOutLocallyTaken,
-  watchExclusiveSession,
-} from '../lib/singleSession';
 
 export function useAuth() {
   const isConfigured = isSupabaseConfigured();
@@ -26,67 +20,29 @@ export function useAuth() {
     }
 
     let cancelled = false;
-    let stopWatch = () => {};
 
-    const attachSession = async (session, { claim = false } = {}) => {
+    const attachSession = (session) => {
       if (cancelled) return;
-      stopWatch();
-      stopWatch = () => {};
-
-      if (!session?.user) {
-        setUser(null);
-        return;
-      }
-
-      if (claim) {
-        await claimExclusiveSession(session);
-      } else {
-        const stillActive = await isExclusiveSessionActive(session);
-        if (!stillActive) {
-          await signOutLocallyTaken();
-          if (!cancelled) setUser(null);
-          return;
-        }
-      }
-
-      if (cancelled) return;
-      setUser(session.user);
-      stopWatch = watchExclusiveSession(session, async () => {
-        await signOutLocallyTaken();
-        if (!cancelled) setUser(null);
-      });
+      setUser(session?.user ?? null);
     };
 
     getCurrentSession()
-      .then((session) => attachSession(session, { claim: true }))
+      .then((session) => attachSession(session))
       .finally(() => {
         if (!cancelled) setAuthLoading(false);
       });
 
-    const unsubscribe = subscribeToAuthChanges(async (_nextUser, event, session) => {
+    const unsubscribe = subscribeToAuthChanges((_nextUser, event, session) => {
       if (cancelled) return;
-      if (event === 'SIGNED_IN') {
-        await attachSession(session, { claim: true });
-        return;
-      }
       if (event === 'SIGNED_OUT') {
-        stopWatch();
-        stopWatch = () => {};
         setUser(null);
         return;
       }
-      if (event === 'TOKEN_REFRESHED' && session) {
-        const stillActive = await isExclusiveSessionActive(session);
-        if (!stillActive) {
-          await signOutLocallyTaken();
-          if (!cancelled) setUser(null);
-        }
-      }
+      if (session?.user) setUser(session.user);
     });
 
     return () => {
       cancelled = true;
-      stopWatch();
       unsubscribe();
     };
   }, [isConfigured]);

@@ -321,6 +321,60 @@ export function formatDuration(minutes) {
   return rest ? `${hours}h ${rest}m` : `${hours}h`;
 }
 
+export function blockStatusAt(block) {
+  if (!block || block.status === 'Planned') return null;
+  return block.statusAt
+    || (block.status === 'Done' ? block.completedAt : null)
+    || (block.status === 'Skipped' ? block.skippedAt : null)
+    || (block.status === 'Moved' ? block.movedAt : null)
+    || null;
+}
+
+export function formatBlockClock(iso) {
+  if (!iso) return '';
+  const date = iso instanceof Date ? iso : new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+export function formatBlockStatusStamp(block) {
+  const at = blockStatusAt(block);
+  if (!at) return '';
+  const parsed = new Date(at);
+  if (Number.isNaN(parsed.getTime())) return '';
+  const clock = formatBlockClock(parsed);
+  const day = toIsoDate(parsed);
+  if (clock && day && block?.date && day !== block.date) {
+    return `${clock} · ${day.slice(8)}/${day.slice(5, 7)}`;
+  }
+  return clock;
+}
+
+export function collectPathResolvedForDate(bundle, dateStr) {
+  const target = String(dateStr || '');
+  if (!target) return [];
+  const items = [];
+  for (const block of bundle?.blocks || []) {
+    if (block.status === 'Planned') continue;
+    const at = blockStatusAt(block);
+    if (!at) continue;
+    const parsed = new Date(at);
+    if (Number.isNaN(parsed.getTime())) continue;
+    if (toIsoDate(parsed) !== target) continue;
+    items.push({
+      id: `path:${block.id}`,
+      kind: 'path',
+      title: block.title || 'Path block',
+      projectTitle: block.projectTitle || null,
+      completedAt: at,
+      timeLabel: formatBlockClock(parsed),
+      done: block.status === 'Done',
+      status: block.status,
+    });
+  }
+  return items.sort((a, b) => String(b.completedAt || '').localeCompare(String(a.completedAt || '')));
+}
+
 export function blockActionProgress(block) {
   const actions = Array.isArray(block?.actions) ? block.actions : [];
   if (!actions.length) return null;
@@ -362,6 +416,7 @@ export function buildWeeklyPlanPreview(bundle, weekStart = startOfWeekMonday()) 
       date,
       short: WEEKDAYS[index]?.short || '',
       isToday: date === today,
+      isPast: date < today,
       count: dayBlocks.length,
       done: dayBlocks.filter((block) => block.status === 'Done').length,
       blocks: dayBlocks.map((block) => ({
