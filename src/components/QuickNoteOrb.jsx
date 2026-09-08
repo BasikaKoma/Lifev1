@@ -250,7 +250,7 @@ export function QuickNoteOrb({
           {open && (
             <div className="quick-note-orb__panel" ref={panelRef}>
               <div className="quick-note-orb__panel-header">
-                <span>Γρήγορη σημείωση</span>
+                <span>{preview.type === 'thought' ? 'Σκέψη' : 'Γρήγορη σημείωση'}</span>
                 <span className="quick-note-orb__phase">{describeCapture(preview)}</span>
               </div>
               <textarea
@@ -260,33 +260,37 @@ export function QuickNoteOrb({
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ιδέα, σημείωση, σκέψη…"
+                placeholder="Σκέψη, ιδέα, σημείωση…"
               />
+              <div className="quick-note-orb__types" role="group" aria-label="Τύπος">
+                {CAPTURE_TYPES.map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    className={`quick-note-orb__chip${preview.type === type ? ' is-active' : ''}`}
+                    onClick={() => setOverrideType(type)}
+                  >
+                    {CAPTURE_TYPE_LABELS[type]}
+                  </button>
+                ))}
+              </div>
               <div className="quick-note-orb__route">
-                <select
-                  className="input quick-note-orb__select"
-                  value={preview.type}
-                  onChange={(e) => setOverrideType(e.target.value)}
-                  aria-label="Τύπος"
-                >
-                  {CAPTURE_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {CAPTURE_TYPE_LABELS[type]}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  className="input quick-note-orb__select"
-                  value={preview.projectId || ''}
-                  onChange={(e) => setOverrideProjectId(e.target.value || null)}
-                  aria-label="Project"
-                >
-                  {destinations.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.title}
-                    </option>
-                  ))}
-                </select>
+                {preview.type === 'thought' ? (
+                  <p className="quick-note-orb__today">Πηγαίνει στο σήμερα · χωρίς classification</p>
+                ) : (
+                  <select
+                    className="input quick-note-orb__select"
+                    value={preview.projectId || ''}
+                    onChange={(e) => setOverrideProjectId(e.target.value || null)}
+                    aria-label="Project"
+                  >
+                    {destinations.map((project) => (
+                      <option key={project.id} value={project.id}>
+                        {project.title}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
               {preview.stageTitle && (
                 <p className="quick-note-orb__stage-hint">Milestone: {preview.stageTitle}</p>

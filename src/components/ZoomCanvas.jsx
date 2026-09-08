@@ -422,7 +422,12 @@ export const ZoomCanvas = forwardRef(function ZoomCanvas({
       const w = viewport.clientWidth;
       const h = viewport.clientHeight;
       if (w < 1 || h < 1) return false;
-      const s = transformRef.current.scale;
+      const s = typeof scrollToCanvasPoint.scale === 'number'
+        ? clampScale(scrollToCanvasPoint.scale, minScale, maxScale)
+        : transformRef.current.scale;
+      if (typeof scrollToCanvasPoint.scale === 'number') {
+        setScale(s);
+      }
       setPan({
         x: w / 2 - scrollToCanvasPoint.x * s,
         y: h / 2 - scrollToCanvasPoint.y * s,
@@ -447,6 +452,9 @@ export const ZoomCanvas = forwardRef(function ZoomCanvas({
     scrollToCanvasPoint?.trigger,
     scrollToCanvasPoint?.x,
     scrollToCanvasPoint?.y,
+    scrollToCanvasPoint?.scale,
+    minScale,
+    maxScale,
   ]);
 
   const percent = Math.round(scale * 100);

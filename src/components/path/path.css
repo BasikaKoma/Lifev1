@@ -77,6 +77,75 @@
   background: var(--path-accent);
 }
 
+.path-review {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.path-thoughts-review {
+  padding: 16px 18px;
+  border: 1px solid var(--path-border);
+  border-radius: 16px;
+  background: var(--path-card);
+}
+
+.path-thoughts-review__title {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.path-thoughts-review__lede,
+.path-thoughts-review__empty {
+  margin: 6px 0 0;
+  color: var(--path-muted);
+  font-size: 0.88rem;
+}
+
+.path-thoughts-review__groups {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.path-thoughts-review__group h3 {
+  margin: 0 0 8px;
+  font-size: 0.82rem;
+  color: var(--path-muted);
+  font-weight: 600;
+}
+
+.path-thoughts-review__group ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.path-thoughts-review__group li {
+  display: grid;
+  grid-template-columns: 46px 1fr;
+  gap: 8px 10px;
+}
+
+.path-thoughts-review__time {
+  color: var(--path-muted);
+  font-size: 0.75rem;
+}
+
+.path-thoughts-review__text {
+  font-size: 0.9rem;
+}
+
+.path-thoughts-review__meta {
+  grid-column: 2;
+  font-size: 0.72rem;
+  color: var(--path-muted);
+}
+
 .path-review .calls-view {
   max-width: none;
   margin: 0;

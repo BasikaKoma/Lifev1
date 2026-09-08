@@ -1463,6 +1463,157 @@
 }
 
 /* Project day KPI */
+.self-thoughts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem 1rem;
+  border-radius: 18px;
+  background: var(--hub-card);
+  border: 1px solid var(--hub-border);
+}
+
+.self-thoughts__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.self-thoughts__heading {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.self-thoughts__icon {
+  width: 28px;
+  height: 28px;
+  color: var(--hub-accent-bright);
+}
+
+.self-thoughts__eyebrow {
+  margin: 0;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  color: rgba(248, 250, 252, 0.45);
+}
+
+.self-thoughts__count {
+  margin: 0.1rem 0 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.self-thoughts__close {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 12px;
+  background: rgba(52, 211, 153, 0.08);
+  border: 1px solid rgba(52, 211, 153, 0.18);
+  font-size: 0.82rem;
+}
+
+.self-thoughts__close p {
+  margin: 0;
+}
+
+.self-thoughts__composer {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.5rem;
+}
+
+.self-thoughts__input {
+  min-width: 0;
+}
+
+.self-thoughts__empty {
+  margin: 0;
+  font-size: 0.78rem;
+  color: rgba(248, 250, 252, 0.38);
+}
+
+.self-thoughts__list,
+.thought-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.thought-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  overflow: hidden;
+}
+
+.thought-item__swipe {
+  display: grid;
+  grid-template-columns: 46px 1fr;
+  gap: 0.55rem;
+  touch-action: pan-y;
+}
+
+.thought-item__time {
+  font-size: 0.72rem;
+  color: rgba(248, 250, 252, 0.42);
+  padding-top: 0.15rem;
+}
+
+.thought-item__text {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.thought-item__meta {
+  margin: 0.2rem 0 0;
+  font-size: 0.7rem;
+  color: rgba(248, 250, 252, 0.32);
+}
+
+.thought-item--dismissed .thought-item__text {
+  opacity: 0.45;
+}
+
+.thought-item__evening,
+.thought-item__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.thought-item__actions {
+  opacity: 0.7;
+}
+
+.thought-item__actions.is-open,
+.thought-item:hover .thought-item__actions {
+  opacity: 1;
+}
+
+.thought-item__promote {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(248, 250, 252, 0.72);
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 0.68rem;
+  cursor: pointer;
+}
+
+.thought-item__promote:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .self-project-day {
   display: flex;
   flex-direction: column;

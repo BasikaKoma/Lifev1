@@ -110,6 +110,13 @@ function asNullableString(value) {
   return text ? text : null;
 }
 
+/** Keep spaces while typing. Empty string becomes null. */
+function asFreeText(value) {
+  if (value == null) return null;
+  const text = String(value);
+  return text.length ? text : null;
+}
+
 function asNullableNumber(value) {
   if (value == null || value === '') return null;
   const num = typeof value === 'number' ? value : Number(String(value).replace(',', '.'));
@@ -151,19 +158,19 @@ export function createEmptyGoal(overrides = {}) {
     title: asString(overrides.title),
     projectId: asNullableString(overrides.projectId || overrides.project_id),
     projectTitle: asNullableString(overrides.projectTitle || overrides.project_title),
-    lifeArea: asNullableString(overrides.lifeArea || overrides.life_area),
+    lifeArea: asFreeText(overrides.lifeArea || overrides.life_area),
     role: overrides.role === null ? null : pick(GOAL_ROLES, overrides.role, 'Growth'),
-    baseline: asNullableString(overrides.baseline),
-    target: asNullableString(overrides.target),
+    baseline: asFreeText(overrides.baseline),
+    target: asFreeText(overrides.target),
     currentValue: asNullableNumber(overrides.currentValue || overrides.current_value),
-    unit: asNullableString(overrides.unit),
+    unit: asFreeText(overrides.unit),
     deadline: asNullableString(overrides.deadline),
-    why: asNullableString(overrides.why),
-    weeklyAllocation: asNullableString(overrides.weeklyAllocation || overrides.weekly_allocation),
-    minimumAction: asNullableString(overrides.minimumAction || overrides.minimum_action),
+    why: asFreeText(overrides.why),
+    weeklyAllocation: asFreeText(overrides.weeklyAllocation || overrides.weekly_allocation),
+    minimumAction: asFreeText(overrides.minimumAction || overrides.minimum_action),
     status: pick(GOAL_STATUSES, overrides.status, 'Active'),
     color: normalizeGoalColor(overrides.color) || null,
-    notes: asNullableString(overrides.notes),
+    notes: asFreeText(overrides.notes),
     createdAt: overrides.createdAt || overrides.created_at || now,
     updatedAt: overrides.updatedAt || overrides.updated_at || now,
     archivedAt: asNullableString(overrides.archivedAt || overrides.archived_at),
@@ -224,18 +231,18 @@ export function createEmptyBlock(overrides = {}) {
     blockType: pick(BLOCK_TYPES, overrides.blockType || overrides.block_type, 'Deep Work'),
     normalDuration: asNullableNumber(overrides.normalDuration || overrides.normal_duration),
     minimumDuration: asNullableNumber(overrides.minimumDuration || overrides.minimum_duration),
-    minimumAction: asNullableString(overrides.minimumAction || overrides.minimum_action),
+    minimumAction: asFreeText(overrides.minimumAction || overrides.minimum_action),
     status: pick(BLOCK_STATUSES, overrides.status, 'Planned'),
     taskId: asNullableString(overrides.taskId || overrides.task_id),
     taskTitle: asNullableString(overrides.taskTitle || overrides.task_title),
     taskSource: asNullableString(overrides.taskSource || overrides.task_source),
     completeLinkedTask: Boolean(overrides.completeLinkedTask),
     templateId: asNullableString(overrides.templateId || overrides.template_id),
-    notes: asNullableString(overrides.notes),
-    desiredOutcome: asNullableString(overrides.desiredOutcome || overrides.desired_outcome),
-    resultSummary: asNullableString(overrides.resultSummary || overrides.result_summary),
-    remaining: asNullableString(overrides.remaining),
-    nextStep: asNullableString(overrides.nextStep || overrides.next_step),
+    notes: asFreeText(overrides.notes),
+    desiredOutcome: asFreeText(overrides.desiredOutcome || overrides.desired_outcome),
+    resultSummary: asFreeText(overrides.resultSummary || overrides.result_summary),
+    remaining: asFreeText(overrides.remaining),
+    nextStep: asFreeText(overrides.nextStep || overrides.next_step),
     statusAt: asNullableString(overrides.statusAt || overrides.status_at),
     completedAt: asNullableString(overrides.completedAt || overrides.completed_at),
     skippedAt: asNullableString(overrides.skippedAt || overrides.skipped_at),
@@ -275,7 +282,7 @@ export function createEmptyBlockResource(overrides = {}) {
   const now = nowIso();
   return {
     id: overrides.id || createPathId('bres'),
-    title: asNullableString(overrides.title),
+    title: asFreeText(overrides.title),
     url: asNullableString(overrides.url),
     createdAt: overrides.createdAt || overrides.created_at || now,
   };
@@ -305,7 +312,7 @@ export function createEmptyTemplate(overrides = {}) {
     blockType: pick(BLOCK_TYPES, overrides.blockType || overrides.block_type, 'Deep Work'),
     normalDuration: asNullableNumber(overrides.normalDuration || overrides.normal_duration),
     minimumDuration: asNullableNumber(overrides.minimumDuration || overrides.minimum_duration),
-    minimumAction: asNullableString(overrides.minimumAction || overrides.minimum_action),
+    minimumAction: asFreeText(overrides.minimumAction || overrides.minimum_action),
     taskId: asNullableString(overrides.taskId || overrides.task_id),
     taskTitle: asNullableString(overrides.taskTitle || overrides.task_title),
     enabled: overrides.enabled !== false,
@@ -323,7 +330,7 @@ export function createEmptyMetricEntry(overrides = {}) {
     id: overrides.id || createPathId('entry'),
     date: asNullableString(overrides.date),
     value: asNullableNumber(overrides.value),
-    note: asNullableString(overrides.note),
+    note: asFreeText(overrides.note),
   };
 }
 

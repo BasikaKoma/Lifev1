@@ -18,7 +18,7 @@ import { processStages, setStageComplete, toggleStageComplete as toggleStageComp
 import { withCompletionTimestamp } from '../utils/archive';
 import { normalizeProjectBrief } from '../utils/projectBrief';
 import { isSupabaseConfigured } from '../lib/supabase';
-import { flushPathNow, hasPendingPathSave, subscribePathSave } from '../lib/path/store';
+import { flushPathNow, hasPendingPathSave, queuePathSave, readPathBundleLocal, subscribePathSave } from '../lib/path/store';
 import { SAVE_INTERVAL_MS } from '../constants/save';
 import {
   loadInitialProject,
@@ -65,6 +65,7 @@ import {
   resolvePlanDayHeight,
 } from '../utils/planMode';
 import { patchDayEntry, normalizeLifelineDays, mergeLifelineDaysMaps, routineTemplatesEqual, patchMultipleDayEntries, getDayEntry, normalizeRoutineTemplates, appendDayJournalNote } from '../utils/lifelineDays';
+import { appendThought, applyThoughtToPathNextStep, removeThought, snapshotThoughtContext, updateThought } from '../utils/dayThoughts';
 import { normalizeNorthStars, northStarsEqual } from '../utils/lifelineNorthStars';
 import { mapLifelineReconcileToState } from '../utils/lifelineMerge';
 import { normalizeSelfHubDays } from '../utils/selfHubDays';
@@ -230,6 +231,7 @@ export function useAppState(userId) {
   const lifelineDaysRef = useRef({});
   const selfHubDaysRef = useRef({});
   const [lifelineFocusToken, setLifelineFocusToken] = useState(0);
+  const [projectsFocusToken, setProjectsFocusToken] = useState(0);
   const lastRegularProjectIdRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [syncError, setSyncError] = useState(null);
@@ -1248,11 +1250,25 @@ export function useAppState(userId) {
     setHasUnsavedChanges(sessionHasUnsavedWork());
   }, [applyLifelineBundleLocally, clearHistory, hydrateLifelineHubFromState, rememberSyncedState, sessionHasUnsavedWork, snapshotPendingHub]);
 
-  const switchProject = useCallback(async (projectId) => {
-    if (!projectId || stateRef.current?.projectId === projectId) return;
+  const switchProject = useCallback(async (projectId, options = {}) => {
+    const focusNextCheckpoint = options.focusNextCheckpoint === true;
+    if (!projectId) return;
+    if (stateRef.current?.projectId === projectId) {
+      if (focusNextCheckpoint) {
+        setState((prev) => (
+          prev ? { ...prev, activeView: 'projects', selectedStageId: null } : prev
+        ));
+        setProjectsFocusToken(Date.now());
+      }
+      return;
+    }
     setSyncError(null);
     stashCurrentProject();
-    if (restoreSessionProject(projectId, { selectedStageId: null })) return;
+    if (focusNextCheckpoint) setProjectsFocusToken(Date.now());
+    if (restoreSessionProject(projectId, {
+      selectedStageId: null,
+      ...(focusNextCheckpoint ? { activeView: 'projects' } : {}),
+    })) return;
     setLoading(true);
     try {
       const data = await loadProjectById(projectId);
@@ -1261,7 +1277,9 @@ export function useAppState(userId) {
         ...data,
         projectList: projectListRef.current,
         selectedStageId: null,
-        activeView: normalizeActiveView(data.activeView || 'projects'),
+        activeView: focusNextCheckpoint
+          ? 'projects'
+          : normalizeActiveView(data.activeView || 'projects'),
       });
     } catch (err) {
       setSyncError(err.message || 'Failed to switch project');
@@ -3275,6 +3293,30 @@ export function useAppState(userId) {
       itemId: capture.itemId || generateId(),
     };
 
+    if (classified.type === 'thought') {
+      const today = toDateString(new Date());
+      const lifelineSource = mergeLifelineDaysMaps(
+        lifelineDaysRef.current,
+        current.isLifeline ? current.lifelineDays : {}
+      );
+      const previousThoughts = getDayEntry(lifelineSource, today).thoughts || [];
+      const context = capture.thoughtContext || snapshotThoughtContext({ at: new Date() });
+      const nextThoughts = appendThought(previousThoughts, classified.body || classified.title, context);
+      const thought = nextThoughts[nextThoughts.length - 1];
+      updateLifelineDay(today, { thoughts: nextThoughts });
+      flushSaveNow().catch(() => {});
+      return {
+        remote: false,
+        itemId: thought?.id || classified.itemId,
+        type: 'thought',
+        date: today,
+        previousThoughts,
+        projectId: lifelineProjectId || targetId,
+        projectTitle: 'Lifeline',
+        message: 'Αποθηκεύτηκε: Σκέψη → Σήμερα',
+      };
+    }
+
     const isLifelineTarget =
       Boolean(lifelineProjectId && targetId === lifelineProjectId) ||
       (current.isLifeline === true && targetId === currentId);
@@ -3345,6 +3387,18 @@ export function useAppState(userId) {
       updateLifelineDay(ref.date, { notes: ref.previousNotes || '' });
       return;
     }
+    if (ref.type === 'thought' && ref.date) {
+      const current = stateRef.current;
+      const lifelineSource = mergeLifelineDaysMaps(
+        lifelineDaysRef.current,
+        current?.isLifeline ? current.lifelineDays : {}
+      );
+      const previous = Array.isArray(ref.previousThoughts)
+        ? ref.previousThoughts
+        : removeThought(getDayEntry(lifelineSource, ref.date).thoughts, ref.itemId);
+      updateLifelineDay(ref.date, { thoughts: previous });
+      return;
+    }
     const currentId = stateRef.current?.projectId;
     if (!ref.remote || ref.projectId === currentId) {
       patchState((prev) => removeCaptureFromState(prev, ref).state);
@@ -3353,6 +3407,58 @@ export function useAppState(userId) {
     await removeCaptureFromRemoteProject(ref.projectId, ref);
     refreshProjectActivity().catch(() => {});
   }, [patchState, refreshProjectActivity, updateLifelineDay]);
+
+  const promoteThought = useCallback(async (dateStr, thoughtId, kind) => {
+    const date = toDateString(dateStr) || toDateString(new Date());
+    const current = stateRef.current;
+    const lifelineSource = mergeLifelineDaysMaps(
+      lifelineDaysRef.current,
+      current?.isLifeline ? current.lifelineDays : {}
+    );
+    const thoughts = getDayEntry(lifelineSource, date).thoughts || [];
+    const thought = thoughts.find((item) => item.id === thoughtId);
+    if (!thought) throw new Error('Η σκέψη δεν βρέθηκε.');
+
+    const promoted = { type: kind, at: new Date().toISOString() };
+
+    if (kind === 'task' || kind === 'idea') {
+      const targetId = current?.isLifeline
+        ? lastRegularProjectIdRef.current || current.projectId
+        : current?.projectId;
+      if (!targetId) throw new Error('Δεν υπάρχει project για promote.');
+      const capture = {
+        type: kind,
+        title: thought.text.slice(0, 80),
+        body: thought.text,
+        projectId: targetId,
+      };
+      if (targetId === current?.projectId) {
+        let applied = null;
+        patchState((prev) => {
+          applied = applyCaptureToState(prev, capture);
+          return applied.state;
+        });
+        promoted.itemId = applied?.itemId || null;
+        promoted.projectId = targetId;
+      } else {
+        const remote = await appendCaptureToRemoteProject(targetId, capture);
+        promoted.itemId = remote.itemId;
+        promoted.projectId = targetId;
+      }
+    } else if (kind === 'path-next') {
+      const result = applyThoughtToPathNextStep(readPathBundleLocal(), thought);
+      if (!result.block) throw new Error('Δεν υπάρχει Path block σήμερα.');
+      queuePathSave(result.bundle);
+      promoted.blockId = result.block.id;
+    } else {
+      throw new Error('Άγνωστο promote.');
+    }
+
+    updateLifelineDay(date, {
+      thoughts: updateThought(thoughts, thoughtId, { promoted }),
+    });
+    return promoted;
+  }, [patchState, updateLifelineDay]);
 
   const base = {
     loading,
@@ -3377,6 +3483,7 @@ export function useAppState(userId) {
     lifelineProjectId,
     lastRegularProjectId,
     lifelineFocusToken,
+    projectsFocusToken,
     lifelineAnchors,
     setLifelineAnchorDate,
     updateLifelineDay,
@@ -3477,6 +3584,7 @@ export function useAppState(userId) {
     applyBrainActions,
     applySmartCapture,
     undoSmartCapture,
+    promoteThought,
   };
 
   if (!state) {
@@ -3518,6 +3626,7 @@ export function useAppState(userId) {
     lifelineProjectId,
     lastRegularProjectId,
     lifelineFocusToken,
+    projectsFocusToken,
     lifelineAnchors,
     projectActivity,
     selfHubDays,

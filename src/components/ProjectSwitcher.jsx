@@ -12,6 +12,7 @@ function getInitials(name) {
 export function ProjectSwitcher({
   projectTitle,
   projectId,
+  loadedProjectId,
   projectList,
   onSwitch,
   onCreate,
@@ -94,7 +95,7 @@ export function ProjectSwitcher({
                   type="button"
                   className={`project-switcher__item ${p.id === projectId ? 'project-switcher__item--active' : ''}`}
                   onClick={() => {
-                    if (p.id !== projectId) onSwitch(p.id);
+                    if (p.id !== (loadedProjectId || projectId)) onSwitch(p.id);
                     setOpen(false);
                   }}
                 >

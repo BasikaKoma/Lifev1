@@ -8,9 +8,10 @@ import {
 import { nextFreeCanvasTaskPosition } from './canvasNodes';
 import { processStages } from './logic';
 
-export const CAPTURE_TYPES = ['note', 'idea', 'task', 'goal'];
+export const CAPTURE_TYPES = ['thought', 'note', 'idea', 'task', 'goal'];
 
 export const CAPTURE_TYPE_LABELS = {
+  thought: 'Σκέψη',
   note: 'Σημείωση',
   idea: 'Ιδέα',
   task: 'Task',
@@ -72,6 +73,15 @@ function detectType(text) {
   const reasons = [];
 
   if (
+    /(?:σκεψη|thought)\s*[:：]/.test(n) ||
+    /(?:γραψε|κρατα|βαλε|add|save).{0,12}(?:σκεψη|thought)/.test(n) ||
+    /(?:σκεφτομαι|just thinking|random thought)/.test(n)
+  ) {
+    reasons.push('ρητή σκέψη');
+    return { type: 'thought', confidence: 0.94, reasons };
+  }
+
+  if (
     /(?:εχω|have).{0,20}(?:ιδεα|idea)/.test(n) ||
     /(?:γραψε|προσθεσε|βαλε|add|save).{0,12}(?:ιδεα|idea)/.test(n) ||
     /(?:ιδεα|idea)\s*[:：]/.test(n)
@@ -116,8 +126,8 @@ function detectType(text) {
     return { type: 'note', confidence: 0.62, reasons };
   }
 
-  reasons.push('προεπιλογή σημείωσης');
-  return { type: 'note', confidence: 0.42, reasons };
+  reasons.push('προεπιλογή σκέψης');
+  return { type: 'thought', confidence: 0.42, reasons };
 }
 
 function stripIntentAndNames(raw, names = []) {
@@ -138,6 +148,7 @@ function stripIntentAndNames(raw, names = []) {
   text = text
     .replace(/^(?:έχω|εχω|have)\s+(?:μια\s+|την?\s+)?/i, '')
     .replace(/^(?:την?\s+)?(?:ιδέα|ιδεα|idea)\s*[:：]?\s*/i, '')
+    .replace(/^(?:σκέψη|σκεψη|thought)\s*[:：]?\s*/i, '')
     .replace(/^(?:σημείωση|σημειωση|note|θυμήσου|θυμησου)\s*[:：]?\s*/i, '')
     .replace(/^(?:todo|task|στόχος|στοχος|goal)\s*[:：]?\s*/i, '')
     .replace(/^(?:γράψε|φτιάξε|πρόσθεσε|βάλε|κάνε|γραψε|φτιαξε|προσθεσε|βαλε|κανε|create|add|make|save)\s+(?:μου\s+)?/i, '')
@@ -269,6 +280,7 @@ export function classifyCapture(text, ctx = {}) {
 
 export function describeCapture(result) {
   if (!result) return '';
+  if (result.type === 'thought') return 'Σκέψη → Σήμερα';
   const typeLabel = CAPTURE_TYPE_LABELS[result.type] || 'Σημείωση';
   const project = result.needsTriage
     ? `Inbox / ${result.projectTitle || 'τρέχον'}`
@@ -292,7 +304,9 @@ export function applyCaptureToState(state, capture) {
   const now = new Date().toISOString();
   const title = (capture.title || '').trim() || 'Quick note';
   const body = (capture.body || title).trim();
-  const type = CAPTURE_TYPES.includes(capture.type) ? capture.type : 'note';
+  const type = CAPTURE_TYPES.includes(capture.type) && capture.type !== 'thought'
+    ? capture.type
+    : 'note';
 
   if (type === 'idea') {
     const idea = createEmptyIdea({

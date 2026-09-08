@@ -123,6 +123,13 @@ export function SelfIcon({ name }) {
         <path d="M9 13h6M9 17h4" />
       </svg>
     ),
+    thought: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M8.5 16.5c-2.8-1-4.5-3.4-4.5-6.2C4 6.5 7.1 4 12 4s8 2.5 8 6.3c0 2.8-1.7 5.2-4.5 6.2" />
+        <path d="M10 18.5c.4 1.2 1.2 2 2 2s1.6-.8 2-2" />
+        <path d="M9 10h.01M12 10h.01M15 10h.01" />
+      </svg>
+    ),
     meal: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <path d="M6 3v7a2 2 0 0 0 4 0V3" />

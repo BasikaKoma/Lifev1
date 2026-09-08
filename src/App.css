@@ -2524,9 +2524,39 @@ html:has(.app--projects) body {
   height: 40px;
 }
 
+.quick-note-orb__types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 8px;
+}
+
+.quick-note-orb__chip {
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.quick-note-orb__chip.is-active {
+  color: #ecfdf5;
+  border-color: rgba(52, 211, 153, 0.45);
+  background: rgba(16, 185, 129, 0.16);
+}
+
+.quick-note-orb__today {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
 .quick-note-orb__route {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 8px;
   margin-bottom: 8px;
 }
@@ -6667,11 +6697,11 @@ html:has(.app--projects) body {
   position:relative;
   display:flex;
   flex-direction:column;
-  width:min(1200px,100%);
-  height:min(88vh,900px);
+  width:min(720px,100%);
+  height:min(88vh,860px);
   border-radius:16px;
   border:1px solid rgba(255,255,255,.12);
-  background:#0a0a0a;
+  background:#101010;
   box-shadow:0 32px 80px #000000a6;
   overflow:hidden
 }
@@ -6733,28 +6763,121 @@ html:has(.app--projects) body {
   color:#fff
 }
 
-.checkpoint-notes-modal__toolbar {
-  flex-shrink:0;
-  padding:8px 12px;
-  border-bottom:1px solid rgba(255,255,255,.06);
-  background:#0c0c0cf2
+.checkpoint-notes-modal__kbd {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:18px;
+  height:18px;
+  margin-left:8px;
+  padding:0 5px;
+  border:1px solid rgba(255,255,255,.14);
+  border-radius:4px;
+  font-size:.6875rem;
+  font-weight:600;
+  letter-spacing:.04em;
+  color:#ffffff8c
 }
 
-.checkpoint-notes-modal__stage {
+.checkpoint-notes-modal__body {
   flex:1;
   min-height:0;
-  background:#000
+  overflow:auto;
+  padding:20px 22px 28px;
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+  background:#0c0c0c
 }
 
-.checkpoint-notes-modal__zoom,.checkpoint-notes-modal__zoom .zoom-canvas__viewport {
-  height:100%;
-  min-height:0
+.checkpoint-notes-modal__page {
+  display:block;
+  flex:1 0 auto;
+  min-height:220px
 }
 
-.checkpoint-notes-modal__board {
-  position:relative;
-  min-width:1600px;
-  min-height:1200px
+.checkpoint-notes-modal__editor,
+.checkpoint-notes-modal__card-editor {
+  width:100%;
+  border:none;
+  outline:none;
+  resize:none;
+  background:transparent;
+  color:#f5f5f5;
+  font:inherit;
+  line-height:1.65;
+  overflow:hidden
+}
+
+.checkpoint-notes-modal__editor {
+  min-height:220px;
+  padding:8px 2px 16px;
+  font-size:1.0625rem;
+  letter-spacing:-.01em
+}
+
+.checkpoint-notes-modal__editor::placeholder,
+.checkpoint-notes-modal__card-editor::placeholder {
+  color:#ffffff4d
+}
+
+.checkpoint-notes-modal__editor:focus,
+.checkpoint-notes-modal__card-editor:focus {
+  outline:none;
+  box-shadow:none
+}
+
+.checkpoint-notes-modal__card {
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:12px;
+  background:#161616;
+  padding:10px 12px 12px
+}
+
+.checkpoint-notes-modal__card-bar {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  margin-bottom:4px
+}
+
+.checkpoint-notes-modal__card-label {
+  font-size:.6875rem;
+  font-weight:600;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+  color:#ffffff59
+}
+
+.checkpoint-notes-modal__card-delete {
+  width:24px;
+  height:24px;
+  border:none;
+  border-radius:6px;
+  background:transparent;
+  color:#ffffff73;
+  font-size:1.125rem;
+  line-height:1;
+  cursor:pointer
+}
+
+.checkpoint-notes-modal__card-delete:hover {
+  background:#ffffff14;
+  color:#fff
+}
+
+.checkpoint-notes-modal__card-editor {
+  min-height:80px;
+  padding:4px 2px 0;
+  font-size:.9375rem
+}
+
+.checkpoint-notes-modal__card-image {
+  display:block;
+  max-width:100%;
+  border-radius:8px;
+  margin:6px 0 8px
 }
 
 .canvas-connection__line {
@@ -10679,6 +10802,23 @@ to {
 .lifeline-day-tick--today .lifeline-day-tick__label {
   color:#facc15f2;
   font-weight:700
+}
+
+.lifeline-day-tick__thoughts {
+  position: absolute;
+  left: calc(50% + 10px);
+  top: -2px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: rgba(52, 211, 153, 0.22);
+  color: #6ee7b7;
+  font-size: 0.55rem;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+  pointer-events: none;
 }
 
 .lifeline-day-tick__score {

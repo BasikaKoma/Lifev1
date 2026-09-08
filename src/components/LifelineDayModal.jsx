@@ -39,6 +39,8 @@ import { DAY_VIEW_PHASE } from '../hooks/useLifelineDayView';
 import { SelfMetricCard } from './self/SelfMetricCard';
 import { SelfChart } from './self/SelfCharts';
 import { SelfIcon } from './self/SelfIcons';
+import { ThoughtItem } from './ThoughtItem';
+import { appendThought, visibleThoughts } from '../utils/dayThoughts';
 import './SelfView.css';
 import './selfHub.css';
 import './DayLab.css';
@@ -59,6 +61,10 @@ export function LifelineDayModal({
   pathBundle = null,
   onUpdateDay,
   onUpdateRoutineTemplates,
+  onPromoteThought,
+  onKeepThought,
+  onDismissThought,
+  onAddThought,
   onClose,
   backLabel = '← Lifeline',
 }) {
@@ -80,6 +86,8 @@ export function LifelineDayModal({
     };
   }, [lifelineDays, selfHubDays, date]);
   const [notes, setNotes] = useState(entry.notes);
+  const [newThought, setNewThought] = useState('');
+  const [savingThought, setSavingThought] = useState(false);
   const [newTodo, setNewTodo] = useState('');
   const [newRoutineLabel, setNewRoutineLabel] = useState('');
   const [newRoutineTime, setNewRoutineTime] = useState('');
@@ -468,6 +476,58 @@ export function LifelineDayModal({
                   + Ρουτίνα
                 </button>
               </form>
+            </section>
+
+            <section className="day-lab__panel">
+              <h3 className="day-lab__panel-title">Σκέψεις</h3>
+              <form
+                className="day-lab__thought-form"
+                onSubmit={async (event) => {
+                  event.preventDefault();
+                  const text = newThought.trim();
+                  if (!text || !date || savingThought) return;
+                  setSavingThought(true);
+                  try {
+                    if (onAddThought && date === localTodayIsoDate()) {
+                      await onAddThought(text);
+                    } else {
+                      onUpdateDay?.(date, {
+                        thoughts: appendThought(entry.thoughts, text),
+                      });
+                    }
+                    setNewThought('');
+                  } finally {
+                    setSavingThought(false);
+                  }
+                }}
+              >
+                <input
+                  className="input"
+                  value={newThought}
+                  onChange={(event) => setNewThought(event.target.value)}
+                  placeholder="Γρήγορη σκέψη…"
+                  aria-label="Νέα σκέψη"
+                />
+                <button type="submit" className="btn btn--primary btn--sm" disabled={!newThought.trim() || savingThought}>
+                  +
+                </button>
+              </form>
+              {visibleThoughts(entry.thoughts, { includeDismissed: true }).length === 0 ? (
+                <p className="day-lab__empty">Καμία σκέψη αυτή την ημέρα.</p>
+              ) : (
+                <ul className="thought-list day-lab__thoughts">
+                  {[...visibleThoughts(entry.thoughts, { includeDismissed: true })].reverse().map((thought) => (
+                    <ThoughtItem
+                      key={thought.id}
+                      thought={thought}
+                      compact
+                      onPromote={onPromoteThought ? (id, kind) => onPromoteThought(date, id, kind) : undefined}
+                      onKeep={onKeepThought ? (id) => onKeepThought(date, id) : undefined}
+                      onDismiss={onDismissThought ? (id) => onDismissThought(date, id) : undefined}
+                    />
+                  ))}
+                </ul>
+              )}
             </section>
 
             <section className="day-lab__panel">

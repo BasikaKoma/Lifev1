@@ -13,6 +13,7 @@ import {
   SelfNextBestActionCard,
   SelfSummaryStrip,
   SelfProjectDayCard,
+  SelfThoughtsCard,
   SelfRoutinesCard,
   SelfPathWeekCard,
   SelfHubMenu,
@@ -60,6 +61,10 @@ export function SelfView({
   pathBundle = null,
   onOpenPath,
   onOpenPathWeek,
+  onAddThought,
+  onPromoteThought,
+  onKeepThought,
+  onDismissThought,
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [focusMessage, setFocusMessage] = useState(null);
@@ -298,6 +303,15 @@ export function SelfView({
             />
           </div>
 
+          <SelfThoughtsCard
+            thoughts={getDayEntry(lifelineDays, today)?.thoughts || []}
+            onAddThought={onAddThought}
+            onPromoteThought={(thoughtId, kind) => onPromoteThought?.(today, thoughtId, kind)}
+            onKeepThought={(thoughtId) => onKeepThought?.(today, thoughtId)}
+            onDismissThought={(thoughtId) => onDismissThought?.(today, thoughtId)}
+            onOpenDayDetails={handleOpenDayDetails}
+          />
+
           <SelfProjectDayCard
             projectDay={hubView.projectDay}
             onOpenDayDetails={handleOpenDayDetails}
@@ -323,6 +337,10 @@ export function SelfView({
         pathBundle={pathBundle}
         onUpdateDay={onUpdateLifelineDay}
         onUpdateRoutineTemplates={handleUpdateRoutineTemplates}
+        onPromoteThought={onPromoteThought}
+        onKeepThought={onKeepThought}
+        onDismissThought={onDismissThought}
+        onAddThought={onAddThought}
         onClose={handleCloseDayDetails}
         backLabel="← Self"
       />

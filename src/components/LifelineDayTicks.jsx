@@ -96,6 +96,7 @@ export function LifelineDayTicks({
           ? getRoutineDayScore(templates, getDayEntry(lifelineDays, tick.date).routines)
           : { total: 0, label: '' };
         const showRoutineScore = routineScore.total > 0 && (detailZoom || tick.isToday || hasContent);
+        const thoughtCount = getDayEntry(lifelineDays, tick.date).thoughts?.length || 0;
 
         return (
           <button
@@ -124,8 +125,8 @@ export function LifelineDayTicks({
               e.preventDefault();
               onDayClick?.(tick.date, e.currentTarget);
             }}
-            title={`Άνοιγμα ημέρας — ${formatDayLabel(tick.date)}${showRoutineScore ? ` · ${routineScore.label}` : ''}`}
-            aria-label={`Ημέρα ${formatDayLabel(tick.date)}${showRoutineScore ? `, ρουτίνες ${routineScore.label}` : ''}`}
+            title={`Άνοιγμα ημέρας — ${formatDayLabel(tick.date)}${thoughtCount ? ` · ${thoughtCount} σκέψεις` : ''}${showRoutineScore ? ` · ${routineScore.label}` : ''}`}
+            aria-label={`Ημέρα ${formatDayLabel(tick.date)}${thoughtCount ? `, ${thoughtCount} σκέψεις` : ''}${showRoutineScore ? `, ρουτίνες ${routineScore.label}` : ''}`}
             aria-current={isSelected ? 'date' : undefined}
           >
             <span className="lifeline-day-tick__line" />
@@ -138,6 +139,9 @@ export function LifelineDayTicks({
                 </span>
               )
             )}
+            {thoughtCount > 0 ? (
+              <span className="lifeline-day-tick__thoughts" aria-hidden>{thoughtCount}</span>
+            ) : null}
             {showRoutineScore ? (
               <span className="lifeline-day-tick__score">{routineScore.label}</span>
             ) : null}

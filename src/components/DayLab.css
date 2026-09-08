@@ -345,6 +345,25 @@
   color: var(--self-emerald-bright);
 }
 
+.day-lab__thought-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.day-lab__thoughts {
+  margin-top: 0.25rem;
+}
+
+.day-lab .thought-item__text {
+  color: #e5e5e5;
+}
+
+.day-lab .thought-item__meta {
+  color: rgba(229, 229, 229, 0.4);
+}
+
 .day-lab__notes {
   min-height: 100px;
   resize: vertical;

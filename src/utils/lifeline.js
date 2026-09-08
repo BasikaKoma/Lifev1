@@ -120,6 +120,7 @@ export function getLifelineDayIntensity(dayData) {
   if (!dayData) return 0;
   let score = 0;
   if (dayData.notes?.trim()) score += 0.35;
+  if (dayData.thoughts?.length) score += Math.min(0.3, dayData.thoughts.length * 0.08);
   const todos = dayData.todos || [];
   if (todos.length) {
     const done = todos.filter((t) => t?.done).length;
@@ -146,6 +147,7 @@ export function hasLifelineDayContent(dayData, date, activityDates = null) {
   if (date && activityDates?.has?.(date)) return true;
   if (!dayData) return false;
   if (dayData.notes?.trim()) return true;
+  if (dayData.thoughts?.length > 0) return true;
   if (dayData.todos?.length > 0) return true;
   if (Object.values(dayData.routines || {}).some((r) => r?.done)) return true;
   return hasLifelineDayMetrics(dayData.metrics);

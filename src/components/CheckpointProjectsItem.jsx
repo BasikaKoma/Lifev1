@@ -97,6 +97,7 @@ export function CheckpointProjectsItem({
   const dragOrigin = useRef(null);
   const moved = useRef(false);
   const dragAxis = useRef(null);
+  const lastClickAt = useRef(0);
   const nodeRef = { type: 'checkpoint', id: checkpoint.id, stageId };
   const isConnectSource = sameNodeRef(connectFrom, nodeRef);
   const isSelected = sameNodeRef(selectedNodeRef, nodeRef);
@@ -196,10 +197,22 @@ export function CheckpointProjectsItem({
     setDragOffset(dragOrigin.current.offset + dx);
   };
 
+  const openNotes = () => {
+    setExpanded(false);
+    onOpenCheckpoint?.(stageId, checkpoint.id);
+  };
+
   const finishDrag = () => {
     if (!moved.current) {
       if (connectModeActive && onConnectClick) {
         onConnectClick(nodeRef);
+        return;
+      }
+      const now = Date.now();
+      const isDoubleClick = now - lastClickAt.current < 350;
+      lastClickAt.current = now;
+      if (isDoubleClick && onOpenCheckpoint) {
+        openNotes();
         return;
       }
       onNodeSelect?.(nodeRef);
@@ -267,7 +280,22 @@ export function CheckpointProjectsItem({
   const handleTitleDoubleClick = (e) => {
     e.stopPropagation();
     e.preventDefault();
+    if (e.altKey) {
+      setEditingTitle(true);
+      return;
+    }
+    if (onOpenCheckpoint) {
+      openNotes();
+      return;
+    }
     setEditingTitle(true);
+  };
+
+  const handleItemDoubleClick = (e) => {
+    if (e.target.closest(interactiveSelector)) return;
+    e.stopPropagation();
+    e.preventDefault();
+    if (onOpenCheckpoint) openNotes();
   };
 
   const labelStyle = getLabelStyle(centerX, side, dragOffset);
@@ -306,6 +334,11 @@ export function CheckpointProjectsItem({
               : { left: centerX + 12, transform: 'translateY(-50%)' }),
           }}
           onClick={() => onOpenPlanPanel?.(stageId, checkpoint.id)}
+          onDoubleClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onOpenCheckpoint?.(stageId, checkpoint.id);
+          }}
           title={checkpoint.title}
         >
           <span className="checkpoint-projects-item__lifeline-mini-title">{checkpoint.title}</span>
@@ -352,7 +385,8 @@ export function CheckpointProjectsItem({
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerCancel}
-          title="Κλικ για panel · σύρε κάθετα για αλλαγή ημέρας"
+          onDoubleClick={handleItemDoubleClick}
+          title="Διπλό κλικ για σημειώσεις · κλικ για panel · σύρε κάθετα για αλλαγή ημέρας"
         >
           <div className="checkpoint-projects-item__plan-anchor">
             {dayLabel && (
@@ -403,7 +437,7 @@ export function CheckpointProjectsItem({
                     <span
                       className="checkpoint-projects-item__text checkpoint-projects-item__text--plan"
                       onDoubleClick={handleTitleDoubleClick}
-                      title="Διπλό κλικ για επεξεργασία"
+                      title="Διπλό κλικ για σημειώσεις"
                     >
                       {checkpoint.title}
                     </span>
@@ -522,10 +556,11 @@ export function CheckpointProjectsItem({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
+        onDoubleClick={handleItemDoubleClick}
         title={
           done && hasSettledLinkedNotes
-            ? 'Κλικ για εμφάνιση σημειώσεων'
-            : 'Διπλό κλικ στον τίτλο για επεξεργασία · σύρε κάθετα για σειρά'
+            ? 'Διπλό κλικ για σημειώσεις'
+            : 'Διπλό κλικ για σημειώσεις · σύρε κάθετα για σειρά'
         }
       >
         <label
@@ -569,7 +604,7 @@ export function CheckpointProjectsItem({
                 <span
                   className={`checkpoint-projects-item__text${hasNotes ? ' checkpoint-projects-item__text--has-notes' : ''}`}
                   onDoubleClick={handleTitleDoubleClick}
-                  title="Διπλό κλικ για επεξεργασία τίτλου"
+                  title="Διπλό κλικ για σημειώσεις"
                 >
                   {checkpoint.title}
                 </span>
