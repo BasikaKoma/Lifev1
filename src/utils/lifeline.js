@@ -101,12 +101,20 @@ export function canEnterLifelineDayView(daySpacing) {
   return (Number(daySpacing) || 0) >= LIFELINE_ZOOM.everyDaySpacing;
 }
 
+/** CSS-scale bucket used by `resolveLifelineZoomLevel` (spacing handled separately). */
+export function lifelineCssScaleBucket(cssScale) {
+  const scale = Number(cssScale) || 1;
+  if (scale < 0.42) return LIFELINE_ZOOM_LEVEL.life;
+  if (scale < 0.7) return LIFELINE_ZOOM_LEVEL.time;
+  return LIFELINE_ZOOM_LEVEL.month;
+}
+
 /** Resolve semantic zoom level from day spacing and CSS overview scale. */
 export function resolveLifelineZoomLevel(daySpacing, cssScale = 1) {
   const spacing = Number(daySpacing) || 0;
-  const scale = Number(cssScale) || 1;
-  if (scale < 0.42 || spacing < 5) return LIFELINE_ZOOM_LEVEL.life;
-  if (scale < 0.7 || spacing < 9) return LIFELINE_ZOOM_LEVEL.time;
+  const cssBucket = lifelineCssScaleBucket(cssScale);
+  if (cssBucket === LIFELINE_ZOOM_LEVEL.life || spacing < 5) return LIFELINE_ZOOM_LEVEL.life;
+  if (cssBucket === LIFELINE_ZOOM_LEVEL.time || spacing < 9) return LIFELINE_ZOOM_LEVEL.time;
   if (spacing < LIFELINE_ZOOM.everyDaySpacing) return LIFELINE_ZOOM_LEVEL.month;
   return LIFELINE_ZOOM_LEVEL.week;
 }
@@ -180,22 +188,29 @@ export function nextLifelineDayHeight(mapTheme, extraDates = [], zoomIn) {
  * renders, so the dates never shift — only the spacing between them grows.
  * Returns null when the gap can't grow any more (whole line already at the
  * budget-fit cap), which the caller treats as "open Day View".
+ *
+ * `steps` applies several wheel ticks in one sync (coalesced zoom).
  */
-export function applyLifelineDayHeightZoom(mapTheme, extraDates, zoomIn, anchorDate) {
-  const nextHeight = nextLifelineDayHeight(mapTheme, extraDates, zoomIn);
+export function applyLifelineDayHeightZoom(mapTheme, extraDates, zoomIn, anchorDate, steps = 1) {
+  const count = Math.max(1, Math.min(16, Math.round(Number(steps) || 1)));
+  let working = mapTheme;
+  let nextHeight = null;
+  for (let i = 0; i < count; i += 1) {
+    const stepped = nextLifelineDayHeight(working, extraDates, zoomIn);
+    if (stepped == null) break;
+    nextHeight = stepped;
+    working = {
+      ...working,
+      lifeline: {
+        ...(working?.lifeline || {}),
+        dayHeight: stepped,
+      },
+    };
+  }
   if (nextHeight == null) return null;
 
   const before = getLifelineConfig(mapTheme, extraDates);
-  const synced = syncLifelineMapTheme(
-    {
-      ...mapTheme,
-      lifeline: {
-        ...(mapTheme?.lifeline || {}),
-        dayHeight: nextHeight,
-      },
-    },
-    extraDates
-  );
+  const synced = syncLifelineMapTheme(working, extraDates);
   const after = getLifelineConfig(synced, extraDates);
   // The whole line always fits — if the rendered gap didn't move, we're at the
   // budget cap. Nothing to magnify → let the caller open Day View.
@@ -205,7 +220,7 @@ export function applyLifelineDayHeightZoom(mapTheme, extraDates, zoomIn, anchorD
     toDateString(anchorDate) || toDateString(new Date()) || after.startDate;
   const layout = synced.roadmap || mapTheme?.roadmap;
   const anchorY = focus ? getDayTickCanvasY(focus, after, layout, extraDates) : null;
-  return { mapTheme: synced, anchorY, dayHeight: nextHeight };
+  return { mapTheme: synced, anchorY, dayHeight: after.dayHeight };
 }
 
 /** Reset day density to default (CSS scale handled separately). */
@@ -700,21 +715,27 @@ export function generateLifelineDayBands(config, lineMetrics, layout = null, lif
 
   const totalDays = computeLifelineDayCount(config);
   const spacing = height / Math.max(1, totalDays);
+  const start = parseDate(config.startDate);
+  if (!start) return [];
+  const cursor = new Date(start.getFullYear(), start.getMonth(), start.getDate());
   const bands = [];
 
   for (let i = 0; i < totalDays; i += 1) {
-    const date = addDays(config.startDate, i);
+    const date = `${cursor.getFullYear()}-${pad2(cursor.getMonth() + 1)}-${pad2(cursor.getDate())}`;
     const intensity = Math.max(
       getLifelineDayIntensity(lifelineDays[date]),
       activityDates?.has?.(date) ? 0.25 : 0
     );
-    if (intensity <= 0) continue;
-    bands.push({
-      date,
-      top: bottomY - i * spacing - spacing,
-      height: spacing,
-      intensity,
-    });
+    if (intensity > 0) {
+      bands.push({
+        date,
+        dayIndex: i,
+        top: bottomY - i * spacing - spacing,
+        height: spacing,
+        intensity,
+      });
+    }
+    cursor.setDate(cursor.getDate() + 1);
   }
 
   return bands;
@@ -741,15 +762,17 @@ export function generateDayTicks(config, lineMetrics, layout = null, options = {
   const lifelineDays = options.lifelineDays || {};
   const activityDates = options.activityDates || null;
   const zoomLevel = options.zoomLevel ?? resolveLifelineZoomLevel(spacing);
+  const start = parseDate(config.startDate);
+  if (!start) return [];
+  const cursor = new Date(start.getFullYear(), start.getMonth(), start.getDate());
   const ticks = [];
 
   for (let i = 0; i < totalDays; i += 1) {
-    const date = addDays(config.startDate, i);
+    const date = `${cursor.getFullYear()}-${pad2(cursor.getMonth() + 1)}-${pad2(cursor.getDate())}`;
     const tickTop = bottomY - i * spacing;
-    const parsed = parseDate(date);
-    const dayOfWeek = parsed?.getDay() ?? 0;
-    const dayOfMonth = parsed?.getDate() ?? 1;
-    const monthIndex = parsed?.getMonth() ?? 0;
+    const dayOfWeek = cursor.getDay();
+    const dayOfMonth = cursor.getDate();
+    const monthIndex = cursor.getMonth();
     const isMonthStart = dayOfMonth === 1;
     const isYearStart = isMonthStart && monthIndex === 0;
     const isWeekStart = dayOfWeek === 1;
@@ -790,24 +813,77 @@ export function generateDayTicks(config, lineMetrics, layout = null, options = {
         break;
     }
 
-    if (!isInteractive) continue;
-
-    ticks.push({
-      dayIndex: i,
-      date,
-      top: tickTop,
-      isToday,
-      isWeekStart,
-      isMonthStart,
-      isYearStart,
-      showLabel,
-      labelKind,
-      intensity,
-      hasContent,
-    });
+    if (isInteractive) {
+      ticks.push({
+        dayIndex: i,
+        date,
+        top: tickTop,
+        isToday,
+        isWeekStart,
+        isMonthStart,
+        isYearStart,
+        showLabel,
+        labelKind,
+        intensity,
+        hasContent,
+      });
+    }
+    cursor.setDate(cursor.getDate() + 1);
   }
 
   return ticks;
+}
+
+/**
+ * Week/month braces along the Lifeline spine.
+ * Week zoom + month zoom → Monday–Sunday groups.
+ * Time zoom → calendar months. Life zoom → none.
+ */
+export function generatePeriodBrackets(config, zoomLevel) {
+  if (zoomLevel === LIFELINE_ZOOM_LEVEL.life) return [];
+  const totalDays = computeLifelineDayCount(config);
+  if (totalDays < 2) return [];
+  const start = toDateString(config.startDate);
+  if (!start) return [];
+  const kind = zoomLevel === LIFELINE_ZOOM_LEVEL.time ? 'month' : 'week';
+  const brackets = [];
+  let i = 0;
+
+  while (i < totalDays) {
+    const date = addDays(start, i);
+    const parsed = parseDate(date);
+    if (!parsed) break;
+    let days = 1;
+    if (kind === 'week') {
+      const dayOfWeek = parsed.getDay();
+      const daysToSunday = dayOfWeek === 0 ? 1 : 8 - dayOfWeek;
+      days = Math.min(daysToSunday, totalDays - i);
+    } else {
+      const month = parsed.getMonth();
+      const year = parsed.getFullYear();
+      days = 0;
+      while (i + days < totalDays) {
+        const cursor = parseDate(addDays(start, i + days));
+        if (!cursor || cursor.getMonth() !== month || cursor.getFullYear() !== year) break;
+        days += 1;
+      }
+    }
+    if (days > 0) {
+      const endDate = addDays(date, days - 1);
+      brackets.push({
+        kind,
+        startDate: date,
+        endDate,
+        startIndex: i,
+        dayCount: days,
+      });
+      i += days;
+    } else {
+      i += 1;
+    }
+  }
+
+  return brackets;
 }
 
 export function formatDayLabel(dateStr) {

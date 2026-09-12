@@ -1,21 +1,22 @@
-; Stop any running instance (including zombie single-instance processes).
+; Close a running instance so files can be overwritten.
+; Do not wipe $INSTDIR or the uninstall registry — recursive delete of the
+; Electron tree is extremely slow on HDD + Defender and makes updates look hung
+; before the copy step even starts. NSIS overwrites in place instead.
+
 !macro customInit
   nsExec::ExecToLog 'taskkill /F /IM "${APP_EXECUTABLE_FILENAME}" /T'
   Pop $0
-  Sleep 1000
+  Sleep 1500
 
-  ; Upgrade path: remove old files directly instead of running the old silent
-  ; uninstaller (it can falsely report "app cannot be closed" even when nothing runs).
-  IfFileExists "$INSTDIR\${APP_EXECUTABLE_FILENAME}" 0 customInit_done
-    DetailPrint "Removing previous ${PRODUCT_NAME} from $INSTDIR"
-    nsExec::ExecToLog 'taskkill /F /IM "${APP_EXECUTABLE_FILENAME}" /T'
-    Pop $0
-    Sleep 800
-    RMDir /r "$INSTDIR"
-    DeleteRegKey HKCU "${UNINSTALL_REGISTRY_KEY}"
-    DeleteRegKey HKLM "${UNINSTALL_REGISTRY_KEY}"
-    DeleteRegKey HKCU "${INSTALL_REGISTRY_KEY}"
-    DeleteRegKey HKLM "${INSTALL_REGISTRY_KEY}"
+  ; Auto-update passes --updated. Skip the old uninstaller: it also recursively
+  ; deletes the install dir (same hang as RMDir /r). Install location stays in
+  ; the registry so files are replaced in place.
+  ${GetParameters} $R8
+  ClearErrors
+  ${GetOptions} $R8 "--updated" $R9
+  IfErrors customInit_done
+    DeleteRegValue HKCU "${UNINSTALL_REGISTRY_KEY}" "UninstallString"
+    DeleteRegValue HKLM "${UNINSTALL_REGISTRY_KEY}" "UninstallString"
   customInit_done:
 !macroend
 
@@ -27,5 +28,6 @@
 !macroend
 
 !macro customUnInstallCheck
-  ; Old install already removed in customInit — ignore uninstaller exit code.
+  ; Previous uninstaller can report a false "app still running" after taskkill.
+  ; Continue with in-place overwrite instead of aborting.
 !macroend

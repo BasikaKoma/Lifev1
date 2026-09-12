@@ -237,6 +237,7 @@ function buildFromSelfData(selfData, { displayName, stages, ouraRow, projectActi
   const sleepScore = numericValue(metrics.sleep);
   const activityScore = numericValue(metrics.activity);
   const weightKg = metrics.weight?.kg ?? numericValue(metrics.weight);
+  const waistCm = numericCalories(metrics.weight?.waistCm);
   const caloriesIn = numericCalories(metrics.calories?.intake);
   const caloriesOut = numericCalories(metrics.calories?.burned);
 
@@ -286,6 +287,7 @@ function buildFromSelfData(selfData, { displayName, stages, ouraRow, projectActi
       sleepScore != null ||
       hrValue != null ||
       weightKg != null ||
+      waistCm != null ||
       activityScore != null);
 
   const deepWorkMessage =
@@ -356,17 +358,25 @@ function buildFromSelfData(selfData, { displayName, stages, ouraRow, projectActi
         status: weightKg != null ? `${weightKg} kg` : NO_DATA,
         caloriesIn,
         caloriesOut,
+        waistCm,
+        waistDelta: metrics.weight?.waistDelta ?? null,
         source:
           weightKg != null
             ? usingScale
               ? 'scale'
               : 'oura'
-            : caloriesIn != null || caloriesOut != null
-              ? 'oura'
-              : 'none',
-        updatedAt: metrics.weight?.recordedAt ?? referenceTime,
+            : waistCm != null
+              ? 'manual'
+              : caloriesIn != null || caloriesOut != null
+                ? 'oura'
+                : 'none',
+        updatedAt: metrics.weight?.recordedAt ?? metrics.weight?.waistRecordedAt ?? referenceTime,
         confidence:
-          weightKg != null ? 'high' : caloriesIn != null || caloriesOut != null ? 'medium' : 'none',
+          weightKg != null || waistCm != null
+            ? 'high'
+            : caloriesIn != null || caloriesOut != null
+              ? 'medium'
+              : 'none',
         isLive: false,
       }),
       focusWindow: createEmptyMetric({
@@ -512,13 +522,19 @@ export function buildSelfHubView({
 function mergeWeightMetric(baseWeight, hubWeight) {
   if (!baseWeight) return null;
   const hasKg = baseWeight.kg != null || (typeof baseWeight.value === 'number' && Number.isFinite(baseWeight.value));
-  if (hasKg) return baseWeight;
+  const waistCm = baseWeight.waistCm ?? hubWeight?.waistCm ?? null;
+  const merged = {
+    ...baseWeight,
+    waistCm,
+    waistDelta: baseWeight.waistDelta ?? hubWeight?.waistDelta ?? null,
+  };
+  if (hasKg) return merged;
 
   const hubValue = hubWeight?.value;
-  if (hubValue == null || hubValue === '—') return baseWeight;
+  if (hubValue == null || hubValue === '—') return merged;
 
   return {
-    ...baseWeight,
+    ...merged,
     kg: hubValue,
     value: hubValue,
     status: hubWeight.status && hubWeight.status !== NO_DATA ? hubWeight.status : baseWeight.status,

@@ -35,6 +35,28 @@ export function onDeepLink(callback) {
   return () => listeners.delete(callback);
 }
 
+export function parseMetaCallback(url) {
+  if (!url || typeof url !== 'string') return null;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === 'lifev1:' && parsed.hostname === 'meta-callback') {
+      return {
+        success: parsed.searchParams.get('success') === '1',
+        error: parsed.searchParams.get('error'),
+      };
+    }
+    if (parsed.searchParams.get('meta') === 'connected') {
+      return { success: true, error: null };
+    }
+    if (parsed.searchParams.get('meta') === 'error') {
+      return { success: false, error: '1' };
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 export function parseOuraCallback(url) {
   if (!url || typeof url !== 'string') return null;
   try {

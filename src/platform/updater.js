@@ -12,6 +12,13 @@ export function checkForUpdates() {
   return window.electronUpdater.checkForUpdates();
 }
 
+export function installUpdate() {
+  if (!window.electronUpdater?.installUpdate) {
+    return Promise.resolve({ ok: false, error: 'Not available' });
+  }
+  return window.electronUpdater.installUpdate();
+}
+
 export function onStatus(callback) {
   if (!window.electronUpdater) return undefined;
   return window.electronUpdater.onStatus(callback);

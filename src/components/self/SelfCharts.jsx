@@ -440,7 +440,7 @@ function formatKgLabel(value) {
   return Number(value).toFixed(1);
 }
 
-function WeightLineChart({ points = [] }) {
+function WeightLineChart({ points = [], unit = 'kg' }) {
   const uid = useId().replace(/:/g, '');
   const fillId = `weightFill-${uid}`;
   const strokeId = `weightStroke-${uid}`;
@@ -486,7 +486,7 @@ function WeightLineChart({ points = [] }) {
           preserveAspectRatio="none"
           className="self-chart__weight-svg"
           role="img"
-          aria-label="Weight trend"
+          aria-label={unit === 'cm' ? 'Waist trend' : 'Weight trend'}
         >
           <defs>
             <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
@@ -599,7 +599,7 @@ export function SelfChart({ chart, value, max, intake, burned, goal, unit }) {
     case 'sleepBars':
       return <SleepBarsChart bars={chart.bars} startLabel={chart.startLabel} endLabel={chart.endLabel} />;
     case 'weightLine':
-      return <WeightLineChart points={chart.points} />;
+      return <WeightLineChart points={chart.points} unit={chart.unit} />;
     case 'progressBar':
       return <ProgressBarChart value={value} max={max} />;
     case 'activityBars':

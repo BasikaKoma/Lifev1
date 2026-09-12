@@ -23,7 +23,7 @@ function RoutineCheckRow({ routine, onToggle }) {
 export function SelfRoutinesCard({
   dayRoutines = [],
   onToggle,
-  onOpenDayDetails,
+  onOpenPathRoutines,
   weekLabel = '',
 }) {
   const total = dayRoutines.length;
@@ -47,16 +47,24 @@ export function SelfRoutinesCard({
             )}
           </p>
         </div>
-        {onOpenDayDetails ? (
-          <button type="button" className="self-routines__edit" onClick={onOpenDayDetails}>
-            {total > 0 ? 'Επεξεργασία' : 'Προσθήκη'}
+        {total > 0 && onOpenPathRoutines ? (
+          <button type="button" className="self-routines__edit" onClick={onOpenPathRoutines}>
+            Path
           </button>
         ) : null}
       </header>
 
       {total === 0 ? (
         <p className="self-hub-card__empty">
-          Όρισε 2–3 πρωινές και 2–3 βραδινές πράξεις. Μετά τις κλείνεις εδώ με ένα tap.
+          Όρισε τις ρουτίνες στο Path.
+          {onOpenPathRoutines ? (
+            <>
+              {' '}
+              <button type="button" className="self-routines__edit" onClick={onOpenPathRoutines}>
+                Άνοιξε Path
+              </button>
+            </>
+          ) : null}
         </p>
       ) : (
         <div className="self-routines__stacks">

@@ -30,10 +30,13 @@ module.exports = {
   },
   nsis: {
     oneClick: false,
+    perMachine: false,
     allowToChangeInstallationDirectory: true,
     createDesktopShortcut: true,
     createStartMenuShortcut: true,
     shortcutName: 'lifev1',
+    deleteAppDataOnUninstall: false,
+    runAfterFinish: true,
     include: path.join(__dirname, 'build', 'installer.nsh'),
   },
   ...(updateFeedUrl

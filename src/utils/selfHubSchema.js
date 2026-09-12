@@ -1,4 +1,4 @@
-/** @typedef {'oura'|'scale'|'computed'|'none'} SelfHubMetricSource */
+/** @typedef {'oura'|'scale'|'computed'|'manual'|'none'} SelfHubMetricSource */
 /** @typedef {'high'|'medium'|'low'|'none'} SelfHubConfidence */
 
 export const NO_DATA = 'No data';
@@ -16,6 +16,8 @@ export const NO_DATA = 'No data';
  * @property {number|null} [max]
  * @property {number|null} [caloriesIn] — total kcal (Oura total_calories)
  * @property {number|null} [caloriesOut] — active kcal burned (Oura active_calories)
+ * @property {number|null} [waistCm] — waist circumference in cm
+ * @property {number|null} [waistDelta]
  * @property {number|null} [resting] — resting HR (bpm)
  * @property {number|null} [avg] — average HR (bpm)
  * @property {{ type: string, points?: number[], samples?: unknown[], startLabel?: string, endLabel?: string, sampleCount?: number }|undefined} [chart]

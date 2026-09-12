@@ -3,8 +3,10 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { initAutoUpdates } = require('./updater.cjs');
+const { setupAuthStoreIpc } = require('./authStore.cjs');
 const { setupBrainIpc } = require('./brain.cjs');
 const { setupCamerasIpc } = require('./cameras.cjs');
+const { setupVaultIpc } = require('./vault.cjs');
 
 const APP_PORT = 17823;
 const DEV_URL = 'http://localhost:5173';
@@ -31,6 +33,8 @@ let staticServer = null;
 let allowWindowClose = false;
 let scaleBackgroundEnabled = false;
 let tray = null;
+let updateDownloaded = false;
+let quittingForUpdate = false;
 
 function getDistPath() {
   return path.join(__dirname, '..', 'dist');
@@ -131,8 +135,9 @@ function setupCloseGuard(win) {
   };
 
   win.on('close', (event) => {
-    if (allowWindowClose) return;
-    if (scaleBackgroundEnabled) {
+    if (allowWindowClose || quittingForUpdate) return;
+    // A pending update must actually quit — hiding to tray would skip the installer.
+    if (scaleBackgroundEnabled && !updateDownloaded) {
       event.preventDefault();
       win.hide();
       ensureTray();
@@ -152,8 +157,19 @@ function setupCloseGuard(win) {
 
   ipcMain.removeAllListeners('flush-save-complete');
   ipcMain.on('flush-save-complete', () => {
+    if (quittingForUpdate) return;
     completeClose();
   });
+}
+
+function prepareQuitForUpdate() {
+  quittingForUpdate = true;
+  scaleBackgroundEnabled = false;
+  allowWindowClose = true;
+  if (tray && !tray.isDestroyed()) {
+    tray.destroy();
+    tray = null;
+  }
 }
 
 function createWindow() {
@@ -273,8 +289,10 @@ if (!gotSingleInstanceLock) {
   app.whenReady().then(async () => {
     setupPermissions();
     setupScaleBackgroundIpc();
+    setupAuthStoreIpc();
     setupBrainIpc();
     setupCamerasIpc();
+    setupVaultIpc();
     if (app.isPackaged) {
       await clearStaleServiceWorkers();
     }
@@ -282,7 +300,12 @@ if (!gotSingleInstanceLock) {
     await loadApp();
 
     if (app.isPackaged) {
-      initAutoUpdates(mainWindow);
+      initAutoUpdates(mainWindow, {
+        prepareQuitForUpdate,
+        onUpdateDownloaded: () => {
+          updateDownloaded = true;
+        },
+      });
     }
 
     app.on('activate', async () => {
@@ -303,6 +326,7 @@ if (!gotSingleInstanceLock) {
 
   app.on('before-quit', () => {
     allowWindowClose = true;
+    scaleBackgroundEnabled = false;
     if (tray && !tray.isDestroyed()) {
       tray.destroy();
       tray = null;

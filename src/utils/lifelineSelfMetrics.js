@@ -77,7 +77,8 @@ export function normalizeDayMetrics(raw) {
 
   const hasLeft = Array.isArray(raw.leftMetrics) && raw.leftMetrics.length > 0;
   const hasWeight = raw.weight != null && raw.weight.kg != null;
-  if (!hasLeft && !hasWeight) return null;
+  const hasWaist = raw.waist != null && raw.waist.cm != null;
+  if (!hasLeft && !hasWeight && !hasWaist) return null;
 
   return {
     source: typeof raw.source === 'string' ? raw.source : 'oura',
@@ -95,6 +96,7 @@ export function normalizeDayMetrics(raw) {
     rightMetrics: Array.isArray(raw.rightMetrics) ? raw.rightMetrics : [],
     dayScore: raw.dayScore && typeof raw.dayScore === 'object' ? raw.dayScore : null,
     weight: hasWeight ? raw.weight : null,
+    waist: hasWaist ? raw.waist : null,
   };
 }
 
@@ -147,6 +149,7 @@ export function getEmptyDayLabView(date = null) {
     rightMetrics: [metrics.sleep, metrics.emotionalState],
     dayScore: null,
     weight: null,
+    waist: null,
   });
 }
 
@@ -154,7 +157,7 @@ export function getDayLabView({ entryMetrics, date, ouraRow = null }) {
   const stored = entryMetrics?.preview === true ? null : entryMetrics;
   const fromOura = ouraRow ? ouraRowToLifelineMetrics(ouraRow) : null;
   const storedHasData = Boolean(
-    stored && (stored.leftMetrics?.length || stored.weight || stored.dayScore)
+    stored && (stored.leftMetrics?.length || stored.weight || stored.waist || stored.dayScore)
   );
 
   if (storedHasData) {
@@ -164,6 +167,7 @@ export function getDayLabView({ entryMetrics, date, ouraRow = null }) {
         ...stored,
         preview: false,
         weight: stored.weight ?? fromOura?.weight ?? null,
+        waist: stored.waist ?? fromOura?.waist ?? null,
         leftMetrics: stored.leftMetrics?.length ? stored.leftMetrics : fromOura?.leftMetrics,
         rightMetrics: stored.rightMetrics?.length ? stored.rightMetrics : fromOura?.rightMetrics,
       },

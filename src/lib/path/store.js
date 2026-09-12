@@ -1,6 +1,8 @@
 import { getSupabaseClient, isSupabaseConfigured } from '../supabase';
 import { waitForAuthSession } from '../auth';
 import { createEmptyBundle, normalizeBundle, nowIso, pathBundleHasContent } from './schema';
+import { isCloudSyncEnabled, mirrorVaultJson, readVaultJsonIfEnabled } from '../vault/mirror';
+import { pathBundlePath } from '../vault/paths';
 
 const STORAGE_KEY = 'lifev1-path';
 const SAVE_DEBOUNCE_MS = 400;
@@ -23,7 +25,12 @@ function readLocal() {
 function writeLocal(bundle) {
   const next = normalizeBundle(bundle);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  mirrorVaultJson(pathBundlePath(), next);
   return next;
+}
+
+export function readLocalPathBundle() {
+  return readLocal();
 }
 
 async function getSessionUser() {
@@ -99,17 +106,27 @@ export async function pushPathBundle(bundle) {
 
 export async function loadPathBundle() {
   const local = readLocal();
+  const vault = await readVaultJsonIfEnabled(pathBundlePath());
+  const vaultBundle = vault ? normalizeBundle(vault) : null;
+  const base = mergeBundles(local, vaultBundle);
   try {
-    const cloud = await pullPathBundle();
-    const merged = mergeBundles(local, cloud) || createEmptyBundle();
+    const cloud = isCloudSyncEnabled() ? await pullPathBundle() : null;
+    const merged = mergeBundles(base, cloud) || createEmptyBundle();
     writeLocal(merged);
     notifyPathBundle(merged);
-    if (pathBundleHasContent(merged) && !pathBundleHasContent(cloud) && pathBundleHasContent(local)) {
+    if (
+      isCloudSyncEnabled()
+      && pathBundleHasContent(merged)
+      && !pathBundleHasContent(cloud)
+      && pathBundleHasContent(local)
+    ) {
       await pushPathBundle(merged).catch(() => {});
     }
     return merged;
   } catch {
-    return local || createEmptyBundle();
+    const fallback = base || createEmptyBundle();
+    if (vaultBundle) writeLocal(fallback);
+    return fallback;
   }
 }
 
@@ -193,6 +210,12 @@ export async function flushPathNow() {
           return { ok: true };
         }
         writeLocal(next);
+        if (!isCloudSyncEnabled()) {
+          if (!pendingBundle) pendingCloud = false;
+          lastError = '';
+          if (!pendingBundle) return { ok: true, localOnly: true };
+          continue;
+        }
         const result = await pushPathBundle(next);
         if (result?.ok === false && (result.reason === 'missing-table' || result.reason === 'offline-or-signed-out')) {
           if (!pendingBundle) pendingCloud = false;

@@ -1,5 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { APP_NAME, LOGO_SRC } from '../constants/branding';
+import {
+  clearSavedLogin,
+  clearStaySignedOut,
+  getSavedLogin,
+  hasElectronAuthStore,
+  saveLogin,
+} from '../lib/electronAuth';
 import { consumeSessionTakenMessage, SESSION_TAKEN_MESSAGE } from '../lib/singleSession';
 
 export function AuthView({
@@ -10,15 +17,54 @@ export function AuthView({
   onContinue,
   onSignOutExisting,
 }) {
+  const canRememberLogin = hasElectronAuthStore();
   const [mode, setMode] = useState('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [rememberLogin, setRememberLogin] = useState(canRememberLogin);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(() =>
     consumeSessionTakenMessage() ? SESSION_TAKEN_MESSAGE : ''
   );
   const [info, setInfo] = useState('');
+
+  useEffect(() => {
+    if (!canRememberLogin) return undefined;
+    let cancelled = false;
+
+    getSavedLogin().then((saved) => {
+      if (cancelled || !saved) return;
+      setEmail(saved.email);
+      setPassword(saved.password);
+      setRememberLogin(true);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canRememberLogin]);
+
+  const persistLoginChoice = async (trimmedEmail) => {
+    if (!canRememberLogin) return;
+    try {
+      if (rememberLogin) {
+        await saveLogin(trimmedEmail, password);
+      } else {
+        await clearSavedLogin();
+      }
+      await clearStaySignedOut();
+    } catch {
+      /* Session still persists; saved password is optional. */
+    }
+  };
+
+  const handleRememberChange = (checked) => {
+    setRememberLogin(checked);
+    if (!checked) {
+      clearSavedLogin();
+    }
+  };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -40,6 +86,7 @@ export function AuthView({
     try {
       if (mode === 'signup') {
         const user = await onSignUp(trimmedEmail, password, displayName.trim() || undefined);
+        await persistLoginChoice(trimmedEmail);
         if (!user) {
           setInfo('Στείλαμε email επιβεβαίωσης. Έλεγξε τα εισερχόμενά σου και μετά σύνδεσου.');
           setMode('signin');
@@ -48,6 +95,7 @@ export function AuthView({
         onAuthSuccess?.();
       } else {
         await onSignIn(trimmedEmail, password);
+        await persistLoginChoice(trimmedEmail);
         onAuthSuccess?.();
       }
     } catch (err) {
@@ -99,7 +147,7 @@ export function AuthView({
           </div>
         )}
 
-        <form className="auth-form" onSubmit={handleSubmit}>
+        <form className="auth-form" onSubmit={handleSubmit} autoComplete="on">
           {mode === 'signup' && (
             <>
               <label className="settings-label" htmlFor="auth-display-name">
@@ -107,6 +155,7 @@ export function AuthView({
               </label>
               <input
                 id="auth-display-name"
+                name="name"
                 type="text"
                 className="input"
                 value={displayName}
@@ -122,12 +171,13 @@ export function AuthView({
           </label>
           <input
             id="auth-email"
+            name="email"
             type="email"
             className="input"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
-            autoComplete="email"
+            autoComplete="username"
             required
           />
 
@@ -136,6 +186,7 @@ export function AuthView({
           </label>
           <input
             id="auth-password"
+            name="password"
             type="password"
             className="input"
             value={password}
@@ -144,6 +195,17 @@ export function AuthView({
             autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
             required
           />
+
+          {canRememberLogin && (
+            <label className="settings-check auth-form__remember">
+              <input
+                type="checkbox"
+                checked={rememberLogin}
+                onChange={(e) => handleRememberChange(e.target.checked)}
+              />
+              <span>Αποθήκευση email και κωδικού σε αυτόν τον υπολογιστή</span>
+            </label>
+          )}
 
           {error && <p className="auth-form__error">{error}</p>}
           {info && <p className="auth-form__info">{info}</p>}

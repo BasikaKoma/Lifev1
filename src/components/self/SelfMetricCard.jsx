@@ -78,6 +78,15 @@ export function SelfMetricCard({ metric, variant = 'score' }) {
               <span className="self-card__weight-unit"> kg</span>
             </p>
           ) : null}
+          {isWeight ? (
+            <p className={`self-card__waist-latest${metric.waistCm == null ? ' self-card__waist-latest--empty' : ''}`}>
+              Μέση{' '}
+              {metric.waistCm != null
+                ? (typeof metric.waistCm === 'number' ? metric.waistCm.toFixed(1) : metric.waistCm)
+                : '—'}
+              <span className="self-card__weight-unit"> cm</span>
+            </p>
+          ) : null}
           {isWeight && metric.chart?.type === 'weightLine' ? (
             <SelfChart chart={metric.chart} />
           ) : !isWeight ? (

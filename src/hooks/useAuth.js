@@ -7,6 +7,11 @@ import {
   signOut as authSignOut,
   subscribeToAuthChanges,
 } from '../lib/auth';
+import {
+  getAuthBootstrap,
+  hasElectronAuthStore,
+  markStaySignedOut,
+} from '../lib/electronAuth';
 
 export function useAuth() {
   const isConfigured = isSupabaseConfigured();
@@ -27,7 +32,27 @@ export function useAuth() {
     };
 
     getCurrentSession()
-      .then((session) => attachSession(session))
+      .then(async (session) => {
+        if (session?.user) {
+          attachSession(session);
+          return;
+        }
+        if (!hasElectronAuthStore()) return;
+
+        const boot = await getAuthBootstrap();
+        if (cancelled || boot.staySignedOut || !boot.login) return;
+
+        try {
+          const { user: signedIn, session: restored } = await signInWithEmail(
+            boot.login.email,
+            boot.login.password
+          );
+          if (cancelled) return;
+          attachSession(restored || { user: signedIn });
+        } catch {
+          /* AuthView prefills the saved credentials. */
+        }
+      })
       .finally(() => {
         if (!cancelled) setAuthLoading(false);
       });
@@ -65,6 +90,7 @@ export function useAuth() {
 
   const signOut = useCallback(async () => {
     await authSignOut();
+    await markStaySignedOut();
     setUser(null);
   }, []);
 

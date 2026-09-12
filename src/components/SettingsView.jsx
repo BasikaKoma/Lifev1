@@ -8,6 +8,7 @@ import {
 import { CANVAS_INSERT_SHORTCUTS } from '../utils/canvasInsertShortcuts';
 import { platform } from '../platform';
 import { ShareProjectPanel } from './ShareProjectPanel';
+import { VaultSettings } from './VaultSettings';
 
 export function SettingsView({
   focusMode,
@@ -20,6 +21,8 @@ export function SettingsView({
   onSignOut,
   ouraStatus,
   onOpenOuraModal,
+  metaStatus,
+  onOpenMetaModal,
   onOpenScaleModal,
   onOpenCamerasModal,
   onOpenCamerasView,
@@ -67,7 +70,7 @@ export function SettingsView({
   };
 
   const handleSignOut = async () => {
-    if (!window.confirm('Αποσύνδεση; Τα projects σου μένουν στο cloud.')) return;
+    if (!window.confirm('Αποσύνδεση; Τα δεδομένα μένουν στο cloud ή στον φάκελο που έχεις διαλέξει.')) return;
     setSigningOut(true);
     try {
       const saved = await onFlushSave?.();
@@ -165,6 +168,8 @@ export function SettingsView({
             </div>
           ) : null}
 
+          <VaultSettings onFlushSave={onFlushSave} />
+
           {projectId && isSupabaseConfigured() && (
             <ShareProjectPanel projectId={projectId} isLifeline={isLifeline} />
           )}
@@ -178,7 +183,7 @@ export function SettingsView({
                 </p>
               )}
               <p className="settings-block__desc">
-                Οι ενημερώσεις ελέγχονται αυτόματα κάθε 5 λεπτά. Μετά το κατέβασμα, πάτα «Επανεκκίνηση τώρα».
+                Οι ενημερώσεις ελέγχονται αυτόματα κάθε 5 λεπτά. Μετά το κατέβασμα, πάτα «Επανεκκίνηση τώρα» — η εγκατάσταση γίνεται στο παρασκήνιο.
               </p>
               {updateStatus?.message && (
                 <p
@@ -197,6 +202,15 @@ export function SettingsView({
               >
                 {checkingUpdate ? 'Έλεγχος…' : 'Έλεγχος για ενημέρωση'}
               </button>
+              {updateStatus?.state === 'ready' && (
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  onClick={() => platform.updater.installUpdate()}
+                >
+                  Εγκατάσταση και επανεκκίνηση
+                </button>
+              )}
             </div>
           )}
 
@@ -336,6 +350,22 @@ export function SettingsView({
                 </p>
                 <button type="button" className="btn btn--primary" onClick={onOpenOuraModal}>
                   {ouraStatus?.connected ? 'Διαχείριση Oura' : 'Connect Oura'}
+                </button>
+              </div>
+
+              <div className="settings-block">
+                <h3 className="settings-block__title">Meta (Facebook / Instagram)</h3>
+                <p className="settings-block__desc">
+                  {metaStatus?.connected
+                    ? (metaStatus.instagram?.ig_username
+                      ? `Συνδεδεμένο — @${String(metaStatus.instagram.ig_username).replace(/^@/, '')}${metaStatus.facebook?.page_name ? ` · ${metaStatus.facebook.page_name}` : ''}.`
+                      : metaStatus.facebook?.page_name
+                        ? `Συνδεδεμένο — ${metaStatus.facebook.page_name}.`
+                        : 'Συνδεδεμένο — διάλεξε Page και Instagram στο Personal Brand.')
+                    : 'Σύνδεσε Facebook Page και Instagram Professional για το Personal Brand. Χωρίς δημοσίευση ακόμα.'}
+                </p>
+                <button type="button" className="btn btn--primary" onClick={onOpenMetaModal}>
+                  {metaStatus?.connected ? 'Διαχείριση Meta' : 'Connect Meta'}
                 </button>
               </div>
             </>

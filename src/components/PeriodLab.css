@@ -1,0 +1,156 @@
+.period-lab {
+  overflow: hidden;
+}
+
+.period-lab__nav {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 0.45rem;
+}
+
+.period-lab__nav-btn {
+  margin: 0;
+  padding: 0.2rem 0.55rem;
+  border: 1px solid var(--self-glass-border);
+  border-radius: 999px;
+  background: var(--self-glass);
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 0.68rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.period-lab__nav-btn:hover {
+  color: var(--self-emerald-bright);
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+.period-lab__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.85rem;
+  padding: 0.75rem 1.25rem 1.4rem;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.period-lab__card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  min-height: 11.5rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--self-glass-border);
+  border-radius: 18px;
+  background: var(--self-glass);
+  backdrop-filter: blur(16px);
+}
+
+.period-lab__card--empty {
+  opacity: 0.72;
+}
+
+.period-lab__card-eyebrow {
+  margin: 0;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.38);
+}
+
+.period-lab__card-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.period-lab__card-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #f5f5f5;
+}
+
+.period-lab__card-primary {
+  margin: 0;
+  font-size: 1.55rem;
+  font-weight: 750;
+  letter-spacing: -0.03em;
+  color: var(--self-emerald-bright);
+}
+
+.period-lab__card-primary span {
+  margin-left: 0.15rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.period-lab__card-empty {
+  margin: 0;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.38);
+}
+
+.period-lab__delta {
+  margin-left: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.period-lab__delta--up {
+  color: var(--self-emerald-bright);
+}
+
+.period-lab__delta--down {
+  color: #f87171;
+}
+
+.period-lab__delta--neutral {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.period-lab__rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+}
+
+.period-lab__rows li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.period-lab__rows strong {
+  color: #e5e5e5;
+  font-weight: 650;
+  text-align: right;
+}
+
+.period-lab__notes {
+  margin: 0.15rem 0 0;
+  padding: 0 0 0 1rem;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.72rem;
+}
+
+@media (max-width: 1100px) {
+  .period-lab__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .period-lab__grid {
+    grid-template-columns: 1fr;
+    padding: 0.6rem 0.85rem 1.1rem;
+  }
+}

@@ -422,6 +422,19 @@
   color: var(--self-text, #e8f5ef);
 }
 
+.self-card__waist-latest {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: rgba(232, 245, 239, 0.78);
+}
+
+.self-card__waist-latest--empty {
+  font-weight: 500;
+  color: rgba(232, 245, 239, 0.38);
+}
+
 .self-card__weight-unit {
   font-size: 0.9rem;
   font-weight: 500;

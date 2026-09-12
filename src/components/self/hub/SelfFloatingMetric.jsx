@@ -61,8 +61,23 @@ function getMovementValue(metric) {
   return String(metric.value);
 }
 
+function formatWaistCm(value) {
+  if (value == null || value === '—') return null;
+  return typeof value === 'number' ? value.toFixed(1) : String(value);
+}
+
 function formatKcal(value) {
   return new Intl.NumberFormat('en-US').format(value);
+}
+
+function WaistFoot({ waistCm }) {
+  const label = formatWaistCm(waistCm);
+  return (
+    <span className={`self-float-metric__waist${label ? '' : ' self-float-metric__waist--empty'}`}>
+      Μέση {label ?? '—'}
+      <span className="self-float-metric__detailed-unit">cm</span>
+    </span>
+  );
 }
 
 function WeightCalories({ caloriesIn, caloriesOut }) {
@@ -210,6 +225,8 @@ function DetailedCaloriesCard({ metric, position }) {
             <span className="self-float-metric__detailed-unit">kg</span>
           </div>
         ) : null}
+
+        <WaistFoot waistCm={metric.waistCm} />
       </div>
     </div>
   );
@@ -310,7 +327,10 @@ export function SelfFloatingMetric({
             <span className="self-float-metric__status">{metric.status || NO_DATA}</span>
           )}
           {metric.label === 'Weight' ? (
-            <WeightCalories caloriesIn={metric.caloriesIn} caloriesOut={metric.caloriesOut} />
+            <>
+              <WeightCalories caloriesIn={metric.caloriesIn} caloriesOut={metric.caloriesOut} />
+              <WaistFoot waistCm={metric.waistCm} />
+            </>
           ) : metric.secondary ? (
             <span className="self-float-metric__secondary">{metric.secondary}</span>
           ) : hasValue && metric.status && metric.status !== NO_DATA ? (

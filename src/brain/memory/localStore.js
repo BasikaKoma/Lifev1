@@ -5,6 +5,8 @@ import {
   saveConversations,
 } from '../conversations';
 import { createEmptyProfile, normalizeMemory, normalizeProfile } from './normalize';
+import { mirrorVaultJson } from '../../lib/vault/mirror';
+import { brainConversationsPath, brainMemoriesPath, brainProfilePath } from '../../lib/vault/paths';
 
 const PROFILE_KEY = 'lifev1-brain-profile';
 const MEMORIES_KEY = 'lifev1-brain-memories';
@@ -25,6 +27,7 @@ export function loadLocalProfile() {
 export function saveLocalProfile(profile) {
   const next = normalizeProfile(profile);
   localStorage.setItem(PROFILE_KEY, JSON.stringify(next));
+  mirrorVaultJson(brainProfilePath(), next);
   return next;
 }
 
@@ -36,6 +39,7 @@ export function loadLocalMemories() {
 export function saveLocalMemories(memories) {
   const next = (Array.isArray(memories) ? memories : []).map(normalizeMemory).filter(Boolean);
   localStorage.setItem(MEMORIES_KEY, JSON.stringify(next));
+  mirrorVaultJson(brainMemoriesPath(), next);
   return next;
 }
 
@@ -53,5 +57,10 @@ export function saveLocalBundle({ profile, conversations, memories, activeConver
   if (conversations) saveConversations(conversations);
   if (memories) saveLocalMemories(memories);
   if (activeConversationId) saveActiveConversationId(activeConversationId);
-  return loadLocalBundle();
+  const bundle = loadLocalBundle();
+  mirrorVaultJson(brainConversationsPath(), {
+    conversations: bundle.conversations,
+    activeConversationId: bundle.activeConversationId,
+  });
+  return bundle;
 }

@@ -18,6 +18,7 @@ import {
   readLocalColumns,
   readLocalMeta,
   writeLocalColumnsQuiet,
+  clearLocalProject,
 } from './projectLocalStore';
 import {
   createLifelineProject,
@@ -32,6 +33,8 @@ import {
   mergeLifelineRowData,
   protectLifelineDataFromAccidentalWipe,
 } from './lifelineMerge';
+import { isCloudSyncEnabled } from '../lib/vault/config';
+import { overlayVaultProjectData } from '../lib/vault/projects';
 
 const MINIMAL_PROJECT_COLUMNS = new Set([
   'title',
@@ -1233,6 +1236,7 @@ export async function deleteProject(projectId, currentProjectId) {
 
   const { error } = await supabase.from('projects').delete().eq('id', projectId);
   if (error) throw error;
+  await clearLocalProject(projectId);
 
   const list = await listProjects();
   if (list.length === 0) {
@@ -1337,6 +1341,17 @@ export async function patchLifelineProjectBundle(lifelineProjectId, { selfHubDay
     map_theme: mapTheme,
   });
 
+  const localState = {
+    ...loaded,
+    lifelineDays: mergedDays,
+    mapTheme,
+  };
+  writeLocalColumnsQuiet(localState, ['lifeline_days', 'map_theme'], []);
+
+  if (!isCloudSyncEnabled()) {
+    return { ok: true, source: 'vault', cloudUpdatedAt: loaded.cloudUpdatedAt };
+  }
+
   const expectedUpdatedAt = loaded.cloudUpdatedAt || null;
   let first = await updateLifelineWithLock(supabase, lifelineProjectId, row, expectedUpdatedAt);
 
@@ -1404,8 +1419,17 @@ async function mergeLocalCaptureBase(peeked) {
 
 async function persistRemoteCapture(projectId, mutate, { retryCapture } = {}) {
   const peeked = await peekProjectById(projectId);
-  const base = await mergeLocalCaptureBase(peeked);
+  const sourced = isCloudSyncEnabled() ? peeked : await overlayVaultProjectData(peeked);
+  const base = await mergeLocalCaptureBase(sourced);
   const applied = mutate(base);
+  if (!isCloudSyncEnabled()) {
+    writeLocalColumnsQuiet(applied.state, applied.columns, []);
+    return {
+      ...applied,
+      projectTitle: applied.state.projectTitle,
+      isLifeline: applied.state.isLifeline === true,
+    };
+  }
   const result = await saveProjectToSupabase(applied.state, { columns: applied.columns });
 
   if (result.conflict) {

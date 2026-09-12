@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { usePath } from '../../hooks/usePath';
 import { PATH_TABS, startOfWeekMonday } from '../../lib/path/schema';
 import { collectLinkableTasks } from '../../lib/path/logic';
@@ -9,6 +9,7 @@ import { CallsView } from '../CallsView';
 import { PathGoals } from './PathGoals';
 import { PathWeek } from './PathWeek';
 import { PathMetrics } from './PathMetrics';
+import { PathRoutines } from './PathRoutines';
 import { PathImportPlan } from './PathImportPlan';
 import { PathPlanFileButton } from './PathPlanFileViewer';
 import './path.css';
@@ -28,11 +29,18 @@ export function PathView({
   projectActivity = [],
   onCompleteLinkedTask,
   initialTab,
+  onTabChange,
+  routineTemplates = [],
+  onUpdateRoutineTemplates,
 }) {
   const path = usePath();
   const [tab, setTab] = useState(() => initialPathTab(initialTab));
   const [importing, setImporting] = useState(() => hasImportDraft());
   const [weekStart, setWeekStart] = useState(() => startOfWeekMonday());
+
+  useEffect(() => {
+    if (PATH_TABS.some((item) => item.id === initialTab)) setTab(initialTab);
+  }, [initialTab]);
 
   const projects = useMemo(
     () => filterRegularProjects(projectList).map((project) => ({ id: project.id, title: project.title })),
@@ -74,6 +82,7 @@ export function PathView({
             aria-current={tab === item.id ? 'page' : undefined}
             onClick={() => {
               setTab(item.id);
+              onTabChange?.(item.id);
               setImporting(false);
             }}
           >
@@ -114,6 +123,13 @@ export function PathView({
       ) : null}
 
       {tab === 'metrics' ? <PathMetrics path={path} /> : null}
+
+      {tab === 'routines' ? (
+        <PathRoutines
+          routineTemplates={routineTemplates}
+          onUpdateRoutineTemplates={onUpdateRoutineTemplates}
+        />
+      ) : null}
 
       {tab === 'review' ? (
         <div className="path-review">

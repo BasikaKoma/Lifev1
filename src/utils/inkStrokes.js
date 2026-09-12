@@ -87,12 +87,14 @@ export function shouldHandleInkPointer(tool, e) {
 }
 
 /** Whether ZoomCanvas should start a pan for this pointer. */
-export function shouldStartPan(e, interactionMode, spaceHeld) {
+export function shouldStartPan(e, interactionMode, spaceHeld, inkEnabled = true) {
   if (e.button === 1) return true;
   if (spaceHeld) return true;
   if (e.button !== 0) return false;
-  if (isPenLikePointer(e)) return false;
-  if (interactionMode === 'draw' || interactionMode === 'erase' || interactionMode === 'select') return false;
+  if (inkEnabled && isPenLikePointer(e)) return false;
+  if (inkEnabled && (interactionMode === 'draw' || interactionMode === 'erase' || interactionMode === 'select')) {
+    return false;
+  }
   return true;
 }
 
@@ -283,31 +285,3 @@ export function getInkSurfaceSize(boardSize, strokes = []) {
   };
 }
 
-/**
- * Scale canvas ink when lifeline dayHeight zoom changes so handwriting stays
- * visually aligned with the day grid (CSS scale already handles zoom below 100%).
- */
-export function scaleInkStrokesForLifelineZoom(
-  strokes,
-  { centerX, anchorY, ratio }
-) {
-  if (!Array.isArray(strokes) || !strokes.length) return strokes;
-  if (!ratio || ratio === 1 || typeof anchorY !== 'number') return strokes;
-  const cx = typeof centerX === 'number' ? centerX : 480;
-
-  return strokes.map((stroke) => ({
-    ...stroke,
-    size: Math.min(
-      MAX_INK_SIZE,
-      Math.max(MIN_INK_SIZE, (stroke.size || DEFAULT_INK_SIZE) * ratio)
-    ),
-    points: (stroke.points || []).map((p) => {
-      if (!p || p.length < 2) return p;
-      const x = p[0];
-      const y = p[1];
-      const nx = cx + (x - cx) * ratio;
-      const ny = anchorY + (y - anchorY) * ratio;
-      return p.length >= 3 ? [nx, ny, p[2]] : [nx, ny];
-    }),
-  }));
-}
