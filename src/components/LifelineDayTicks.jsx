@@ -9,6 +9,7 @@ import {
 } from '../utils/lifeline';
 import { formatPeriodAriaLabel } from '../utils/periodSummary';
 import { isLifelineTickLabelHidden } from '../utils/stageLayout';
+import { getDayEntry, getRoutineDayScore, normalizeRoutineTemplates } from '../utils/lifelineDays';
 
 const PLAN_LABEL_MIN_SPACING = 7;
 const MIN_BRACE_PX = 28;
@@ -54,11 +55,14 @@ export const LifelineDayTicks = memo(function LifelineDayTicks({
   hiddenTickRanges = [],
   selectedDate = null,
   selectedPeriod = null,
+  lifelineDays = {},
+  routineTemplates = [],
 }) {
   const [hoveredPeriod, setHoveredPeriod] = useState(null);
   if (!ticks?.length && !daySpacing && !dayBands?.length && !periodBrackets?.length) return null;
 
   const detailZoom = daySpacing >= LIFELINE_ZOOM.everyDaySpacing;
+  const templates = normalizeRoutineTemplates(routineTemplates);
   const visibleBrackets = (periodBrackets || []).filter(
     (bracket) => (Number(bracket.dayCount) || 0) * (Number(daySpacing) || 0) >= MIN_BRACE_PX
   );
@@ -158,6 +162,11 @@ export const LifelineDayTicks = memo(function LifelineDayTicks({
         const showPlanLabel = Boolean(planLabel && daySpacing >= PLAN_LABEL_MIN_SPACING);
         const hideDayLabel = isLifelineTickLabelHidden(tick.top, hiddenTickRanges);
         const isSelected = selectedDate === tick.date;
+        const routineScore = templates.length
+          ? getRoutineDayScore(templates, getDayEntry(lifelineDays, tick.date).routines)
+          : { total: 0, label: '' };
+        const showRoutineScore = routineScore.total > 0 && (detailZoom || tick.isToday || hasContent);
+        const thoughtCount = getDayEntry(lifelineDays, tick.date).thoughts?.length || 0;
 
         return (
           <button
@@ -186,8 +195,8 @@ export const LifelineDayTicks = memo(function LifelineDayTicks({
               e.preventDefault();
               onDayClick?.(tick.date, e.currentTarget);
             }}
-            title={`Άνοιγμα ημέρας — ${formatDayLabel(tick.date)}`}
-            aria-label={`Άνοιγμα ημέρας ${formatDayLabel(tick.date)}`}
+            title={`Άνοιγμα ημέρας — ${formatDayLabel(tick.date)}${thoughtCount ? ` · ${thoughtCount} σκέψεις` : ''}${showRoutineScore ? ` · ${routineScore.label}` : ''}`}
+            aria-label={`Ημέρα ${formatDayLabel(tick.date)}${thoughtCount ? `, ${thoughtCount} σκέψεις` : ''}${showRoutineScore ? `, ρουτίνες ${routineScore.label}` : ''}`}
             aria-current={isSelected ? 'date' : undefined}
           >
             <span className="lifeline-day-tick__line" />
@@ -201,6 +210,12 @@ export const LifelineDayTicks = memo(function LifelineDayTicks({
                 </span>
               )
             )}
+            {thoughtCount > 0 ? (
+              <span className="lifeline-day-tick__thoughts" aria-hidden>{thoughtCount}</span>
+            ) : null}
+            {showRoutineScore ? (
+              <span className="lifeline-day-tick__score">{routineScore.label}</span>
+            ) : null}
           </button>
         );
       })}

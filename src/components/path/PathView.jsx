@@ -6,6 +6,7 @@ import { hasImportDraft } from '../../lib/path/importPlan';
 import { filterRegularProjects } from '../../utils/lifeline';
 import { pathTabFromPathname } from '../../utils/appNavigation';
 import { CallsView } from '../CallsView';
+import { PathThoughtsReview } from './PathThoughtsReview';
 import { PathGoals } from './PathGoals';
 import { PathWeek } from './PathWeek';
 import { PathMetrics } from './PathMetrics';
@@ -32,6 +33,7 @@ export function PathView({
   onTabChange,
   routineTemplates = [],
   onUpdateRoutineTemplates,
+  lifelineDays = {},
 }) {
   const path = usePath();
   const [tab, setTab] = useState(() => initialPathTab(initialTab));
@@ -133,6 +135,7 @@ export function PathView({
 
       {tab === 'review' ? (
         <div className="path-review">
+          <PathThoughtsReview lifelineDays={lifelineDays} weekStart={weekStart} />
           <CallsView />
         </div>
       ) : null}

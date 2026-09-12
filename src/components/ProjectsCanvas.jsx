@@ -120,6 +120,7 @@ import {
 
 const PROJECTS_OPEN_SCALE = 0.55;
 const canvasViewCache = new Map();
+const appliedProjectsFocusTokens = new Set();
 
 function canvasViewCacheKey(projectId, isLifeline) {
   return `${isLifeline ? 'lifeline' : 'projects'}:${projectId || ''}`;
@@ -1152,6 +1153,7 @@ export function ProjectsCanvas({
   projectActivity = [],
   onRefreshProjectActivity,
   lifelineFocusToken = 0,
+  projectsFocusToken = 0,
   syncing = false,
   hasUnsavedChanges = false,
   onSave,
@@ -1163,6 +1165,10 @@ export function ProjectsCanvas({
   brainOrb = null,
   pathBundle = null,
   onOpenPath,
+  onPromoteThought,
+  onKeepThought,
+  onDismissThought,
+  onAddThought,
 }) {
   const [connectFrom, setConnectFrom] = useState(null);
   const [connectPreviewPos, setConnectPreviewPos] = useState(null);
@@ -1204,7 +1210,20 @@ export function ProjectsCanvas({
 
   const [autoEditStickyId, setAutoEditStickyId] = useState(null);
   const transformRef = useRef({ scale: PROJECTS_OPEN_SCALE, pan: { x: 48, y: 24 }, viewportRef: null });
-  const cachedCanvasView = canvasViewCache.get(canvasViewCacheKey(projectId, isLifeline)) || null;
+  const focusNextCheckpointRef = useRef(false);
+  const consumeProjectsFocus = Boolean(
+    !isLifeline && projectsFocusToken && !appliedProjectsFocusTokens.has(projectsFocusToken)
+  );
+  if (isLifeline) {
+    focusNextCheckpointRef.current = false;
+  } else if (consumeProjectsFocus) {
+    appliedProjectsFocusTokens.add(projectsFocusToken);
+    focusNextCheckpointRef.current = true;
+    if (projectId) canvasViewCache.delete(canvasViewCacheKey(projectId, false));
+  }
+  const cachedCanvasView = focusNextCheckpointRef.current
+    ? null
+    : (canvasViewCache.get(canvasViewCacheKey(projectId, isLifeline)) || null);
   const zoomCanvasRef = useRef(null);
   const canvasTransformRef = useRef(null);
   const containerRef = useRef(null);
@@ -1694,8 +1713,12 @@ export function ProjectsCanvas({
     if (isLifeline) return null;
     const point = getProjectsOpenFocusPoint(projectsCheckpoints, stages, projectsLayout);
     if (!point) return null;
-    return { ...point, trigger: 'open' };
-  }, [isLifeline, projectsCheckpoints, stages, projectsLayout]);
+    return {
+      ...point,
+      scale: PROJECTS_OPEN_SCALE,
+      trigger: `${projectsFocusToken || 'open'}`,
+    };
+  }, [isLifeline, projectsCheckpoints, stages, projectsLayout, projectsFocusToken]);
   const projectsDefaultPan = useMemo(() => {
     const target = projectsScrollTarget;
     const s = PROJECTS_OPEN_SCALE;
@@ -2053,6 +2076,7 @@ export function ProjectsCanvas({
 
   useEffect(() => {
     const onKey = (e) => {
+      if (checkpointNotesModal.open) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.target?.closest?.('input, textarea, select, [contenteditable="true"]')) return;
 
@@ -2068,7 +2092,14 @@ export function ProjectsCanvas({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [handleAddSticky, handleAddMilestone, handleAddObstacle, handleAddResource, handleAddTask]);
+  }, [
+    checkpointNotesModal.open,
+    handleAddSticky,
+    handleAddMilestone,
+    handleAddObstacle,
+    handleAddResource,
+    handleAddTask,
+  ]);
 
   const handleDeleteObstacle = useCallback((obstacleId) => {
     onRemoveCanvasObstacle(obstacleId);
@@ -2561,6 +2592,7 @@ export function ProjectsCanvas({
 
   useEffect(() => {
     if (!selectedNodeRef) return;
+    if (checkpointNotesModal.open) return;
 
     const onKey = (e) => {
       if (e.target.closest('input, textarea, select, [contenteditable="true"]')) return;
@@ -2615,7 +2647,7 @@ export function ProjectsCanvas({
 
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [selectedNodeRef, handleToolbarAction]);
+  }, [selectedNodeRef, handleToolbarAction, checkpointNotesModal.open]);
 
   const handleApplyThemeToSelected = useCallback((updates) => {
     if (!selectedNodeRef) return;
@@ -3281,7 +3313,9 @@ export function ProjectsCanvas({
             scrollToCanvasPoint={
               isLifeline
                 ? lifelineScrollTarget
-                : (cachedCanvasView ? null : projectsScrollTarget)
+                : ((focusNextCheckpointRef.current || !cachedCanvasView)
+                  ? projectsScrollTarget
+                  : null)
             }
             panExcludeSelector={
               isLifeline
@@ -3569,6 +3603,10 @@ export function ProjectsCanvas({
             handleCloseLifelineDay();
             onOpenPath?.('routines');
           }}
+          onPromoteThought={onPromoteThought}
+          onKeepThought={onKeepThought}
+          onDismissThought={onDismissThought}
+          onAddThought={onAddThought}
           onClose={handleCloseLifelineDay}
         />
       )}
@@ -3597,10 +3635,8 @@ export function ProjectsCanvas({
         stageId={checkpointNotesModal.stageId}
         checkpointId={checkpointNotesModal.checkpointId}
         stages={stages}
-        mapTheme={activeTheme}
         onUpdateCheckpoint={onUpdateCheckpoint}
         onClose={handleCloseCheckpointNotes}
-        onUndo={onUndo}
       />
 
       <CheckpointPlanPanel

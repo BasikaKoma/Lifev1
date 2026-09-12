@@ -1,6 +1,18 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createEmptyBlockAction, createEmptyBlockResource, goalColorStyle, sortBlockActions } from '../../lib/path/schema';
 import { blockActionProgress, blockLinkedProject, formatBlockClock, formatBlockStatusStamp, formatDuration, reorderBlockActions, tasksForBlockProject } from '../../lib/path/logic';
+
+const TEXT_SAVE_MS = 700;
+
+function textDraftFromBlock(block) {
+  return {
+    desiredOutcome: block?.desiredOutcome || '',
+    notes: block?.notes || '',
+    resultSummary: block?.resultSummary || '',
+    remaining: block?.remaining || '',
+    nextStep: block?.nextStep || '',
+  };
+}
 
 function normalizeUrl(value) {
   const text = String(value || '').trim();
@@ -91,6 +103,47 @@ export function PathBlockWorkspace({
   const [resourceTitle, setResourceTitle] = useState('');
   const [resourceUrl, setResourceUrl] = useState('');
   const [overActionId, setOverActionId] = useState(null);
+  const [textDraft, setTextDraft] = useState(() => textDraftFromBlock(block));
+  const pendingTextRef = useRef({});
+  const textTimerRef = useRef(null);
+  const onPatchRef = useRef(onPatch);
+  onPatchRef.current = onPatch;
+
+  const consumePendingText = () => {
+    if (textTimerRef.current) {
+      clearTimeout(textTimerRef.current);
+      textTimerRef.current = null;
+    }
+    const pending = pendingTextRef.current;
+    pendingTextRef.current = {};
+    return pending;
+  };
+
+  const applyPatch = (patch) => {
+    const pending = consumePendingText();
+    if (!Object.keys(pending).length && !patch) return;
+    onPatchRef.current({ ...pending, ...patch });
+  };
+
+  useEffect(() => {
+    setTextDraft(textDraftFromBlock(block));
+    pendingTextRef.current = {};
+    if (textTimerRef.current) {
+      clearTimeout(textTimerRef.current);
+      textTimerRef.current = null;
+    }
+  }, [block?.id]);
+
+  useEffect(() => () => {
+    const pending = pendingTextRef.current;
+    pendingTextRef.current = {};
+    if (textTimerRef.current) {
+      clearTimeout(textTimerRef.current);
+      textTimerRef.current = null;
+    }
+    if (Object.keys(pending).length) onPatchRef.current(pending);
+  }, []);
+
   if (!block) return null;
 
   const actions = sortBlockActions(block.actions);
@@ -101,7 +154,19 @@ export function PathBlockWorkspace({
     block.taskId ? { id: block.taskId, title: block.taskTitle, source: block.taskSource } : null
   );
 
-  const patchActions = (nextActions) => onPatch({ actions: nextActions });
+  const patchText = (key, value) => {
+    setTextDraft((prev) => ({ ...prev, [key]: value }));
+    pendingTextRef.current = { ...pendingTextRef.current, [key]: value || null };
+    if (textTimerRef.current) clearTimeout(textTimerRef.current);
+    textTimerRef.current = setTimeout(() => {
+      textTimerRef.current = null;
+      const pending = pendingTextRef.current;
+      pendingTextRef.current = {};
+      if (Object.keys(pending).length) onPatchRef.current(pending);
+    }, TEXT_SAVE_MS);
+  };
+
+  const patchActions = (nextActions) => applyPatch({ actions: nextActions });
 
   const addAction = () => {
     patchActions([
@@ -116,7 +181,7 @@ export function PathBlockWorkspace({
   const addResource = () => {
     const url = normalizeUrl(resourceUrl);
     if (!url) return;
-    onPatch({
+    applyPatch({
       resources: [
         ...(block.resources || []),
         createEmptyBlockResource({ title: resourceTitle || null, url }),
@@ -128,7 +193,7 @@ export function PathBlockWorkspace({
 
   return (
     <div className="path-workspace" role="dialog" aria-modal="true" aria-labelledby="path-workspace-title">
-      <button type="button" className="path-modal__backdrop" onClick={onClose} aria-label="Close" />
+      <button type="button" className="path-modal__backdrop" onClick={() => { applyPatch(); onClose(); }} aria-label="Close" />
       <aside className={`path-workspace__panel${goal?.color ? ' path-card--goal' : ''}`} style={goalColorStyle(goal?.color)}>
         <header className="path-workspace__head">
           <div>
@@ -137,8 +202,8 @@ export function PathBlockWorkspace({
           </div>
           <div className="path-view__actions">
             <span className="path-workspace__save">{saving ? 'Saving…' : 'Saved'}</span>
-            <button type="button" className="btn" onClick={() => onEdit(block)}>Edit</button>
-            <button type="button" className="btn" onClick={onClose}>Close</button>
+            <button type="button" className="btn" onClick={() => { applyPatch(); onEdit(block); }}>Edit</button>
+            <button type="button" className="btn" onClick={() => { applyPatch(); onClose(); }}>Close</button>
           </div>
         </header>
 
@@ -156,10 +221,10 @@ export function PathBlockWorkspace({
         </div>
 
         <div className="path-workspace__status">
-          {block.status !== 'Done' ? <button type="button" className="btn" onClick={() => onStatus(block, 'Done')}>Done</button> : null}
-          {block.status !== 'Moved' ? <button type="button" className="btn" onClick={() => onStatus(block, 'Moved')}>Moved</button> : null}
-          {block.status !== 'Skipped' ? <button type="button" className="btn" onClick={() => onStatus(block, 'Skipped')}>Skipped</button> : null}
-          {block.status !== 'Planned' ? <button type="button" className="btn" onClick={() => onStatus(block, 'Planned')}>Plan</button> : null}
+          {block.status !== 'Done' ? <button type="button" className="btn" onClick={() => { applyPatch(); onStatus(block, 'Done'); }}>Done</button> : null}
+          {block.status !== 'Moved' ? <button type="button" className="btn" onClick={() => { applyPatch(); onStatus(block, 'Moved'); }}>Moved</button> : null}
+          {block.status !== 'Skipped' ? <button type="button" className="btn" onClick={() => { applyPatch(); onStatus(block, 'Skipped'); }}>Skipped</button> : null}
+          {block.status !== 'Planned' ? <button type="button" className="btn" onClick={() => { applyPatch(); onStatus(block, 'Planned'); }}>Plan</button> : null}
         </div>
         {block.statusHistory?.length ? (
           <p className="path-card__meta">
@@ -172,8 +237,9 @@ export function PathBlockWorkspace({
           <textarea
             className="input path-workspace__notes"
             rows={3}
-            value={block.desiredOutcome || ''}
-            onChange={(event) => onPatch({ desiredOutcome: event.target.value || null })}
+            value={textDraft.desiredOutcome}
+            onChange={(event) => patchText('desiredOutcome', event.target.value)}
+            onBlur={() => applyPatch()}
             placeholder="Τι πρέπει να έχει ολοκληρωθεί όταν τελειώσει αυτό το block;"
           />
         </section>
@@ -227,8 +293,9 @@ export function PathBlockWorkspace({
           <textarea
             className="input path-workspace__notes path-workspace__notes--large"
             rows={8}
-            value={block.notes || ''}
-            onChange={(event) => onPatch({ notes: event.target.value || null })}
+            value={textDraft.notes}
+            onChange={(event) => patchText('notes', event.target.value)}
+            onBlur={() => applyPatch()}
             placeholder="Πληροφορίες, σκέψεις, οδηγίες, πρόχειρες σημειώσεις"
           />
         </section>
@@ -245,7 +312,7 @@ export function PathBlockWorkspace({
                   <button
                     type="button"
                     className="path-day__add"
-                    onClick={() => onPatch({
+                    onClick={() => applyPatch({
                       resources: (block.resources || []).filter((item) => item.id !== resource.id),
                     })}
                   >
@@ -282,7 +349,7 @@ export function PathBlockWorkspace({
               value={block.taskId || ''}
               onChange={(event) => {
                 const task = projectTasks.find((item) => item.id === event.target.value);
-                onPatch({
+                applyPatch({
                   taskId: task?.id || null,
                   taskTitle: task?.title || null,
                   taskSource: task?.source || null,
@@ -318,8 +385,9 @@ export function PathBlockWorkspace({
             <textarea
               className="input path-workspace__notes"
               rows={3}
-              value={block.resultSummary || ''}
-              onChange={(event) => onPatch({ resultSummary: event.target.value || null })}
+              value={textDraft.resultSummary}
+              onChange={(event) => patchText('resultSummary', event.target.value)}
+              onBlur={() => applyPatch()}
               placeholder="Τι ολοκληρώθηκε"
             />
           </label>
@@ -328,8 +396,9 @@ export function PathBlockWorkspace({
             <textarea
               className="input path-workspace__notes"
               rows={3}
-              value={block.remaining || ''}
-              onChange={(event) => onPatch({ remaining: event.target.value || null })}
+              value={textDraft.remaining}
+              onChange={(event) => patchText('remaining', event.target.value)}
+              onBlur={() => applyPatch()}
               placeholder="Τι έμεινε"
             />
           </label>
@@ -338,8 +407,9 @@ export function PathBlockWorkspace({
             <textarea
               className="input path-workspace__notes"
               rows={2}
-              value={block.nextStep || ''}
-              onChange={(event) => onPatch({ nextStep: event.target.value || null })}
+              value={textDraft.nextStep}
+              onChange={(event) => patchText('nextStep', event.target.value)}
+              onBlur={() => applyPatch()}
               placeholder="Ποιο είναι το επόμενο βήμα"
             />
           </label>

@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from './hooks/useAuth';
 import { useAppState } from './hooks/useAppState';
 import { filterRegularProjects } from './utils/lifeline';
-import { mergeLiveProjectActivity } from './utils/lifelineDays';
+import { mergeLiveProjectActivity, getDayEntry } from './utils/lifelineDays';
+import { snapshotThoughtContext, updateThought } from './utils/dayThoughts';
 import { getSupabaseConfigError, isSupabaseConfigured } from './lib/supabase';
 import { Sidebar } from './components/Sidebar';
 import { ProjectsCanvas } from './components/ProjectsCanvas';
@@ -117,6 +118,7 @@ function MainApp({ user, onSignOut }) {
     lifelineProjectId,
     lastRegularProjectId,
     lifelineFocusToken,
+    projectsFocusToken,
     lifelineAnchors,
     setLifelineAnchorDate,
     assignLifelineAnchorToday,
@@ -203,6 +205,7 @@ function MainApp({ user, onSignOut }) {
     applyBrainActions,
     applySmartCapture,
     undoSmartCapture,
+    promoteThought,
   } = useAppState(user?.id);
 
   const {
@@ -370,6 +373,34 @@ function MainApp({ user, onSignOut }) {
     pathBundle,
     onCapture: captureSelfHubLiveDay,
   });
+
+  const thoughtContext = useMemo(() => {
+    try {
+      return snapshotThoughtContext({ ouraRow: ouraMetricsRow, pathBundle });
+    } catch {
+      return { capacity: null, capacityLabel: null, ouraReadiness: null, pathBlock: null };
+    }
+  }, [ouraMetricsRow, pathBundle]);
+
+  const handleSmartCapture = useCallback(
+    (capture) => applySmartCapture({ ...capture, thoughtContext }),
+    [applySmartCapture, thoughtContext],
+  );
+
+  const handleAddThought = useCallback(
+    (text) => handleSmartCapture({ type: 'thought', title: text, body: text }),
+    [handleSmartCapture],
+  );
+
+  const handleKeepThought = useCallback((date, thoughtId) => {
+    const thoughts = getDayEntry(lifelineDays, date).thoughts;
+    updateLifelineDay(date, { thoughts: updateThought(thoughts, thoughtId, { kept: true }) });
+  }, [lifelineDays, updateLifelineDay]);
+
+  const handleDismissThought = useCallback((date, thoughtId) => {
+    const thoughts = getDayEntry(lifelineDays, date).thoughts;
+    updateLifelineDay(date, { thoughts: updateThought(thoughts, thoughtId, { kept: false }) });
+  }, [lifelineDays, updateLifelineDay]);
 
   const pinchZoomEnabled =
     platform.isMobile && !canvasFullscreen && activeView !== 'projects';
@@ -689,6 +720,7 @@ function MainApp({ user, onSignOut }) {
             projectActivity={hubProjectActivity}
             onRefreshProjectActivity={refreshProjectActivity}
             lifelineFocusToken={lifelineFocusToken}
+            projectsFocusToken={projectsFocusToken}
             syncing={syncing}
             hasUnsavedChanges={hasUnsavedChanges}
             onSave={flushSaveNow}
@@ -700,6 +732,10 @@ function MainApp({ user, onSignOut }) {
             }
             pathBundle={pathBundle}
             onOpenPath={openPath}
+            onPromoteThought={promoteThought}
+            onKeepThought={handleKeepThought}
+            onDismissThought={handleDismissThought}
+            onAddThought={handleAddThought}
           />
         );
         return (
@@ -789,6 +825,10 @@ function MainApp({ user, onSignOut }) {
             pathBundle={pathBundle}
             onOpenPath={openPath}
             onOpenPathWeek={() => openPath('week')}
+            onAddThought={handleAddThought}
+            onPromoteThought={promoteThought}
+            onKeepThought={handleKeepThought}
+            onDismissThought={handleDismissThought}
           />
         );
       case 'path':
@@ -804,6 +844,7 @@ function MainApp({ user, onSignOut }) {
             onTabChange={setPathTab}
             routineTemplates={lifelineRoutineTemplates}
             onUpdateRoutineTemplates={updateLifelineRoutineTemplates}
+            lifelineDays={lifelineDays}
             onCompleteLinkedTask={(linked) => {
               if (!linked?.taskId) return;
               for (const stage of stages || []) {
@@ -889,7 +930,7 @@ function MainApp({ user, onSignOut }) {
           projectTitle={projectTitle}
           projectId={projectId}
           projectList={projectList}
-          onSwitchProject={switchProject}
+          onSwitchProject={(id) => switchProject(id, { focusNextCheckpoint: true })}
           onCreateProject={createNewProject}
           onDeleteProject={deleteCurrentProject}
           isLifeline={isLifeline}
@@ -912,7 +953,7 @@ function MainApp({ user, onSignOut }) {
             currentProjectId={projectId}
             currentProjectTitle={projectTitle}
             lifelineProjectId={lifelineProjectId}
-            onCapture={applySmartCapture}
+            onCapture={handleSmartCapture}
             onOpenProject={switchProject}
             onUndoCapture={undoSmartCapture}
           />
@@ -939,7 +980,7 @@ function MainApp({ user, onSignOut }) {
           currentProjectId={projectId}
           currentProjectTitle={projectTitle}
           lifelineProjectId={lifelineProjectId}
-          onCapture={applySmartCapture}
+          onCapture={handleSmartCapture}
           onOpenProject={switchProject}
           onUndoCapture={undoSmartCapture}
         />

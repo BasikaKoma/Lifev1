@@ -225,6 +225,7 @@ export function Sidebar({
           <ProjectSwitcher
             projectTitle={switcherProjectTitle}
             projectId={switcherProjectId}
+            loadedProjectId={projectId}
             projectList={regularProjects}
             onSwitch={onSwitchProject}
             onCreate={onCreateProject}

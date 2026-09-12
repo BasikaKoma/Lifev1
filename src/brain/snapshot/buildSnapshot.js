@@ -47,6 +47,7 @@ function summarizeDay(date, lifelineDays, selfHubDays, projectActivity = []) {
     .slice(0, 8)
     .map((item) => compactText(item.projectTitle ? `${item.projectTitle}: ${item.title}` : item.title, 90));
   const notes = compactText(day.notes || hub.journal?.notes, 220);
+  const thoughts = (day.thoughts || []).slice(-6).map((thought) => compactText(thought.text, 80));
   const sleep = metricFromList(day.metrics, 'sleep');
   const readiness = metricFromList(day.metrics, 'readiness');
   const dayScore = typeof day.metrics?.dayScore?.value === 'number' ? day.metrics.dayScore.value : null;
@@ -56,13 +57,14 @@ function summarizeDay(date, lifelineDays, selfHubDays, projectActivity = []) {
     date,
     sourceIds: [sourceId('lifeline-day', date), sourceId('self', date)].filter(Boolean),
     notes,
+    thoughts,
     sleep,
     readiness,
     dayScore,
     capacity: hub.hub?.capacity?.label || day.hubSnapshot?.capacity?.label || null,
     todos: { done: todosDone, total: todos.length },
     completed: completedTitles,
-    hadWork: completedTitles.length > 0 || todosDone > 0 || Boolean(notes),
+    hadWork: completedTitles.length > 0 || todosDone > 0 || Boolean(notes) || thoughts.length > 0,
   };
 }
 

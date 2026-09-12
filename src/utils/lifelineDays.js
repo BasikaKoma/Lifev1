@@ -7,6 +7,22 @@ import { normalizeSelfHubDayEntry } from './selfHubDays';
 import { normalizeRoutineLog } from './lifelineRoutines';
 import { normalizeTimelineSnapshot } from './selfHubTimelineEvents';
 
+function normalizeDayThoughts(list) {
+  if (!Array.isArray(list)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const item of list) {
+    if (!item || typeof item !== 'object') continue;
+    const text = String(item.text || item.body || item.title || '').trim();
+    if (!text) continue;
+    const id = item.id || `thought-${out.length}-${text.slice(0, 12)}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push({ ...item, id, text });
+  }
+  return out;
+}
+
 export {
   createRoutineTemplate,
   normalizeRoutineTemplates,
@@ -50,6 +66,7 @@ function normalizeHubSnapshotArchive(raw) {
 export function createEmptyDayEntry() {
   return {
     notes: '',
+    thoughts: [],
     todos: [],
     routines: {},
     metrics: null,
@@ -76,6 +93,7 @@ export function getDayEntry(lifelineDays, dateStr) {
   if (!entry || typeof entry !== 'object') return createEmptyDayEntry();
   return {
     notes: typeof entry.notes === 'string' ? entry.notes : '',
+    thoughts: normalizeDayThoughts(entry.thoughts),
     todos: Array.isArray(entry.todos) ? entry.todos : [],
     routines: normalizeRoutineLog(entry.routines),
     metrics: normalizeDayMetrics(entry.metrics),
@@ -95,6 +113,7 @@ export function normalizeLifelineDays(raw) {
     if (!key) continue;
     out[key] = {
       notes: typeof entry?.notes === 'string' ? entry.notes : '',
+      thoughts: normalizeDayThoughts(entry?.thoughts),
       todos: Array.isArray(entry?.todos)
         ? entry.todos.map((todo) => ({
             id: todo.id || `day-todo-${generateId()}`,
@@ -140,6 +159,7 @@ export function mergeLifelineDayEntry(cloud, local) {
     ...cloud,
     ...local,
     notes: pickRicherText(local.notes, cloud.notes),
+    thoughts: pickRicherList(local.thoughts, cloud.thoughts),
     todos: pickRicherList(local.todos, cloud.todos),
     routines: pickRicherObject(local.routines, cloud.routines) || {},
     metrics: local.metrics || cloud.metrics || null,
@@ -700,5 +720,6 @@ export function kindLabel(kind) {
   if (kind === 'image') return 'Εικόνα';
   if (kind === 'sticky') return 'Σημείωση';
   if (kind === 'path') return 'Path';
+  if (kind === 'thought') return 'Σκέψη';
   return 'Item';
 }

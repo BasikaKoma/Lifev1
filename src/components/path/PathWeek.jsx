@@ -276,7 +276,10 @@ export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteL
           goal={path.goals.find((goal) => goal.id === workspaceBlock.goalId) || null}
           tasks={tasks}
           saving={path.saving}
-          onPatch={(patch) => path.upsertBlock({ ...workspaceBlock, ...patch })}
+          onPatch={(patch) => {
+            const current = path.blocks.find((item) => item.id === workspaceBlock.id) || workspaceBlock;
+            path.upsertBlock({ ...current, ...patch });
+          }}
           onEdit={setEditor}
           onClose={() => setWorkspaceId(null)}
           onStatus={requestStatus}

@@ -16,11 +16,11 @@ export function computeCapacity({ recovery, currentState, circadianContext }) {
 
   let score = recovery;
 
-  if (currentState.stressLevel === 'high') score -= 12;
-  else if (currentState.stressLevel === 'low') score += 4;
+  if (currentState?.stressLevel === 'high') score -= 12;
+  else if (currentState?.stressLevel === 'low') score += 4;
 
-  if (circadianContext.isMorningPeak && recovery >= 70) score += 6;
-  if (circadianContext.isAfternoonDip) score -= 8;
+  if (circadianContext?.isMorningPeak && recovery >= 70) score += 6;
+  if (circadianContext?.isAfternoonDip) score -= 8;
 
   const clamped = Math.max(0, Math.min(100, Math.round(score)));
 
