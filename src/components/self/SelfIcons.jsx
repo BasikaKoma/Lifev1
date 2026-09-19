@@ -33,6 +33,13 @@ export function SelfIcon({ name }) {
         <circle cx="12" cy="10" r="1.4" />
       </svg>
     ),
+    waist: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <ellipse cx="12" cy="12" rx="8" ry="4.5" />
+        <path d="M4 12h16" />
+        <path d="M12 7.5v9" opacity="0.45" />
+      </svg>
+    ),
     energy: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />

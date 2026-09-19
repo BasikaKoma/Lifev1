@@ -137,14 +137,30 @@ export async function fetchOuraMetricsForDay(day) {
   return data;
 }
 
-export async function fetchOuraMetricsRange(limit = 30) {
+export async function fetchOuraMetricsRange(limitOrOptions = 30) {
   const supabase = getSupabaseOrThrow();
-  const { data, error } = await supabase
+  const options = typeof limitOrOptions === 'number'
+    ? { limit: limitOrOptions }
+    : (limitOrOptions || {});
+  const limit = Number(options.limit);
+  const startDay = options.startDay || null;
+  const endDay = options.endDay || null;
+
+  let query = supabase
     .from('oura_daily_metrics')
     .select('*')
-    .order('day', { ascending: false })
-    .limit(limit);
+    .order('day', { ascending: false });
 
+  if (startDay) query = query.gte('day', startDay);
+  if (endDay) query = query.lte('day', endDay);
+  if (!startDay && !endDay) {
+    query = query.limit(Number.isFinite(limit) ? limit : 30);
+  } else {
+    const cap = Number.isFinite(limit) && limit > 0 ? Math.max(limit, 120) : 400;
+    query = query.limit(cap);
+  }
+
+  const { data, error } = await query;
   if (error) throw error;
   return data || [];
 }

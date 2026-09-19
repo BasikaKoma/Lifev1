@@ -183,10 +183,8 @@
   gap: 16px;
 }
 
-.brand-hub__mid {
-  display: grid;
-  grid-template-columns: 1.15fr 0.85fr;
-  gap: 16px;
+.brand-capture {
+  max-width: 720px;
 }
 
 .brand-signal {
@@ -316,8 +314,8 @@
 .brand-week__stats {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin-bottom: 18px;
+  gap: 6px;
+  margin-bottom: 10px;
 }
 
 .brand-week__row {
@@ -330,16 +328,65 @@
   font-variant-numeric: tabular-nums;
 }
 
+.brand-meta {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--brand-border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.brand-meta__label {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--brand-muted);
+}
+
+.brand-meta__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.brand-meta__accounts {
+  font-size: 0.82rem;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.brand-meta__hint {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: #fbbf24;
+}
+
+.brand-view__meta-btn {
+  max-width: 168px;
+  padding: 6px 12px;
+  font-size: 0.78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .brand-ring-wrap {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .brand-ring {
-  width: 108px;
-  height: 108px;
+  width: 78px;
+  height: 78px;
   border-radius: 50%;
   background: conic-gradient(var(--brand-accent) calc(var(--p, 0) * 1%), rgba(255, 255, 255, 0.08) 0);
   display: grid;
@@ -348,14 +395,14 @@
 
 .brand-ring::after {
   content: attr(data-label);
-  width: 82px;
-  height: 82px;
+  width: 58px;
+  height: 58px;
   border-radius: 50%;
   background: #0b0d0f;
   display: grid;
   place-items: center;
   font-weight: 700;
-  font-size: 1.15rem;
+  font-size: 0.92rem;
 }
 
 .brand-ring-wrap p {
@@ -460,29 +507,6 @@
   border-color: var(--brand-accent);
   background: var(--brand-accent-dim);
   color: var(--brand-accent-bright);
-}
-
-.brand-balance__row {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 8px 12px;
-  align-items: center;
-  margin-bottom: 10px;
-  font-size: 0.85rem;
-}
-
-.brand-balance__track {
-  grid-column: 1 / -1;
-  height: 8px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
-  overflow: hidden;
-}
-
-.brand-balance__track > span {
-  display: block;
-  height: 100%;
-  background: var(--brand-accent);
 }
 
 .brand-weekly {
@@ -675,7 +699,6 @@
 
 @media (max-width: 1080px) {
   .brand-hub__top,
-  .brand-hub__mid,
   .brand-create,
   .brand-dna,
   .brand-pipeline,

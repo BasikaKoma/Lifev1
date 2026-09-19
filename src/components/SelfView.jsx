@@ -53,10 +53,8 @@ export function SelfView({
   notes = [],
   selfHubDays = {},
   mapTheme = null,
-  onMapThemeChange,
   isLifeline = false,
   routineTemplates: routineTemplatesProp,
-  onUpdateRoutineTemplates,
   onRefreshProjectActivity,
   pathBundle = null,
   onOpenPath,
@@ -152,22 +150,6 @@ export function SelfView({
   const handleCloseDayDetails = useCallback(() => {
     closeDayView();
   }, [closeDayView]);
-
-  const handleUpdateRoutineTemplates = useCallback(
-    (templates) => {
-      if (onUpdateRoutineTemplates) {
-        onUpdateRoutineTemplates(templates);
-        return;
-      }
-      onMapThemeChange?.({
-        lifeline: {
-          ...(mapTheme?.lifeline || {}),
-          routineTemplates: templates,
-        },
-      });
-    },
-    [mapTheme, onMapThemeChange, onUpdateRoutineTemplates],
-  );
 
   const today = localTodayIsoDate();
   const routineTemplates = normalizeRoutineTemplates(
@@ -282,7 +264,7 @@ export function SelfView({
             dayRoutines={todayRoutines}
             weekLabel={routineWeek.label}
             onToggle={handleToggleTodayRoutine}
-            onOpenDayDetails={handleOpenDayDetails}
+            onOpenPathRoutines={() => onOpenPath?.('routines')}
           />
 
           <SelfPathWeekCard pathBundle={pathBundle} onOpenPathWeek={onOpenPathWeek} />
@@ -336,7 +318,10 @@ export function SelfView({
         stages={stages}
         pathBundle={pathBundle}
         onUpdateDay={onUpdateLifelineDay}
-        onUpdateRoutineTemplates={handleUpdateRoutineTemplates}
+        onOpenPathRoutines={() => {
+          closeDayView();
+          onOpenPath?.('routines');
+        }}
         onPromoteThought={onPromoteThought}
         onKeepThought={onKeepThought}
         onDismissThought={onDismissThought}

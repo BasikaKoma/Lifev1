@@ -52,8 +52,7 @@ import {
   clearPendingInviteToken,
 } from '../utils/inviteSession';
 import { setStoredProjectId } from '../utils/projectSession';
-import { syncLifelineMapTheme, applyLifelineSpineResize, toDateString, addDays, daysBetween, getLifelineConfig, timelineYToDate, getDayTickCanvasY, clampLifelineDayHeight, DEFAULT_LIFELINE_CONFIG, collectLifelineBoundDates } from '../utils/lifeline';
-import { scaleInkStrokesForLifelineZoom } from '../utils/inkStrokes';
+import { syncLifelineMapTheme, applyLifelineSpineResize, toDateString, addDays, daysBetween, getLifelineConfig, timelineYToDate, collectLifelineBoundDates } from '../utils/lifeline';
 import {
   buildPlanStartUpdates,
   distributeCheckpointPlanDates,
@@ -82,8 +81,10 @@ import {
   diffDirtyColumns,
   persistableValuesEqual,
 } from '../utils/projectSavePatch';
-import { writeLocalColumns } from '../utils/projectLocalStore';
+import { writeLocalColumns, flushLocalWrites } from '../utils/projectLocalStore';
 import { normalizeActiveView } from '../utils/appNavigation';
+import { flushVaultWrites, isCloudSyncEnabled, overlayVaultProjectData } from '../lib/vault';
+import { registerVaultProjectSource } from '../lib/vault/liveSource';
 
 const LOAD_PROJECT_TIMEOUT_MS = 25000;
 
@@ -252,6 +253,21 @@ export function useAppState(userId) {
   const sessionProjectsRef = useRef(new Map());
   const projectListRef = useRef([]);
 
+  useEffect(() => {
+    registerVaultProjectSource(() => {
+      const rows = [];
+      const current = stateRef.current;
+      if (current?.projectId) rows.push(current);
+      for (const cached of sessionProjectsRef.current.values()) {
+        if (cached?.state?.projectId && cached.state.projectId !== current?.projectId) {
+          rows.push(cached.state);
+        }
+      }
+      return rows;
+    });
+    return () => registerVaultProjectSource(async () => []);
+  }, []);
+
   const hydrateLifelineHubFromState = useCallback((next) => {
     if (!next?.isLifeline) return;
     const hub = normalizeSelfHubDays(next.mapTheme?.lifeline?.selfHubDays);
@@ -383,7 +399,10 @@ export function useAppState(userId) {
         continue;
       }
       try {
-        const result = await saveProjectToSupabase(cached.state, { columns });
+        const result = isCloudSyncEnabled()
+          ? await saveProjectToSupabase(cached.state, { columns })
+          : { ok: true, source: 'vault', cloudUpdatedAt: cached.state.cloudUpdatedAt, writtenColumns: columns };
+        await flushVaultWrites();
         if (result?.conflict) {
           lastError = result.warning || 'Conflict with another device';
           continue;
@@ -549,7 +568,7 @@ export function useAppState(userId) {
         LOAD_PROJECT_TIMEOUT_MS,
         'Η βάση αργεί πολύ. Δοκίμασε ξανά ή έλεγξε internet.',
       );
-      applyLoadedProject(data);
+      applyLoadedProject(await overlayVaultProjectData(data));
       acceptPendingInvites().catch(() => {});
     } catch (err) {
       setState(null);
@@ -576,7 +595,7 @@ export function useAppState(userId) {
     )
       .then(async (data) => {
         if (cancelled) return;
-        applyLoadedProject(data);
+        applyLoadedProject(await overlayVaultProjectData(data));
         try {
           await acceptPendingInvites();
           const pendingToken = getPendingInviteToken();
@@ -585,7 +604,7 @@ export function useAppState(userId) {
             clearPendingInviteToken();
             if (inviteResult?.projectId) {
               const switched = await switchActiveProject(inviteResult.projectId);
-              applyLoadedProject(switched);
+              applyLoadedProject(await overlayVaultProjectData(switched));
             }
           }
         } catch (inviteErr) {
@@ -633,6 +652,7 @@ export function useAppState(userId) {
     if (!lifelineProjectId || !isSupabaseConfigured()) return undefined;
     let cancelled = false;
     loadProjectById(lifelineProjectId)
+      .then((data) => overlayVaultProjectData(data))
       .then((data) => {
         if (cancelled) return;
         const incomingTemplates = normalizeRoutineTemplates(data.mapTheme?.lifeline?.routineTemplates);
@@ -769,7 +789,7 @@ export function useAppState(userId) {
     setSyncError(null);
     try {
       const data = await loadProjectById(projectId);
-      applyRemoteProject(data, { keepUi: true });
+      applyRemoteProject(await overlayVaultProjectData(data), { keepUi: true });
       setSyncConflict(false);
       setHasUnsavedChanges(sessionHasUnsavedWork());
     } catch (err) {
@@ -867,7 +887,10 @@ export function useAppState(userId) {
           const snapshot = stateRef.current;
           if (!snapshot?.projectId) return { ok: true };
 
-          lastResult = await saveProjectToSupabase(snapshot, { columns: pending });
+          lastResult = isCloudSyncEnabled()
+            ? await saveProjectToSupabase(snapshot, { columns: pending })
+            : { ok: true, source: 'vault', cloudUpdatedAt: snapshot.cloudUpdatedAt, writtenColumns: pending };
+          await flushVaultWrites();
           handleSaveResult(lastResult, pending, snapshot);
           if (lastResult?.conflict || lastResult?.ok === false) return lastResult;
         }
@@ -969,6 +992,8 @@ export function useAppState(userId) {
           if (!dirtyRef.current) pendingLifelineBundleRef.current = false;
         }
         await persistInactiveSessionProjects();
+        await flushLocalWrites();
+        await flushVaultWrites();
         const stillDirty = sessionHasUnsavedWork();
         setHasUnsavedChanges(stillDirty);
         if (pathError) {
@@ -1042,7 +1067,7 @@ export function useAppState(userId) {
 
   // Live sync from other devices
   useEffect(() => {
-    if (loading || !state?.projectId || !isSupabaseConfigured()) return;
+    if (loading || !state?.projectId || !isSupabaseConfigured() || !isCloudSyncEnabled()) return;
 
     const projectId = state.projectId;
 
@@ -1105,45 +1130,16 @@ export function useAppState(userId) {
     patchState((prev) => {
       let mapTheme = mergeMapTheme(prev.mapTheme, updates);
       let stages = prev.stages;
-      let canvasInk = prev.canvasInk;
       if (prev.isLifeline) {
         const anchorDates = lifelineBoundDatesFromState(prev, lifelineAnchors);
-        const oldSynced = syncLifelineMapTheme(prev.mapTheme, anchorDates);
-        const oldDayHeight = clampLifelineDayHeight(
-          oldSynced.lifeline?.dayHeight ?? DEFAULT_LIFELINE_CONFIG.dayHeight
-        );
         mapTheme = syncLifelineMapTheme(mapTheme, anchorDates);
         const persistableThemeUnchanged = persistableValuesEqual(
           'map_theme',
           prev.mapTheme,
           mapTheme
         );
-        if (persistableThemeUnchanged && canvasInk === prev.canvasInk) {
+        if (persistableThemeUnchanged) {
           return prev;
-        }
-        const newDayHeight = clampLifelineDayHeight(
-          mapTheme.lifeline?.dayHeight ?? DEFAULT_LIFELINE_CONFIG.dayHeight
-        );
-        const dayHeightRatio = newDayHeight / oldDayHeight;
-        if (dayHeightRatio !== 1 && canvasInk?.length) {
-          const focus =
-            toDateString(mapTheme.lifeline?.viewCenterDate)
-            || toDateString(prev.mapTheme?.lifeline?.viewCenterDate)
-            || toDateString(new Date());
-          const oldLayout = getRoadmapLayout(oldSynced);
-          const newLayout = getRoadmapLayout(mapTheme);
-          const oldConfig = getLifelineConfig(oldSynced, anchorDates);
-          const newConfig = getLifelineConfig(mapTheme, anchorDates);
-          const anchorY =
-            getDayTickCanvasY(focus, oldConfig, oldLayout, anchorDates)
-            ?? getDayTickCanvasY(focus, newConfig, newLayout, anchorDates);
-          if (typeof anchorY === 'number') {
-            canvasInk = scaleInkStrokesForLifelineZoom(canvasInk, {
-              centerX: newLayout.centerX ?? oldLayout.centerX ?? 480,
-              anchorY,
-              ratio: dayHeightRatio,
-            });
-          }
         }
         // Avoid re-render/save loops when sync produces the same viewport.
         // Must still persist lifeline-only fields (e.g. routineTemplates).
@@ -1169,13 +1165,14 @@ export function useAppState(userId) {
           && mapTheme.roadmap?.baseY === prev.mapTheme?.roadmap?.baseY
           && mapTheme.roadmap?.spacing === prev.mapTheme?.roadmap?.spacing
           && mapTheme.roadmap?.centerX === prev.mapTheme?.roadmap?.centerX
-          && canvasInk === prev.canvasInk
         ) {
           return prev;
         }
-        stages = alignLifelinePlanStages(stages, mapTheme, anchorDates);
+        if (stages.some(isPlanMode)) {
+          stages = alignLifelinePlanStages(stages, mapTheme, anchorDates);
+        }
       }
-      return { ...prev, mapTheme, stages, canvasInk };
+      return { ...prev, mapTheme, stages };
     }, { debounce: true });
   }, [patchState, lifelineAnchors]);
 
@@ -1271,7 +1268,7 @@ export function useAppState(userId) {
     })) return;
     setLoading(true);
     try {
-      const data = await loadProjectById(projectId);
+      const data = await overlayVaultProjectData(await loadProjectById(projectId));
       setStoredProjectId(projectId);
       applyProject({
         ...data,
@@ -2852,7 +2849,7 @@ export function useAppState(userId) {
     }
     if (!switchingToLifeline) setLoading(true);
     try {
-      const data = await loadProjectById(projectId);
+      const data = await overlayVaultProjectData(await loadProjectById(projectId));
       setStoredProjectId(projectId);
       applyProject({
         ...data,
@@ -2884,7 +2881,7 @@ export function useAppState(userId) {
         localCheckpointCount === 0;
       if (needsFreshData) {
         try {
-          const fresh = await loadProjectById(lifelineProjectId);
+          const fresh = await overlayVaultProjectData(await loadProjectById(lifelineProjectId));
           const freshCheckpointCount = (fresh.stages || []).reduce(
             (sum, s) => sum + (s.checkpoints?.length || 0),
             0

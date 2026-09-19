@@ -25,6 +25,15 @@ function clampScale(value, minScale, maxScale) {
   return Math.min(maxScale, Math.max(minScale, value));
 }
 
+function panWithLockedCenterX(pan, scale, viewport, lockCenterX) {
+  if (lockCenterX == null || !viewport || !pan) return pan;
+  const width = viewport.clientWidth;
+  if (width < 1) return pan;
+  const x = width / 2 - lockCenterX * scale;
+  if (pan.x === x) return pan;
+  return { ...pan, x };
+}
+
 function prefersReducedMotion() {
   if (typeof window === 'undefined' || !window.matchMedia) return false;
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -56,6 +65,10 @@ export const ZoomCanvas = forwardRef(function ZoomCanvas({
   scrollToCanvasPoint = null,
   /** Return true to skip default wheel handling (pan / ctrl zoom). */
   interceptWheel = null,
+  /** `xy` free pan, `y` vertical only, `none` zoom-only. */
+  panAxis = 'xy',
+  /** Canvas X to keep at the viewport's horizontal center. */
+  lockCenterX = null,
 }, ref) {
   const [scale, setScale] = useState(defaultScale);
   const [pan, setPan] = useState(defaultPan);
@@ -68,9 +81,16 @@ export const ZoomCanvas = forwardRef(function ZoomCanvas({
   const appliedScrollTrigger = useRef(null);
   const animatingRef = useRef(false);
   const animCancelRef = useRef(null);
+  const gesturePaintRef = useRef(false);
+  const reactSyncRafRef = useRef(0);
+  const reactSyncIdleRef = useRef(0);
+  const onTransformChangeRef = useRef(onTransformChange);
+  onTransformChangeRef.current = onTransformChange;
+  const interceptWheelRef = useRef(interceptWheel);
+  interceptWheelRef.current = interceptWheel;
   // Keep in sync during render so layout scroll math never reads a stale pan.
-  // Skip while a DOM-driven animation owns the transform (avoids fighting rAF).
-  if (!animatingRef.current) {
+  // Skip while a DOM-driven animation or live gesture owns the transform.
+  if (!animatingRef.current && !gesturePaintRef.current) {
     transformRef.current = { scale, pan };
   }
 
@@ -82,56 +102,114 @@ export const ZoomCanvas = forwardRef(function ZoomCanvas({
     setScale(next);
   }, [minScale, maxScale]);
 
-  const applyScaleAtViewportPoint = useCallback((newScale, pointX, pointY) => {
+  const lockPanX = useCallback((nextPan, nextScale = transformRef.current.scale) => (
+    panWithLockedCenterX(nextPan, nextScale, viewportRef.current, lockCenterX)
+  ), [lockCenterX]);
+
+  const paintContentTransform = useCallback((nextScale, nextPan) => {
+    const el = contentRef.current;
+    if (el) {
+      el.style.transform = `translate3d(${nextPan.x}px, ${nextPan.y}px, 0) scale(${nextScale})`;
+    }
+    transformRef.current = { scale: nextScale, pan: nextPan };
+  }, []);
+
+  const notifyTransform = useCallback(() => {
+    const t = transformRef.current;
+    onTransformChangeRef.current?.({
+      scale: t.scale,
+      pan: t.pan,
+      viewportRef,
+    });
+  }, []);
+
+  const flushReactTransform = useCallback(() => {
+    if (reactSyncRafRef.current) {
+      cancelAnimationFrame(reactSyncRafRef.current);
+      reactSyncRafRef.current = 0;
+    }
+    if (reactSyncIdleRef.current) {
+      window.clearTimeout(reactSyncIdleRef.current);
+      reactSyncIdleRef.current = 0;
+    }
+    if (animatingRef.current) return;
+    const t = transformRef.current;
+    setScale(t.scale);
+    setPan(t.pan);
+  }, []);
+
+  const scheduleReactTransform = useCallback((mode = 'idle') => {
+    if (mode === 'now') {
+      flushReactTransform();
+      return;
+    }
+    if (mode === 'raf') {
+      if (reactSyncRafRef.current) return;
+      reactSyncRafRef.current = requestAnimationFrame(() => {
+        reactSyncRafRef.current = 0;
+        flushReactTransform();
+      });
+      return;
+    }
+    if (reactSyncIdleRef.current) window.clearTimeout(reactSyncIdleRef.current);
+    reactSyncIdleRef.current = window.setTimeout(() => {
+      reactSyncIdleRef.current = 0;
+      flushReactTransform();
+    }, 120);
+  }, [flushReactTransform]);
+
+  const commitTransform = useCallback((nextScale, nextPan, syncMode = 'idle') => {
+    const locked = lockPanX(nextPan, nextScale);
+    gesturePaintRef.current = true;
+    paintContentTransform(nextScale, locked);
+    notifyTransform();
+    if (syncMode !== 'paint') scheduleReactTransform(syncMode);
+    return locked;
+  }, [lockPanX, paintContentTransform, notifyTransform, scheduleReactTransform]);
+
+  const applyScaleAtViewportPoint = useCallback((newScale, pointX, pointY, syncMode = 'now') => {
     const currentScale = transformRef.current.scale;
     const currentPan = transformRef.current.pan;
     const nextScale = clampScale(newScale, minScale, maxScale);
     if (nextScale === currentScale) return currentScale;
     const nextPan = panForZoomAtPoint(currentPan, currentScale, nextScale, pointX, pointY);
-    transformRef.current = { scale: nextScale, pan: nextPan };
-    setScale(nextScale);
-    setPan(nextPan);
+    commitTransform(nextScale, nextPan, syncMode);
     return nextScale;
-  }, [minScale, maxScale]);
+  }, [minScale, maxScale, commitTransform]);
 
   const zoomBy = useCallback((delta) => {
     const viewport = viewportRef.current;
     const currentScale = transformRef.current.scale;
     const nextScale = clampScale(currentScale + delta, minScale, maxScale);
     if (!viewport) {
-      setScale(nextScale);
+      commitTransform(nextScale, transformRef.current.pan, 'now');
       return;
     }
-    applyScaleAtViewportPoint(nextScale, viewport.clientWidth / 2, viewport.clientHeight / 2);
-  }, [minScale, maxScale, applyScaleAtViewportPoint]);
+    applyScaleAtViewportPoint(nextScale, viewport.clientWidth / 2, viewport.clientHeight / 2, 'now');
+  }, [minScale, maxScale, applyScaleAtViewportPoint, commitTransform]);
 
   const resetView = useCallback(() => {
-    setScale(defaultScale);
-    setPan(defaultPan);
-  }, [defaultScale, defaultPan.x, defaultPan.y]);
+    commitTransform(defaultScale, defaultPan, 'now');
+  }, [defaultScale, defaultPan, commitTransform]);
 
   const resetZoomTo100 = useCallback(() => {
     const viewport = viewportRef.current;
     if (!viewport) {
-      setScale(1);
+      commitTransform(1, transformRef.current.pan, 'now');
       return;
     }
-    applyScaleAtViewportPoint(1, viewport.clientWidth / 2, viewport.clientHeight / 2);
-  }, [applyScaleAtViewportPoint]);
+    applyScaleAtViewportPoint(1, viewport.clientWidth / 2, viewport.clientHeight / 2, 'now');
+  }, [applyScaleAtViewportPoint, commitTransform]);
 
   const setPanValue = useCallback((nextPan) => {
     if (!nextPan || typeof nextPan.x !== 'number' || typeof nextPan.y !== 'number') return;
-    transformRef.current = { ...transformRef.current, pan: nextPan };
-    setPan(nextPan);
-  }, []);
+    commitTransform(transformRef.current.scale, nextPan, 'now');
+  }, [commitTransform]);
 
-  const paintContentTransform = useCallback((nextScale, nextPan) => {
-    const el = contentRef.current;
-    if (el) {
-      el.style.transform = `translate(${nextPan.x}px, ${nextPan.y}px) scale(${nextScale})`;
-    }
-    transformRef.current = { scale: nextScale, pan: nextPan };
-  }, []);
+  const paintPanValue = useCallback((nextPan) => {
+    if (!nextPan || typeof nextPan.x !== 'number' || typeof nextPan.y !== 'number') return;
+    commitTransform(transformRef.current.scale, nextPan, 'paint');
+  }, [commitTransform]);
 
   const setTransformValue = useCallback((next) => {
     if (!next) return;
@@ -139,14 +217,14 @@ export const ZoomCanvas = forwardRef(function ZoomCanvas({
       typeof next.scale === 'number'
         ? clampScale(next.scale, minScale, maxScale)
         : transformRef.current.scale;
-    const nextPan =
+    const nextPan = lockPanX(
       next.pan && typeof next.pan.x === 'number' && typeof next.pan.y === 'number'
         ? next.pan
-        : transformRef.current.pan;
-    paintContentTransform(nextScale, nextPan);
-    setScale(nextScale);
-    setPan(nextPan);
-  }, [minScale, maxScale, paintContentTransform]);
+        : transformRef.current.pan,
+      nextScale
+    );
+    commitTransform(nextScale, nextPan, 'now');
+  }, [minScale, maxScale, lockPanX, commitTransform]);
 
   const animateTo = useCallback((toScale, toPan, durationMs = 400, options = {}) => {
     if (animCancelRef.current) {
@@ -159,14 +237,19 @@ export const ZoomCanvas = forwardRef(function ZoomCanvas({
     const targetScale = clamp
       ? clampScale(rawScale, minScale, maxScale)
       : Math.max(0.05, rawScale);
-    const targetPan = toPan && typeof toPan.x === 'number'
-      ? toPan
-      : transformRef.current.pan;
+    const targetPan = lockPanX(
+      toPan && typeof toPan.x === 'number'
+        ? toPan
+        : transformRef.current.pan,
+      targetScale
+    );
 
     if (!durationMs || prefersReducedMotion()) {
+      gesturePaintRef.current = false;
       paintContentTransform(targetScale, targetPan);
       setScale(targetScale);
       setPan(targetPan);
+      notifyTransform();
       return Promise.resolve();
     }
 
@@ -184,10 +267,12 @@ export const ZoomCanvas = forwardRef(function ZoomCanvas({
       const finish = () => {
         animatingRef.current = false;
         animCancelRef.current = null;
+        gesturePaintRef.current = false;
         if (contentRef.current) contentRef.current.style.willChange = '';
         paintContentTransform(targetScale, targetPan);
         setScale(targetScale);
         setPan(targetPan);
+        notifyTransform();
         resolve();
       };
 
@@ -211,13 +296,14 @@ export const ZoomCanvas = forwardRef(function ZoomCanvas({
       };
       raf = requestAnimationFrame(tick);
     });
-  }, [minScale, maxScale, paintContentTransform]);
+  }, [minScale, maxScale, paintContentTransform, lockPanX, notifyTransform]);
 
   useImperativeHandle(ref, () => ({
     zoomBy,
     resetView,
     resetZoomTo100,
     setPan: setPanValue,
+    paintPan: paintPanValue,
     setTransform: setTransformValue,
     animateTo,
     getScale: () => transformRef.current.scale,
@@ -226,7 +312,7 @@ export const ZoomCanvas = forwardRef(function ZoomCanvas({
       scale: transformRef.current.scale,
       pan: { ...transformRef.current.pan },
     }),
-  }), [zoomBy, resetView, resetZoomTo100, setPanValue, setTransformValue, animateTo]);
+  }), [zoomBy, resetView, resetZoomTo100, setPanValue, paintPanValue, setTransformValue, animateTo]);
 
   useEffect(() => {
     const onKeyDown = (e) => {
@@ -251,11 +337,13 @@ export const ZoomCanvas = forwardRef(function ZoomCanvas({
   }, []);
 
   const handlePointerDown = useCallback((e) => {
-    if (e.target.closest('button, a, input, textarea, select, .drawing-toolbar')) return;
+    const onDayGrid = e.target.closest('.lifeline-day-grid');
+    if (e.target.closest('button, a, input, textarea, select, .drawing-toolbar') && !onDayGrid) return;
 
     const onExcluded = panExcludeSelector && e.target.closest(panExcludeSelector);
+    const inkEnabled = Boolean(onInkPointerDown);
     const inkTool = inkToolFromMode(interactionMode);
-    const wantsPan = shouldStartPan(e, interactionMode, spaceHeld.current);
+    const wantsPan = shouldStartPan(e, interactionMode, spaceHeld.current, inkEnabled);
 
     if (interactionMode === 'select' && onSelectPointerDown && !onExcluded) {
       onSelectPointerDown(e);
@@ -272,26 +360,42 @@ export const ZoomCanvas = forwardRef(function ZoomCanvas({
       return;
     }
 
+    if (panAxis === 'none') return;
     if (onExcluded) return;
     if (!wantsPan) return;
 
     e.preventDefault();
     setDragging(true);
-    dragStart.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
+    const currentPan = transformRef.current.pan;
+    dragStart.current = { x: e.clientX - currentPan.x, y: e.clientY - currentPan.y };
     e.currentTarget.setPointerCapture(e.pointerId);
-  }, [pan.x, pan.y, panExcludeSelector, interactionMode, onInkPointerDown, onSelectPointerDown, onInkDragPointerDown]);
+  }, [panExcludeSelector, interactionMode, onInkPointerDown, onSelectPointerDown, onInkDragPointerDown, panAxis]);
 
   const handlePointerMove = useCallback((e) => {
-    if (!dragging || !dragStart.current) return;
-    setPan({
-      x: e.clientX - dragStart.current.x,
+    if (!dragStart.current) return;
+    if (e.buttons === 0) {
+      setDragging(false);
+      dragStart.current = null;
+      scheduleReactTransform('now');
+      return;
+    }
+    const current = transformRef.current;
+    const next = {
+      x: panAxis === 'y' ? current.pan.x : e.clientX - dragStart.current.x,
       y: e.clientY - dragStart.current.y,
-    });
-  }, [dragging]);
+    };
+    commitTransform(current.scale, next, 'idle');
+  }, [panAxis, commitTransform, scheduleReactTransform]);
 
   const stopDrag = useCallback(() => {
     setDragging(false);
     dragStart.current = null;
+    scheduleReactTransform('now');
+  }, [scheduleReactTransform]);
+
+  useEffect(() => () => {
+    if (reactSyncRafRef.current) cancelAnimationFrame(reactSyncRafRef.current);
+    if (reactSyncIdleRef.current) window.clearTimeout(reactSyncIdleRef.current);
   }, []);
 
   useEffect(() => {
@@ -301,40 +405,57 @@ export const ZoomCanvas = forwardRef(function ZoomCanvas({
     const handleWheel = (e) => {
       e.preventDefault();
 
-      if (interceptWheel?.(e, {
+      const setLockedPan = (nextPan, syncMode = 'now') => {
+        const resolved = typeof nextPan === 'function'
+          ? nextPan(transformRef.current.pan)
+          : nextPan;
+        commitTransform(transformRef.current.scale, resolved, syncMode);
+      };
+
+      if (interceptWheelRef.current?.(e, {
         scale: transformRef.current.scale,
         pan: transformRef.current.pan,
         viewportRef,
-        setScale,
-        setPan,
+        setScale: (nextScale) => {
+          const value = typeof nextScale === 'function'
+            ? nextScale(transformRef.current.scale)
+            : nextScale;
+          commitTransform(
+            clampScale(value, minScale, maxScale),
+            transformRef.current.pan,
+            'idle'
+          );
+        },
+        setPan: setLockedPan,
         minScale,
         maxScale,
       })) {
         return;
       }
 
-      if (e.ctrlKey || e.metaKey) {
+      const zoomWheel = panAxis === 'none' || e.ctrlKey || e.metaKey;
+      if (zoomWheel) {
         const { scale: currentScale, pan: currentPan } = transformRef.current;
         const { x: pointX, y: pointY } = viewportClientPoint(e.clientX, e.clientY, viewport);
         const zoomFactor = Math.exp(-e.deltaY * 0.002);
         const newScale = clampScale(currentScale * zoomFactor, minScale, maxScale);
         if (newScale === currentScale) return;
-
-        const newPan = panForZoomAtPoint(currentPan, currentScale, newScale, pointX, pointY);
-        transformRef.current = { scale: newScale, pan: newPan };
-        setScale(newScale);
-        setPan(newPan);
+        commitTransform(
+          newScale,
+          panForZoomAtPoint(currentPan, currentScale, newScale, pointX, pointY),
+          'idle'
+        );
         return;
       }
-      setPan((current) => ({
-        x: current.x - e.deltaX,
-        y: current.y - e.deltaY,
-      }));
+      setLockedPan({
+        x: panAxis === 'y' ? transformRef.current.pan.x : transformRef.current.pan.x - e.deltaX,
+        y: transformRef.current.pan.y - e.deltaY,
+      }, 'idle');
     };
 
     viewport.addEventListener('wheel', handleWheel, { passive: false });
     return () => viewport.removeEventListener('wheel', handleWheel);
-  }, [minScale, maxScale, interceptWheel]);
+  }, [minScale, maxScale, panAxis, commitTransform]);
 
   useEffect(() => {
     const viewport = viewportRef.current;
@@ -371,7 +492,7 @@ export const ZoomCanvas = forwardRef(function ZoomCanvas({
       const { x: midX, y: midY } = getTouchMidpoint(event.touches);
       const { x: pointX, y: pointY } = viewportClientPoint(midX, midY, viewport);
 
-      applyScaleAtViewportPoint(targetScale, pointX, pointY);
+      applyScaleAtViewportPoint(targetScale, pointX, pointY, 'idle');
     };
 
     const onTouchEnd = (event) => {
@@ -396,14 +517,21 @@ export const ZoomCanvas = forwardRef(function ZoomCanvas({
   // Drive transform on the DOM node so parent re-renders cannot reset mid-animation.
   useLayoutEffect(() => {
     if (animatingRef.current) return;
+    // A live gesture/paint already wrote transformRef onto the DOM. Keep it —
+    // React pan/scale can still be stale while ticks remount at a zoom level.
+    if (gesturePaintRef.current) {
+      gesturePaintRef.current = false;
+      if (contentRef.current) contentRef.current.style.willChange = '';
+      return;
+    }
     paintContentTransform(scale, pan);
   }, [scale, pan, paintContentTransform]);
 
   useEffect(() => {
     // Skip parent notifications mid DOM-animation (prevents ProjectsCanvas thrash).
-    if (animatingRef.current) return;
-    onTransformChange?.({ scale, pan, viewportRef });
-  }, [scale, pan, onTransformChange]);
+    if (animatingRef.current || gesturePaintRef.current) return;
+    notifyTransform();
+  }, [scale, pan, notifyTransform]);
 
   useLayoutEffect(() => {
     if (!scrollToCanvasPoint || typeof scrollToCanvasPoint.y !== 'number') {
@@ -428,10 +556,11 @@ export const ZoomCanvas = forwardRef(function ZoomCanvas({
       if (typeof scrollToCanvasPoint.scale === 'number') {
         setScale(s);
       }
-      setPan({
+      const nextPan = lockPanX({
         x: w / 2 - scrollToCanvasPoint.x * s,
         y: h / 2 - scrollToCanvasPoint.y * s,
-      });
+      }, s);
+      commitTransform(s, nextPan, 'now');
       appliedScrollTrigger.current = trigger;
       return true;
     };
@@ -455,7 +584,28 @@ export const ZoomCanvas = forwardRef(function ZoomCanvas({
     scrollToCanvasPoint?.scale,
     minScale,
     maxScale,
+    lockPanX,
+    commitTransform,
   ]);
+
+  useEffect(() => {
+    if (lockCenterX == null) return undefined;
+    const viewport = viewportRef.current;
+    if (!viewport) return undefined;
+
+    const apply = () => {
+      if (animatingRef.current) return;
+      const current = transformRef.current;
+      const nextPan = lockPanX(current.pan, current.scale);
+      if (nextPan === current.pan || nextPan.x === current.pan.x) return;
+      commitTransform(current.scale, nextPan, 'now');
+    };
+
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, [lockCenterX, lockPanX, commitTransform]);
 
   const percent = Math.round(scale * 100);
   const transformCtx = useMemo(

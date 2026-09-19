@@ -12,6 +12,7 @@ function metricValue(metrics, type, source = null) {
 }
 
 import { getLatestWeightReading, getPreviousWeightReading, formatWeightReadingTime } from './weightReadings';
+import { getLatestWaistReading, getPreviousWaistReading } from './waistReadings';
 
 function latestWeightMetrics(metrics) {
   const latest = getLatestWeightReading(metrics);
@@ -57,11 +58,38 @@ function buildWeightMetric(kg, delta = null, recordedAt = null) {
   };
 }
 
+function applyWaistToWeight(metrics, healthMetrics) {
+  const latest = getLatestWaistReading(healthMetrics);
+  const base = metrics.weight ?? emptySelfData.metrics.weight;
+  if (!latest) {
+    metrics.weight = {
+      ...base,
+      waistCm: null,
+      waistDelta: null,
+    };
+    return metrics;
+  }
+
+  const previous = getPreviousWaistReading(healthMetrics, latest.recordedAt);
+  const waistDelta = previous
+    ? Math.round((latest.value - previous.value) * 10) / 10
+    : null;
+
+  metrics.weight = {
+    ...base,
+    waistCm: Math.round(latest.value * 10) / 10,
+    waistDelta,
+    waistRecordedAt: latest.recordedAt,
+  };
+  return metrics;
+}
+
 function applyWeightMetric(metrics, healthMetrics) {
   const { latest, delta } = latestWeightMetrics(healthMetrics);
   metrics.weight = latest
     ? buildWeightMetric(latest.value, delta, latest.recordedAt)
     : emptySelfData.metrics.weight;
+  applyWaistToWeight(metrics, healthMetrics);
   return metrics;
 }
 
@@ -85,12 +113,14 @@ export function healthMetricsToSelfData({ healthMetrics = [], ouraRow = null, co
   const minHr = metricValue(healthMetrics, 'heart_rate_min', 'oura');
   const maxHr = metricValue(healthMetrics, 'heart_rate_max', 'oura');
   const { latest: latestWeight } = latestWeightMetrics(healthMetrics);
+  const latestWaist = getLatestWaistReading(healthMetrics);
 
   const hasAny =
     sleep != null ||
     readiness != null ||
     activity != null ||
     latestWeight != null ||
+    latestWaist != null ||
     restingHr != null ||
     avgHr != null ||
     connected;

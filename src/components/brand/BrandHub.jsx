@@ -1,5 +1,6 @@
 import { CAPTURE_KINDS, kindLabel, PIPELINE_STAGES } from '../../lib/brand/schema';
 import { isOpenAiConfigured } from '../../lib/openai';
+import { metaStatusHint, metaStatusLabel } from '../../lib/meta';
 
 function PenIcon() {
   return (
@@ -40,13 +41,13 @@ export function BrandHub({
   activeDraft,
   pipeline,
   stats,
-  balance,
   weekly,
   captureText,
   captureKind,
   recording,
   transcribing,
   weeklyAi,
+  metaStatus,
   onCaptureText,
   onCaptureKind,
   onCapture,
@@ -57,6 +58,7 @@ export function BrandHub({
   onVariations,
   onViewPipeline,
   onViewSignals,
+  onManageMeta,
 }) {
   const openAi = isOpenAiConfigured();
 
@@ -141,6 +143,18 @@ export function BrandHub({
             <div className="brand-ring" style={{ '--p': stats.consistency }} data-label={`${stats.consistency}%`} />
             <p>Keep showing up.</p>
           </div>
+          <div className="brand-meta">
+            <p className="brand-meta__label">Meta</p>
+            <div className="brand-meta__row">
+              <span className="brand-meta__accounts">{metaStatusLabel(metaStatus)}</span>
+              <button type="button" className="brand-link" onClick={onManageMeta}>
+                {metaStatus?.connected ? 'Manage' : 'Connect'}
+              </button>
+            </div>
+            {metaStatusHint(metaStatus) ? (
+              <p className="brand-meta__hint">{metaStatusHint(metaStatus)}</p>
+            ) : null}
+          </div>
         </section>
       </div>
 
@@ -175,63 +189,46 @@ export function BrandHub({
         </div>
       </section>
 
-      <div className="brand-hub__mid">
-        <section className="brand-card">
-          <div className="brand-card__head">
-            <h2 className="brand-card__title">Quick Capture</h2>
-          </div>
-          <p className="brand-empty" style={{ marginBottom: 10 }}>
-            Τι έγινε σήμερα που ίσως αξίζει να μοιραστείς;
-          </p>
-          <div className="brand-capture__field">
-            <textarea
-              id="brand-capture"
-              value={captureText}
-              onChange={(event) => onCaptureText(event.target.value)}
-              placeholder="What happened today that is worth sharing?"
-            />
+      <section className="brand-card brand-capture">
+        <div className="brand-card__head">
+          <h2 className="brand-card__title">Quick Capture</h2>
+        </div>
+        <p className="brand-empty" style={{ marginBottom: 10 }}>
+          Τι έγινε σήμερα που ίσως αξίζει να μοιραστείς;
+        </p>
+        <div className="brand-capture__field">
+          <textarea
+            id="brand-capture"
+            value={captureText}
+            onChange={(event) => onCaptureText(event.target.value)}
+            placeholder="What happened today that is worth sharing?"
+          />
+          <button
+            type="button"
+            className="brand-btn brand-btn--icon"
+            onClick={onToggleMic}
+            aria-label={recording ? 'Stop recording' : 'Record'}
+            disabled={transcribing}
+          >
+            <MicIcon active={recording} />
+          </button>
+          <button type="button" className="brand-btn brand-btn--green" onClick={onCapture} disabled={!captureText.trim()}>
+            Capture
+          </button>
+        </div>
+        <div className="brand-kinds">
+          {CAPTURE_KINDS.map((kind) => (
             <button
+              key={kind.id}
               type="button"
-              className="brand-btn brand-btn--icon"
-              onClick={onToggleMic}
-              aria-label={recording ? 'Stop recording' : 'Record'}
-              disabled={transcribing}
+              aria-pressed={captureKind === kind.id}
+              onClick={() => onCaptureKind(kind.id)}
             >
-              <MicIcon active={recording} />
+              {kind.label}
             </button>
-            <button type="button" className="brand-btn brand-btn--green" onClick={onCapture} disabled={!captureText.trim()}>
-              Capture
-            </button>
-          </div>
-          <div className="brand-kinds">
-            {CAPTURE_KINDS.map((kind) => (
-              <button
-                key={kind.id}
-                type="button"
-                aria-pressed={captureKind === kind.id}
-                onClick={() => onCaptureKind(kind.id)}
-              >
-                {kind.label}
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <section className="brand-card">
-          <div className="brand-card__head">
-            <h2 className="brand-card__title">Brand Balance</h2>
-          </div>
-          {balance.bars.map((bar) => (
-            <div key={bar.id} className="brand-balance__row">
-              <span>{bar.label}</span>
-              <strong>{bar.value}%</strong>
-              <div className="brand-balance__track">
-                <span style={{ width: `${bar.value}%` }} />
-              </div>
-            </div>
           ))}
-        </section>
-      </div>
+        </div>
+      </section>
 
       <section className="brand-card">
         <div className="brand-card__head">

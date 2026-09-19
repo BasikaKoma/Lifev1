@@ -2,6 +2,36 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('__lifev1Platform', 'electron');
 
+contextBridge.exposeInMainWorld('electronAuth', {
+  storageGet(key) {
+    return ipcRenderer.invoke('auth:storage-get', key);
+  },
+  storageSet(key, value) {
+    return ipcRenderer.invoke('auth:storage-set', key, value);
+  },
+  storageRemove(key) {
+    return ipcRenderer.invoke('auth:storage-remove', key);
+  },
+  getLogin() {
+    return ipcRenderer.invoke('auth:get-login');
+  },
+  getBootstrap() {
+    return ipcRenderer.invoke('auth:get-bootstrap');
+  },
+  saveLogin(payload) {
+    return ipcRenderer.invoke('auth:save-login', payload);
+  },
+  clearLogin() {
+    return ipcRenderer.invoke('auth:clear-login');
+  },
+  markSignedOut() {
+    return ipcRenderer.invoke('auth:mark-signed-out');
+  },
+  clearSignedOut() {
+    return ipcRenderer.invoke('auth:clear-signed-out');
+  },
+});
+
 contextBridge.exposeInMainWorld('electronSave', {
   onFlushBeforeClose(callback) {
     const handler = () => {
@@ -23,6 +53,36 @@ contextBridge.exposeInMainWorld('electronScale', {
 contextBridge.exposeInMainWorld('electronCameras', {
   snapshot(camera) {
     return ipcRenderer.invoke('cameras:snapshot', camera);
+  },
+});
+
+contextBridge.exposeInMainWorld('electronVault', {
+  getStatus() {
+    return ipcRenderer.invoke('vault:get-status');
+  },
+  pickFolder() {
+    return ipcRenderer.invoke('vault:pick-folder');
+  },
+  disconnect() {
+    return ipcRenderer.invoke('vault:disconnect');
+  },
+  writeText(relativePath, contents) {
+    return ipcRenderer.invoke('vault:write-text', relativePath, contents);
+  },
+  readText(relativePath) {
+    return ipcRenderer.invoke('vault:read-text', relativePath);
+  },
+  exists(relativePath) {
+    return ipcRenderer.invoke('vault:exists', relativePath);
+  },
+  listDir(relativePath) {
+    return ipcRenderer.invoke('vault:list-dir', relativePath);
+  },
+  remove(relativePath) {
+    return ipcRenderer.invoke('vault:remove', relativePath);
+  },
+  reveal() {
+    return ipcRenderer.invoke('vault:reveal');
   },
 });
 
@@ -65,6 +125,9 @@ contextBridge.exposeInMainWorld('electronUpdater', {
   },
   checkForUpdates() {
     return ipcRenderer.invoke('updater:check');
+  },
+  installUpdate() {
+    return ipcRenderer.invoke('updater:install');
   },
   onStatus(callback) {
     const handler = (_event, status) => callback(status);

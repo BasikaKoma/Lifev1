@@ -19,6 +19,10 @@ const MIME = {
 let updateServer = null;
 let mainWindowRef = null;
 let ipcRegistered = false;
+let prepareQuitForUpdate = () => {};
+let onUpdateDownloaded = () => {};
+let installStarted = false;
+let updateFileReady = false;
 
 function sendStatus(payload) {
   if (mainWindowRef && !mainWindowRef.isDestroyed()) {
@@ -91,15 +95,54 @@ function registerUpdaterIpc() {
       return { ok: false, error: err.message || 'Update check failed' };
     }
   });
+
+  ipcMain.handle('updater:install', () => {
+    if (!updateFileReady) {
+      return { ok: false, error: 'No update downloaded' };
+    }
+    installUpdateNow();
+    return { ok: true };
+  });
 }
 
-function setupAutoUpdater(mainWindow) {
+function installUpdateNow() {
+  if (installStarted) return;
+  installStarted = true;
+
+  prepareQuitForUpdate();
+
+  let ran = false;
+  const run = () => {
+    if (ran) return;
+    ran = true;
+    autoUpdater.quitAndInstall(true, true);
+    // If the close-guard blocks app.quit(), force-exit so the installer can replace files.
+    setTimeout(() => app.exit(0), 4000);
+  };
+
+  if (mainWindowRef && !mainWindowRef.isDestroyed() && !mainWindowRef.webContents.isDestroyed()) {
+    const timeout = setTimeout(run, 1500);
+    ipcMain.once('flush-save-complete', () => {
+      clearTimeout(timeout);
+      run();
+    });
+    mainWindowRef.webContents.send('request-flush-save');
+    return;
+  }
+
+  run();
+}
+
+function setupAutoUpdater(mainWindow, hooks = {}) {
   mainWindowRef = mainWindow;
+  prepareQuitForUpdate = typeof hooks.prepareQuitForUpdate === 'function' ? hooks.prepareQuitForUpdate : () => {};
+  onUpdateDownloaded = typeof hooks.onUpdateDownloaded === 'function' ? hooks.onUpdateDownloaded : () => {};
   registerUpdaterIpc();
 
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.autoRunAppAfterInstall = true;
+  autoUpdater.disableWebInstaller = true;
 
   autoUpdater.on('checking-for-update', () => {
     sendStatus({ state: 'checking' });
@@ -130,6 +173,8 @@ function setupAutoUpdater(mainWindow) {
   });
 
   autoUpdater.on('update-downloaded', (info) => {
+    updateFileReady = true;
+    onUpdateDownloaded();
     sendStatus({
       state: 'ready',
       version: info.version,
@@ -142,12 +187,12 @@ function setupAutoUpdater(mainWindow) {
         type: 'info',
         title: 'lifev1',
         message: 'Νέα έκδοση έτοιμη',
-        detail: `Έκδοση ${info.version}. Κλείσε και ξαναάνοιξε την εφαρμογή για να εφαρμοστεί η ενημέρωση.`,
+        detail: `Έκδοση ${info.version}. Η εφαρμογή θα κλείσει, θα εγκατασταθεί στο παρασκήνιο και θα ανοίξει ξανά.`,
         buttons: ['Επανεκκίνηση τώρα', 'Αργότερα'],
         defaultId: 0,
       })
       .then(({ response }) => {
-        if (response === 0) autoUpdater.quitAndInstall(false, true);
+        if (response === 0) installUpdateNow();
       });
   });
 
@@ -175,7 +220,7 @@ function setupAutoUpdater(mainWindow) {
   }, 5 * 60 * 1000);
 }
 
-async function initAutoUpdates(mainWindow) {
+async function initAutoUpdates(mainWindow, hooks = {}) {
   if (!mainWindow) return;
 
   try {
@@ -184,7 +229,7 @@ async function initAutoUpdates(mainWindow) {
     if (override && /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?/i.test(override)) {
       await startLocalUpdateServer();
     }
-    setupAutoUpdater(mainWindow);
+    setupAutoUpdater(mainWindow, hooks);
   } catch (err) {
     console.error('Auto-update init failed:', err.message);
   }

@@ -40,6 +40,7 @@ export function CanvasTopBar({
   onRecognizeInk,
   recognizingInk = false,
   selectedInkCount = 0,
+  allowInk = true,
 }) {
   const [themeOpen, setThemeOpen] = useState(false);
   const isMobile = platform.isMobile;
@@ -77,7 +78,7 @@ export function CanvasTopBar({
           ))}
         </div>
 
-        {!isMobile && (
+        {!isMobile && allowInk && (
           <>
             <div className="canvas-top-bar__divider" aria-hidden="true" />
 
@@ -95,10 +96,10 @@ export function CanvasTopBar({
               recognizing={recognizingInk}
               selectedCount={selectedInkCount}
             />
-
-            <div className="canvas-top-bar__divider" aria-hidden="true" />
           </>
         )}
+
+        {!isMobile && <div className="canvas-top-bar__divider" aria-hidden="true" />}
 
         <div className="canvas-top-bar__group canvas-top-bar__group--edit">
           {!isMobile && <span className="canvas-top-bar__label">Edit</span>}

@@ -1,4 +1,4 @@
-import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ZoomCanvas, useZoomTransform } from './ZoomCanvas';
 import { MilestoneCanvasCard } from './MilestoneCanvasCard';
 import { ObstacleCanvasCard } from './ObstacleCanvasCard';
@@ -76,13 +76,16 @@ import { collectProjectCategories } from '../utils/categories';
 import { ProjectsOriginCard } from './ProjectsOriginCard';
 import { LifelineDayTicks } from './LifelineDayTicks';
 import { LifelineDayModal } from './LifelineDayModal';
+import { LifelinePeriodModal } from './LifelinePeriodModal';
 import { LifelineProjectAnchors, LifelineUnanchoredPanel } from './LifelineProjectAnchors';
 import { LifelineNorthStars } from './LifelineNorthStars';
 import {
   getLifelineConfig,
   generateDayTicks,
   generateLifelineDayBands,
+  generatePeriodBrackets,
   dateToTimelineY,
+  addDays,
   syncLifelineMapTheme,
   isLifelineSpineReady,
   getLifelineTodayScrollPoint,
@@ -96,6 +99,7 @@ import {
   getLifelineZoomPercent,
   getLifelineSpineMetrics,
   timelineYToDate,
+  lifelineCssScaleBucket,
   LIFELINE_ZOOM,
   DEFAULT_LIFELINE_CONFIG,
 } from '../utils/lifeline';
@@ -105,7 +109,7 @@ import { collectLifelineActivityDates } from '../utils/lifelineDays';
 import { viewportClientPoint } from '../utils/inkStrokes';
 import { getCurrentStage, getNextIncompleteCheckpoint, isCheckpointDone } from '../utils/logic';
 import { CheckpointPlanPanel } from './CheckpointPlanPanel';
-import { useLifelineDayView, DAY_VIEW_PHASE } from '../hooks/useLifelineDayView';
+import { useLifelineDayView, DAY_VIEW_PHASE, LIFELINE_VIEW_KIND, originPercentFromRects } from '../hooks/useLifelineDayView';
 import {
   getNoteSettledAt,
   isNoteSettled,
@@ -322,7 +326,10 @@ function ProjectsCenterLine({
 
   if (!lineMetrics) return null;
 
+  const locked = Boolean(lifelineConfig);
+
   const startMove = (e) => {
+    if (locked) return;
     if (e.button !== 0) return;
     if (e.target.closest('.projects-center-line__handle, .projects-center-line__dot, .lifeline-day-tick')) return;
     e.stopPropagation();
@@ -342,6 +349,7 @@ function ProjectsCenterLine({
   };
 
   const startResize = (edge) => (e) => {
+    if (locked) return;
     if (e.button !== 0) return;
     e.stopPropagation();
     e.preventDefault();
@@ -402,17 +410,17 @@ function ProjectsCenterLine({
 
   return (
     <div
-      className={`projects-center-line${selected ? ' projects-center-line--selected' : ''}${lifelineDayTicks ? ' projects-center-line--lifeline' : ''}${planWindows?.length ? ' projects-center-line--plan-active' : ''}`}
+      className={`projects-center-line${selected ? ' projects-center-line--selected' : ''}${lifelineDayTicks ? ' projects-center-line--lifeline' : ''}${planWindows?.length ? ' projects-center-line--plan-active' : ''}${locked ? ' projects-center-line--locked' : ''}`}
       style={{
         left: lineMetrics.centerX,
         top: lineMetrics.top,
         height: lineMetrics.height,
         ...(lifelineDaySpacing != null ? { '--ll-day-spacing': `${lifelineDaySpacing}px` } : {}),
       }}
-      onPointerDown={startMove}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={onPointerUp}
+      onPointerDown={locked ? undefined : startMove}
+      onPointerMove={locked ? undefined : onPointerMove}
+      onPointerUp={locked ? undefined : onPointerUp}
+      onPointerCancel={locked ? undefined : onPointerUp}
       role="presentation"
     >
       <div className="projects-center-line__glow" aria-hidden="true" />
@@ -471,20 +479,24 @@ function ProjectsCenterLine({
         />
       ))}
       {lifelineDayTicks}
-      <button
-        type="button"
-        className="projects-center-line__handle projects-center-line__handle--top"
-        onPointerDown={startResize('top')}
-        title={lifelineConfig ? 'Τράβηξε πάνω για πιο μετά' : 'Μεγέθυνση από πάνω'}
-        aria-label={lifelineConfig ? 'Επέκταση Lifeline προς το μέλλον' : 'Resize canvas from top'}
-      />
-      <button
-        type="button"
-        className="projects-center-line__handle projects-center-line__handle--bottom"
-        onPointerDown={startResize('bottom')}
-        title={lifelineConfig ? 'Τράβηξε κάτω για πιο πριν' : 'Μεγέθυνση από κάτω'}
-        aria-label={lifelineConfig ? 'Επέκταση Lifeline προς το παρελθόν' : 'Resize canvas from bottom'}
-      />
+      {!locked && (
+        <>
+          <button
+            type="button"
+            className="projects-center-line__handle projects-center-line__handle--top"
+            onPointerDown={startResize('top')}
+            title="Μεγέθυνση από πάνω"
+            aria-label="Resize canvas from top"
+          />
+          <button
+            type="button"
+            className="projects-center-line__handle projects-center-line__handle--bottom"
+            onPointerDown={startResize('bottom')}
+            title="Μεγέθυνση από κάτω"
+            aria-label="Resize canvas from bottom"
+          />
+        </>
+      )}
       {(lineMetrics.nodes || []).map((node) => (
         <ProjectsTimelineDot
           key={node.id}
@@ -533,7 +545,66 @@ function CanvasTransformBridge({ bridgeRef }) {
   return null;
 }
 
-function CanvasBoard({
+/** Owns the % label so CSS zoom can update it without re-rendering the whole board. */
+function ZoomPercentLabel({ className = '', subscribeRef, initialPercent }) {
+  const [percent, setPercent] = useState(initialPercent);
+  useEffect(() => {
+    subscribeRef.current = setPercent;
+    return () => {
+      if (subscribeRef.current === setPercent) subscribeRef.current = null;
+    };
+  }, [subscribeRef]);
+  return <span className={className}>{percent}%</span>;
+}
+
+function setLifelineDensityPreview(viewport, { originX, originY, factor }) {
+  if (!viewport) return;
+  const board = viewport.querySelector('.projects-canvas-board');
+  if (!board) return;
+  if (!Number.isFinite(factor) || Math.abs(factor - 1) < 0.001) {
+    clearLifelineDensityPreview(viewport);
+    return;
+  }
+  board.dataset.llDensityPreview = '1';
+  board.style.setProperty('--ll-density-factor', String(factor));
+  board.style.transformOrigin = `${originX}px ${originY}px`;
+  board.style.transform = `scaleY(${factor})`;
+}
+
+function clearLifelineDensityPreview(viewport) {
+  if (!viewport) return;
+  const board = viewport.querySelector('.projects-canvas-board');
+  if (!board) return;
+  delete board.dataset.llDensityPreview;
+  board.style.transform = '';
+  board.style.transformOrigin = '';
+  board.style.removeProperty('--ll-density-factor');
+}
+
+function readLifelineDensityFactor(viewport) {
+  const board = viewport?.querySelector?.('.projects-canvas-board');
+  if (!board || board.dataset.llDensityPreview !== '1') return 1;
+  const factor = Number(board.style.getPropertyValue('--ll-density-factor'));
+  return Number.isFinite(factor) && factor > 0 ? factor : 1;
+}
+
+function mapLifelineFocusY(queue, spine) {
+  const startHeight = queue.startHeight || spine.height;
+  if (!startHeight) return queue.originY;
+  return spine.top + (spine.height / startHeight) * (queue.originY - queue.spineTop);
+}
+
+function snapshotLifelinePaintBase(layout, boardSize, surfaceSize) {
+  return {
+    spineTop: layout?.top || 0,
+    spineHeight: layout?.height || 0,
+    boardHeight: boardSize?.height || 0,
+    surfaceHeight: surfaceSize?.height || 0,
+    centerX: layout?.centerX || 0,
+  };
+}
+
+const CanvasBoard = memo(function CanvasBoard({
   canvasStages,
   canvasIdeas,
   canvasStickies,
@@ -645,9 +716,12 @@ function CanvasBoard({
   lifelineHiddenTickRanges = [],
   lifelineZoomLevel = null,
   lifelineDayBands = null,
+  periodBrackets = [],
   selectedDayDate = null,
+  selectedPeriod = null,
   dayViewPhase = DAY_VIEW_PHASE.timeline,
   routineTemplates = [],
+  onPeriodClick,
 }) {
   const layoutWithOrigin =
     projectsLayout?.direction === 'vertical' && typeof lineMetrics?.bottomY === 'number'
@@ -666,24 +740,28 @@ function CanvasBoard({
       className="projects-canvas-surface"
       style={{ width: inkSurfaceSize.width, height: inkSurfaceSize.height }}
     >
-      <CanvasInkSurface
-        tool={inkTool}
-        color={inkColor}
-        size={inkSize}
-        strokes={canvasInk}
-        onAddStroke={onAddInkStroke}
-        onRemoveStrokes={onRemoveInkStrokes}
-        bindDownRef={inkBindDownRef}
-        selectedStrokeIds={selectedStrokeIds}
-        width={inkSurfaceSize.width}
-        height={inkSurfaceSize.height}
-      />
+      {!isLifeline && (
+        <>
+          <CanvasInkSurface
+            tool={inkTool}
+            color={inkColor}
+            size={inkSize}
+            strokes={canvasInk}
+            onAddStroke={onAddInkStroke}
+            onRemoveStrokes={onRemoveInkStrokes}
+            bindDownRef={inkBindDownRef}
+            selectedStrokeIds={selectedStrokeIds}
+            width={inkSurfaceSize.width}
+            height={inkSurfaceSize.height}
+          />
 
-      <InkSelectionHost
-        strokes={canvasInk}
-        onSelectionChange={onInkSelectionChange}
-        bindDownRef={selectBindRef}
-      />
+          <InkSelectionHost
+            strokes={canvasInk}
+            onSelectionChange={onInkSelectionChange}
+            bindDownRef={selectBindRef}
+          />
+        </>
+      )}
 
       <div
         className={`projects-canvas-board${projectsLayout?.direction === 'vertical' ? ' projects-canvas-board--vertical' : ''}${isPremium ? ' projects-canvas-board--premium' : ''}${connectModeActive ? ' projects-canvas-board--connecting' : ''}${selectedDayDate ? ' projects-canvas-board--day-view' : ''}`}
@@ -711,9 +789,11 @@ function CanvasBoard({
               <LifelineDayTicks
                 ticks={lifelineDayTicks}
                 dayBands={lifelineDayBands}
+                periodBrackets={periodBrackets}
                 lineTop={lineMetrics.top}
                 lifelineDays={lifelineDays}
                 onDayClick={onDayClick}
+                onPeriodClick={onPeriodClick}
                 planLabels={lifelinePlanDateLabels}
                 daySpacing={lifelinePlanContext?.daySpacing ?? 0}
                 zoomLevel={lifelineZoomLevel}
@@ -722,6 +802,7 @@ function CanvasBoard({
                 layout={projectsLayout}
                 hiddenTickRanges={lifelineHiddenTickRanges}
                 selectedDate={selectedDayDate}
+                selectedPeriod={selectedPeriod}
                 routineTemplates={routineTemplates}
               />
             ) : null
@@ -996,7 +1077,7 @@ function CanvasBoard({
       </div>
     </div>
   );
-}
+});
 
 export function ProjectsCanvas({
   stages,
@@ -1100,8 +1181,19 @@ export function ProjectsCanvas({
   const [selectedNodeRef, setSelectedNodeRef] = useState(null);
 
   useEffect(() => {
-    if (!onBrainContextChange) return;
-    if (isLifeline) {
+    if (!onBrainContextChange) return undefined;
+    if (!isLifeline) {
+      onBrainContextChange({
+        selectedDate: null,
+        selectedProjectId: projectId || null,
+        selectedCheckpointId: selectedNodeRef?.type === 'checkpoint' ? selectedNodeRef.id : null,
+        selectedStageId: selectedNodeRef?.type === 'milestone' ? selectedNodeRef.id : null,
+        openedFrom: 'project',
+      });
+      return undefined;
+    }
+    const delay = dayView.date ? 480 : 0;
+    const id = window.setTimeout(() => {
       const projectOnDay = (lifelineAnchors || []).find((project) => (
         project.lifelineAnchorDate === dayView.date
       ));
@@ -1112,15 +1204,8 @@ export function ProjectsCanvas({
         selectedStageId: selectedNodeRef?.type === 'milestone' ? selectedNodeRef.id : null,
         openedFrom: 'lifeline',
       });
-      return;
-    }
-    onBrainContextChange({
-      selectedDate: null,
-      selectedProjectId: projectId || null,
-      selectedCheckpointId: selectedNodeRef?.type === 'checkpoint' ? selectedNodeRef.id : null,
-      selectedStageId: selectedNodeRef?.type === 'milestone' ? selectedNodeRef.id : null,
-      openedFrom: 'project',
-    });
+    }, delay);
+    return () => window.clearTimeout(id);
   }, [isLifeline, onBrainContextChange, dayView.date, selectedNodeRef, lifelineAnchors, projectId]);
 
   const [autoEditStickyId, setAutoEditStickyId] = useState(null);
@@ -1165,7 +1250,42 @@ export function ProjectsCanvas({
     [isLifeline, projectId]
   );
   const [zoomPercent, setZoomPercent] = useState(Math.round(PROJECTS_OPEN_SCALE * 100));
+  const zoomPercentSetterRef = useRef(null);
   const [lifelineCssScale, setLifelineCssScale] = useState(0.9);
+  const lifelineCssScaleRef = useRef(0.9);
+  useEffect(() => {
+    lifelineCssScaleRef.current = lifelineCssScale;
+  }, [lifelineCssScale]);
+  const densityZoomQueueRef = useRef({
+    raf: 0,
+    idle: 0,
+    pendingCommit: false,
+    openDayView: false,
+    zoomIn: true,
+    clientX: 0,
+    clientY: 0,
+    setPanFn: null,
+    steps: 0,
+    anchorDate: null,
+    originY: 0,
+    pointY: 0,
+    startHeight: 0,
+    centerX: 0,
+    spineTop: 0,
+  });
+  const densityPaintBaseRef = useRef({
+    spineTop: 0,
+    spineHeight: 0,
+    boardHeight: 0,
+    surfaceHeight: 0,
+    centerX: 0,
+  });
+  const cssFocusRef = useRef(null);
+  const handleOpenLifelineDayRef = useRef(null);
+  const onMapThemeChangeRef = useRef(onMapThemeChange);
+  onMapThemeChangeRef.current = onMapThemeChange;
+  const lifelineThemeRef = useRef(null);
+  const handleLifelineWheelRef = useRef(null);
   const lifelineSyncedThemeRef = useRef(null);
   const lastPointerClientRef = useRef(null);
   const pointerOnCanvasRef = useRef(false);
@@ -1349,6 +1469,10 @@ export function ProjectsCanvas({
     return synced;
   }, [mapTheme, isLifeline, lifelineBoundDates]);
   useEffect(() => {
+    if (densityZoomQueueRef.current.raf || densityZoomQueueRef.current.steps) return;
+    lifelineThemeRef.current = activeTheme;
+  }, [activeTheme]);
+  useEffect(() => {
     if (!isLifeline || !onMapThemeChange) return;
     const base = mapTheme || DEFAULT_MAP_THEME;
     const config = getLifelineConfig(base, lifelineBoundDates);
@@ -1434,6 +1558,13 @@ export function ProjectsCanvas({
         : null,
     [isLifeline, lifelineConfig, lineMetrics, projectsLayout, lifelineDays, lifelineZoomLevel, lifelineActivityDates]
   );
+  const periodBrackets = useMemo(
+    () =>
+      isLifeline && lifelineConfig && lifelineZoomLevel
+        ? generatePeriodBrackets(lifelineConfig, lifelineZoomLevel)
+        : [],
+    [isLifeline, lifelineConfig, lifelineZoomLevel]
+  );
   const lifelineAnchorsWithPos = useMemo(() => {
     if (!isLifeline || !lifelineConfig) return lifelineAnchors;
     return lifelineAnchors.map((project) => ({
@@ -1447,14 +1578,14 @@ export function ProjectsCanvas({
   const openDayView = dayView.open;
   const closeDayView = dayView.close;
 
-  const handleOpenLifelineDay = useCallback((date, originEl = null) => {
+  const handleOpenLifelineDay = useCallback((date, originEl = null, kind = LIFELINE_VIEW_KIND.day, focusDate = date) => {
     if (!date || !isLifeline) return;
-    onRefreshProjectActivity?.();
 
     const ctx = transformRef.current || {};
     const scale = ctx.scale ?? zoomCanvasRef.current?.getScale?.() ?? 0.9;
     const pan = ctx.pan ?? zoomCanvasRef.current?.getPan?.() ?? { x: 0, y: 0 };
     const viewportEl = ctx.viewportRef?.current;
+    const panDate = focusDate || date;
 
     let originRect = null;
     if (originEl?.getBoundingClientRect && !originEl.classList?.contains('lifeline-day-grid')) {
@@ -1466,7 +1597,7 @@ export function ProjectsCanvas({
         height: r.height,
       };
     } else if (viewportEl && lifelineConfig) {
-      const dayY = getDayTickCanvasY(date, lifelineConfig, projectsLayout, lifelineBoundDates);
+      const dayY = getDayTickCanvasY(panDate, lifelineConfig, projectsLayout, lifelineBoundDates);
       const centerX = projectsLayout?.centerX ?? 480;
       if (dayY != null) {
         const vr = viewportEl.getBoundingClientRect();
@@ -1476,10 +1607,9 @@ export function ProjectsCanvas({
       }
     }
 
-    // Prefer the actual tick button if present (more accurate origin).
     if (!originRect || originEl?.classList?.contains('lifeline-day-grid')) {
       const tickEl = viewportEl?.ownerDocument?.querySelector?.(
-        `.lifeline-day-tick[data-date="${date}"]`
+        `.lifeline-day-tick[data-date="${panDate}"]`
       );
       if (tickEl?.getBoundingClientRect) {
         const r = tickEl.getBoundingClientRect();
@@ -1495,29 +1625,21 @@ export function ProjectsCanvas({
       date,
     };
 
-    // Soft pan to center the day, then Premium Day Lab fades in (no exaggerated dive).
-    let targetPan = pan;
-    if (viewportEl && lifelineConfig) {
-      const dayY = getDayTickCanvasY(date, lifelineConfig, projectsLayout, lifelineBoundDates);
-      const centerX = projectsLayout?.centerX ?? 480;
-      if (dayY != null) {
-        const w = viewportEl.clientWidth;
-        const h = viewportEl.clientHeight;
-        targetPan = {
-          x: w / 2 - centerX * scale,
-          y: h / 2 - dayY * scale,
-        };
-      }
-    }
+    const origin = originPercentFromRects(
+      originRect,
+      containerRef.current?.getBoundingClientRect?.()
+    );
 
     openDayView({
       date,
-      originRect,
+      kind,
+      origin,
       snapshot,
-      zoomApi: zoomCanvasRef.current,
-      targetPan,
-      targetScale: scale,
     });
+
+    if (onRefreshProjectActivity) {
+      window.setTimeout(() => onRefreshProjectActivity(), 500);
+    }
   }, [
     isLifeline,
     onRefreshProjectActivity,
@@ -1527,9 +1649,16 @@ export function ProjectsCanvas({
     activeTheme,
     openDayView,
   ]);
+  handleOpenLifelineDayRef.current = handleOpenLifelineDay;
+
+  const handleOpenLifelinePeriod = useCallback((bracket, originEl = null) => {
+    if (!bracket?.startDate) return;
+    const mid = addDays(bracket.startDate, Math.floor(((Number(bracket.dayCount) || 1) - 1) / 2));
+    handleOpenLifelineDay(bracket.startDate, originEl, bracket.kind, mid);
+  }, [handleOpenLifelineDay]);
 
   const handleCloseLifelineDay = useCallback(() => {
-    closeDayView(zoomCanvasRef.current);
+    closeDayView();
   }, [closeDayView]);
 
   const lifelineScrollTarget = useMemo(() => {
@@ -1627,9 +1756,12 @@ export function ProjectsCanvas({
     [stages, canvasIdeas, canvasStickies, projectsLayout]
   );
   const inkSurfaceSize = useMemo(
-    () => getInkSurfaceSize(boardSize, canvasInk),
-    [boardSize, canvasInk]
+    () => (isLifeline ? boardSize : getInkSurfaceSize(boardSize, canvasInk)),
+    [isLifeline, boardSize, canvasInk]
   );
+  if (!densityZoomQueueRef.current.raf && !densityZoomQueueRef.current.idle && !densityZoomQueueRef.current.pendingCommit && !densityZoomQueueRef.current.anchorDate) {
+    densityPaintBaseRef.current = snapshotLifelinePaintBase(projectsLayout, boardSize, inkSurfaceSize);
+  }
   const isPremium = activeTheme.mapStyle === 'premium';
 
   const nodeLevels = useMemo(
@@ -2539,14 +2671,19 @@ export function ProjectsCanvas({
     }
     const scale = transform?.scale || 1;
     if (isLifeline) {
-      setLifelineCssScale((prev) => (prev === scale ? prev : scale));
-      const dayPercent = getLifelineZoomPercent({ lifeline: { dayHeight: lifelineDayHeight } });
+      if (lifelineCssScaleBucket(lifelineCssScaleRef.current) !== lifelineCssScaleBucket(scale)) {
+        lifelineCssScaleRef.current = scale;
+        startTransition(() => setLifelineCssScale(scale));
+      }
+      const dayPercent = getLifelineZoomPercent({
+        lifeline: { dayHeight: lifelineDayHeight },
+      });
       const nextPercent = scale < 0.995 ? Math.round(scale * 100) : dayPercent;
-      setZoomPercent((prev) => (prev === nextPercent ? prev : nextPercent));
+      zoomPercentSetterRef.current?.(nextPercent);
       return;
     }
     const nextPercent = Math.round(scale * 100);
-    setZoomPercent((prev) => (prev === nextPercent ? prev : nextPercent));
+    zoomPercentSetterRef.current?.(nextPercent);
   }, [isLifeline, lifelineDayHeight, projectId]);
 
   useEffect(() => {
@@ -2554,6 +2691,7 @@ export function ProjectsCanvas({
     const dayPercent = getLifelineZoomPercent({ lifeline: { dayHeight: lifelineDayHeight } });
     const scale = transformRef.current?.scale || 1;
     const nextPercent = scale < 0.995 ? Math.round(scale * 100) : dayPercent;
+    zoomPercentSetterRef.current?.(nextPercent);
     setZoomPercent((prev) => (prev === nextPercent ? prev : nextPercent));
   }, [isLifeline, lifelineDayHeight]);
 
@@ -2563,15 +2701,20 @@ export function ProjectsCanvas({
       const viewport = ctx?.viewportRef?.current;
       if (!viewport) return null;
 
-      const base = activeTheme || DEFAULT_MAP_THEME;
+      const base = lifelineThemeRef.current || activeTheme || DEFAULT_MAP_THEME;
       const rect = viewport.getBoundingClientRect();
       const { y: pointY } = viewportClientPoint(
         clientX ?? rect.left + viewport.clientWidth / 2,
         clientY ?? rect.top + viewport.clientHeight / 2,
         viewport
       );
-      const canvasY = (pointY - (ctx.pan?.y || 0)) / (ctx.scale || 1);
+      const visualY = (pointY - (ctx.pan?.y || 0)) / (ctx.scale || 1);
       const spine = getLifelineSpineMetrics(projectsLayout);
+      const queued = densityZoomQueueRef.current;
+      const previewFactor = readLifelineDensityFactor(viewport);
+      const canvasY = previewFactor !== 1 && queued.startHeight
+        ? spine.top + (visualY - (queued.spineTop || spine.top)) / previewFactor
+        : visualY;
       const metrics = {
         bottomY: spine.bottom,
         top: spine.top,
@@ -2592,42 +2735,134 @@ export function ProjectsCanvas({
     [activeTheme, lifelineBoundDates, projectsLayout]
   );
 
+  const pinLifelineFocusToLayout = useCallback((options = {}) => {
+    const q = densityZoomQueueRef.current;
+    const zoom = zoomCanvasRef.current;
+    const spine = getLifelineSpineMetrics(projectsLayout);
+    const scale = zoom?.getScale?.() || transformRef.current?.scale || 1;
+    const panX = zoom?.getPan?.()?.x ?? transformRef.current?.pan?.x ?? 0;
+    const viewport = transformRef.current?.viewportRef?.current;
+    const gestureEnded = !q.raf && !q.idle;
+    const hadPending = q.pendingCommit;
+
+    if (options.clearPreview || hadPending) {
+      clearLifelineDensityPreview(viewport);
+    }
+
+    if (q.anchorDate && q.startHeight > 0 && spine.height > 0 && q.pointY != null) {
+      const focusY = mapLifelineFocusY(q, spine);
+      zoom?.setPan?.({ x: panX, y: q.pointY - focusY * scale });
+      q.originY = focusY;
+      q.spineTop = spine.top;
+      q.startHeight = spine.height;
+      q.centerX = spine.centerX;
+      densityPaintBaseRef.current = snapshotLifelinePaintBase(
+        projectsLayout,
+        boardSize,
+        inkSurfaceSize
+      );
+    } else if (options.allowCssPin) {
+      const css = cssFocusRef.current;
+      if (css) {
+        zoom?.setPan?.({ x: panX, y: css.pointY - css.canvasY * scale });
+      }
+    }
+
+    if (hadPending) q.pendingCommit = false;
+    if (gestureEnded && !q.openDayView) {
+      q.anchorDate = null;
+      q.originY = 0;
+      q.startHeight = 0;
+    }
+
+    if (q.openDayView && (q.anchorDate || options.dayDate)) {
+      const date = options.dayDate || q.anchorDate;
+      q.openDayView = false;
+      q.anchorDate = null;
+      q.originY = 0;
+      q.startHeight = 0;
+      handleOpenLifelineDayRef.current?.(date);
+    }
+  }, [projectsLayout, boardSize, inkSurfaceSize]);
+
   const applyLifelineDensityZoom = useCallback(
-    (zoomIn, clientX, clientY, setPanFn) => {
+    (zoomIn, clientX, clientY, setPanFn, steps = 1, commit = true) => {
       const ctx = transformRef.current;
       const viewport = ctx?.viewportRef?.current;
       if (!viewport) return false;
 
-      const base = activeTheme || DEFAULT_MAP_THEME;
-      const resolved = resolveLifelineDateAtClientPoint(clientX, clientY);
-      if (!resolved) return false;
-      const { date: anchorDate, pointY } = resolved;
+      const base = lifelineThemeRef.current || activeTheme || DEFAULT_MAP_THEME;
+      const queued = densityZoomQueueRef.current;
+      let resolved = null;
+      if (!queued.anchorDate) {
+        resolved = resolveLifelineDateAtClientPoint(clientX, clientY);
+      } else if (viewport && clientX != null) {
+        queued.pointY = viewportClientPoint(clientX, clientY, viewport).y;
+      }
+      const anchorDate = queued.anchorDate || resolved?.date;
+      if (!anchorDate) return false;
+      if (resolved?.pointY != null) queued.pointY = resolved.pointY;
 
-      const result = applyLifelineDayHeightZoom(base, lifelineBoundDates, zoomIn, anchorDate);
+      const result = applyLifelineDayHeightZoom(
+        base,
+        lifelineBoundDates,
+        zoomIn,
+        anchorDate,
+        steps
+      );
       if (!result) return false;
 
+      lifelineThemeRef.current = result.mapTheme;
+
+      if (!queued.anchorDate) {
+        queued.anchorDate = anchorDate;
+        queued.originY = resolved?.canvasY ?? queued.originY;
+        const liveSpine = getLifelineSpineMetrics(projectsLayout);
+        queued.startHeight = densityPaintBaseRef.current.spineHeight || liveSpine.height;
+        queued.spineTop = densityPaintBaseRef.current.spineTop || liveSpine.top;
+        queued.centerX = densityPaintBaseRef.current.centerX || liveSpine.centerX;
+        queued.pointY = resolved?.pointY ?? queued.pointY;
+      }
+
+      if (!commit) {
+        const height = result.mapTheme.roadmap?.height;
+        const startHeight = queued.startHeight || height;
+        const factor = startHeight ? height / startHeight : 1;
+        const spineTop = queued.spineTop;
+        setLifelineDensityPreview(viewport, {
+          originX: queued.centerX,
+          originY: spineTop,
+          factor,
+        });
+        const visualY = spineTop + factor * (queued.originY - spineTop);
+        const scale = ctx.scale || 1;
+        zoomCanvasRef.current?.paintPan?.({
+          x: ctx.pan.x,
+          y: queued.pointY - visualY * scale,
+        });
+        zoomPercentSetterRef.current?.(getLifelineZoomPercent(result.mapTheme));
+        return true;
+      }
+
+      if (queued.idle) {
+        window.clearTimeout(queued.idle);
+        queued.idle = 0;
+      }
+      queued.pendingCommit = true;
       onMapThemeChange?.({
         lifeline: result.mapTheme.lifeline,
         roadmap: result.mapTheme.roadmap,
       });
-      if (result.anchorY != null) {
-        const nextPan = {
-          x: ctx.pan.x,
-          y: pointY - result.anchorY * (ctx.scale || 1),
-        };
-        if (typeof setPanFn === 'function') setPanFn(nextPan);
-        else zoomCanvasRef.current?.setPan?.(nextPan);
-      }
       return true;
     },
-    [activeTheme, lifelineBoundDates, onMapThemeChange, resolveLifelineDateAtClientPoint]
+    [activeTheme, lifelineBoundDates, onMapThemeChange, projectsLayout, resolveLifelineDateAtClientPoint]
   );
 
   const enterDayViewFromZoom = useCallback(
-    (clientX, clientY) => {
+    (clientX, clientY, knownDate = null) => {
       if (dayView.isActive) return true;
-      const resolved = resolveLifelineDateAtClientPoint(clientX, clientY);
-      const date = resolved?.date;
+      const date = knownDate || densityZoomQueueRef.current.anchorDate
+        || resolveLifelineDateAtClientPoint(clientX, clientY)?.date;
       if (!date) return false;
       const tickEl =
         typeof document !== 'undefined'
@@ -2639,44 +2874,180 @@ export function ProjectsCanvas({
     [dayView.isActive, resolveLifelineDateAtClientPoint, handleOpenLifelineDay]
   );
 
-  const handleLifelineWheel = useCallback(
-    (e, ctx) => {
-      if (!isLifeline || !(e.ctrlKey || e.metaKey)) return false;
+  const scheduleDensityCommit = useCallback(() => {
+    const queued = densityZoomQueueRef.current;
+    if (queued.idle) window.clearTimeout(queued.idle);
+    queued.idle = window.setTimeout(() => {
+      queued.idle = 0;
+      const theme = lifelineThemeRef.current;
+      if (!theme) return;
+      queued.pendingCommit = true;
+      onMapThemeChangeRef.current?.({
+        lifeline: theme.lifeline,
+        roadmap: theme.roadmap,
+      });
+    }, 90);
+  }, []);
 
-      const zoomIn = e.deltaY < 0;
-      const scale = ctx.scale || 1;
-      const dayHeight = activeTheme?.lifeline?.dayHeight ?? DEFAULT_LIFELINE_CONFIG.dayHeight;
+  const prevLifelineZoomLevelRef = useRef(lifelineZoomLevel);
+  useLayoutEffect(() => {
+    if (!isLifeline) return;
+    const q = densityZoomQueueRef.current;
+    const zoomLevelChanged = prevLifelineZoomLevelRef.current !== lifelineZoomLevel;
+    prevLifelineZoomLevelRef.current = lifelineZoomLevel;
+    if (!q.pendingCommit && !q.anchorDate && !zoomLevelChanged) return;
+    pinLifelineFocusToLayout({
+      clearPreview: q.pendingCommit,
+      allowCssPin: zoomLevelChanged && !q.anchorDate,
+    });
+  }, [isLifeline, activeTheme, lifelineZoomLevel, projectsLayout.top, projectsLayout.height, pinLifelineFocusToLayout]);
 
-      if (dayView.isActive) {
-        if (!zoomIn) handleCloseLifelineDay();
-        return true;
+  const densityFlushRef = useRef(() => {});
+  densityFlushRef.current = () => {
+    const queued = densityZoomQueueRef.current;
+    queued.raf = 0;
+    const n = Math.min(8, queued.steps);
+    queued.steps = 0;
+    if (!n) return;
+    const ok = applyLifelineDensityZoom(
+      queued.zoomIn,
+      queued.clientX,
+      queued.clientY,
+      queued.setPanFn,
+      n,
+      false
+    );
+    if (ok) {
+      scheduleDensityCommit();
+      return;
+    }
+    if (!queued.zoomIn || dayView.isActive) return;
+    const theme = lifelineThemeRef.current || activeTheme;
+    const spacing = lifelinePlanContext?.daySpacing
+      ?? theme?.lifeline?.dayHeight
+      ?? DEFAULT_LIFELINE_CONFIG.dayHeight;
+    if (canEnterLifelineDayView(spacing)) {
+      queued.openDayView = true;
+      if (queued.anchorDate || queued.idle || queued.pendingCommit) {
+        scheduleDensityCommit();
+        return;
       }
+      enterDayViewFromZoom(queued.clientX, queued.clientY, queued.anchorDate);
+    }
+  };
 
-      if (zoomIn && scale >= 0.995) {
-        const stepped = applyLifelineDensityZoom(true, e.clientX, e.clientY, ctx.setPan);
-        if (stepped) return true;
-        const spacing = lifelinePlanContext?.daySpacing ?? dayHeight;
-        if (canEnterLifelineDayView(spacing)) {
-          return enterDayViewFromZoom(e.clientX, e.clientY);
-        }
-        return true;
-      }
-      if (!zoomIn && dayHeight > DEFAULT_LIFELINE_CONFIG.dayHeight) {
-        return applyLifelineDensityZoom(false, e.clientX, e.clientY, ctx.setPan);
-      }
+  const queueLifelineDensityZoom = useCallback((zoomIn, clientX, clientY, setPanFn) => {
+    const q = densityZoomQueueRef.current;
+    if (q.steps > 0 && q.zoomIn !== zoomIn) q.steps = 0;
+    if (!q.raf) {
+      lifelineThemeRef.current = lifelineThemeRef.current || activeTheme;
+    }
+    q.zoomIn = zoomIn;
+    q.clientX = clientX;
+    q.clientY = clientY;
+    q.setPanFn = setPanFn;
+    q.steps += 1;
+    if (!q.raf) {
+      q.raf = requestAnimationFrame(() => densityFlushRef.current());
+    }
+    return true;
+  }, [activeTheme]);
 
+  useEffect(() => () => {
+    const q = densityZoomQueueRef.current;
+    if (q.raf) cancelAnimationFrame(q.raf);
+    if (q.idle) window.clearTimeout(q.idle);
+  }, []);
+
+  handleLifelineWheelRef.current = (e, ctx) => {
+    if (!isLifeline) return false;
+    if (!(e.ctrlKey || e.metaKey)) {
+      cssFocusRef.current = null;
+      const q = densityZoomQueueRef.current;
+      if (!q.raf && !q.idle && !q.pendingCommit) {
+        q.anchorDate = null;
+        q.originY = 0;
+        q.startHeight = 0;
+      }
       return false;
-    },
-    [
-      isLifeline,
-      activeTheme,
-      dayView.isActive,
-      lifelinePlanContext,
-      applyLifelineDensityZoom,
-      enterDayViewFromZoom,
-      handleCloseLifelineDay,
-    ]
-  );
+    }
+
+    const zoomIn = e.deltaY < 0;
+    const scale = ctx.scale || 1;
+    const dayHeight = (lifelineThemeRef.current || activeTheme)?.lifeline?.dayHeight
+      ?? DEFAULT_LIFELINE_CONFIG.dayHeight;
+    const viewport = ctx.viewportRef?.current;
+
+    if (dayView.isActive) {
+      if (!zoomIn) handleCloseLifelineDay();
+      return true;
+    }
+
+    if (zoomIn && scale >= 0.995) {
+      cssFocusRef.current = null;
+      return queueLifelineDensityZoom(true, e.clientX, e.clientY, ctx.setPan);
+    }
+    if (!zoomIn && dayHeight > DEFAULT_LIFELINE_CONFIG.dayHeight) {
+      cssFocusRef.current = null;
+      return queueLifelineDensityZoom(false, e.clientX, e.clientY, ctx.setPan);
+    }
+
+    const q = densityZoomQueueRef.current;
+    let pinnedFromDensity = false;
+    if (q.anchorDate || q.idle || q.pendingCommit) {
+      if (q.raf) {
+        cancelAnimationFrame(q.raf);
+        q.raf = 0;
+      }
+      if (q.idle) {
+        window.clearTimeout(q.idle);
+        q.idle = 0;
+      }
+      q.steps = 0;
+      const theme = lifelineThemeRef.current;
+      clearLifelineDensityPreview(viewport);
+      if (theme?.roadmap && q.anchorDate) {
+        const spine = {
+          top: q.spineTop,
+          height: theme.roadmap.height,
+        };
+        const focusY = mapLifelineFocusY(q, spine);
+        if (focusY != null && q.pointY != null) {
+          ctx.setPan?.({
+            x: ctx.pan.x,
+            y: q.pointY - focusY * (ctx.scale || 1),
+          });
+          cssFocusRef.current = { pointY: q.pointY, canvasY: focusY };
+          pinnedFromDensity = true;
+        }
+        q.originY = focusY;
+        q.startHeight = theme.roadmap.height;
+        q.pendingCommit = true;
+        onMapThemeChangeRef.current?.({
+          lifeline: theme.lifeline,
+          roadmap: theme.roadmap,
+        });
+      }
+      q.anchorDate = null;
+      q.originY = 0;
+      q.startHeight = 0;
+    }
+
+    if (viewport && !pinnedFromDensity) {
+      const live = transformRef.current;
+      const { y: pointY } = viewportClientPoint(e.clientX, e.clientY, viewport);
+      cssFocusRef.current = {
+        pointY,
+        canvasY: (pointY - (live?.pan?.y || 0)) / (live?.scale || ctx.scale || 1),
+      };
+    }
+
+    return false;
+  };
+
+  const handleLifelineWheel = useCallback((e, ctx) => (
+    Boolean(handleLifelineWheelRef.current?.(e, ctx))
+  ), []);
 
   const handleZoomIn = useCallback(() => {
     if (!isLifeline) {
@@ -2726,7 +3097,7 @@ export function ProjectsCanvas({
   const isEmptyBoard =
     canvasStages.length === 0 && canvasIdeas.length === 0 && canvasStickiesOnBoard.length === 0;
 
-  const inkInteractionMode = platform.isMobile
+  const inkInteractionMode = isLifeline || platform.isMobile
     ? 'pan'
     : drawTool === 'eraser'
       ? 'erase'
@@ -2887,6 +3258,7 @@ export function ProjectsCanvas({
           onRecognizeInk={handleRecognizeInk}
           recognizingInk={recognizingInk}
           selectedInkCount={selectedStrokeIds.length}
+          allowInk={!isLifeline}
         />
 
       <div
@@ -2922,36 +3294,46 @@ export function ProjectsCanvas({
           )}
           <ZoomCanvas
             ref={zoomCanvasRef}
-            key={isLifeline ? 'lifeline-v6' : 'projects'}
+            key={isLifeline ? 'lifeline-v8' : 'projects'}
             className="projects-canvas zoom-canvas--no-toolbar"
             defaultScale={cachedCanvasView?.scale ?? (isLifeline ? 0.9 : PROJECTS_OPEN_SCALE)}
-            defaultPan={cachedCanvasView?.pan ?? (isLifeline ? lifelineDefaultPan : projectsDefaultPan)}
+            defaultPan={isLifeline ? lifelineDefaultPan : (cachedCanvasView?.pan ?? projectsDefaultPan)}
             minScale={isLifeline ? LIFELINE_ZOOM.minScale : 0.25}
             maxScale={isLifeline ? LIFELINE_ZOOM.maxScale : 2}
             interceptWheel={isLifeline ? handleLifelineWheel : undefined}
+            panAxis={isLifeline ? 'y' : 'xy'}
+            lockCenterX={isLifeline ? (projectsLayout.centerX ?? 480) : null}
             showToolbar={false}
             viewportStyle={viewportThemeStyle}
             onTransformChange={handleTransformChange}
             interactionMode={inkInteractionMode}
-            onInkPointerDown={(e) => inkDownRef.current?.(e)}
-            onSelectPointerDown={(e) => selectDownRef.current?.(e)}
-            onInkDragPointerDown={(e) => inkDragDownRef.current?.(e)}
+            onInkPointerDown={isLifeline ? undefined : (e) => inkDownRef.current?.(e)}
+            onSelectPointerDown={isLifeline ? undefined : (e) => selectDownRef.current?.(e)}
+            onInkDragPointerDown={isLifeline ? undefined : (e) => inkDragDownRef.current?.(e)}
             scrollToCanvasPoint={
-              (!isLifeline && focusNextCheckpointRef.current) || !cachedCanvasView
-                ? (isLifeline ? lifelineScrollTarget : projectsScrollTarget)
-                : null
+              isLifeline
+                ? lifelineScrollTarget
+                : ((focusNextCheckpointRef.current || !cachedCanvasView)
+                  ? projectsScrollTarget
+                  : null)
             }
-            panExcludeSelector=".milestone-canvas-card, .idea-canvas-card, .sticky-note-card, .obstacle-canvas-card, .resource-canvas-card, .task-canvas-card, .checkpoint-projects-item, .canvas-floating-toolbar, .canvas-top-bar, .drawing-toolbar, .projects-center-line, .projects-row, .projects__header, .projects-card, .projects-node, .projects-canvas__fab-dock, .workspace-nav-btn, .brain-orb, .add-milestone-form, .canvas-connection__hit"
+            panExcludeSelector={
+              isLifeline
+                ? '.milestone-canvas-card, .idea-canvas-card, .sticky-note-card, .obstacle-canvas-card, .resource-canvas-card, .task-canvas-card, .checkpoint-projects-item, .canvas-floating-toolbar, .canvas-top-bar, .projects-row, .projects__header, .projects-card, .projects-node, .projects-canvas__fab-dock, .workspace-nav-btn, .brain-orb, .add-milestone-form, .canvas-connection__hit, .lifeline-day-tick'
+                : '.milestone-canvas-card, .idea-canvas-card, .sticky-note-card, .obstacle-canvas-card, .resource-canvas-card, .task-canvas-card, .checkpoint-projects-item, .canvas-floating-toolbar, .canvas-top-bar, .drawing-toolbar, .projects-center-line, .projects-row, .projects__header, .projects-card, .projects-node, .projects-canvas__fab-dock, .workspace-nav-btn, .brain-orb, .add-milestone-form, .canvas-connection__hit'
+            }
           >
             <CanvasTransformBridge bridgeRef={canvasTransformRef} />
-            <InkDragHost
-              strokes={canvasInk}
-              selectedStrokeIds={selectedStrokeIds}
-              onSelectionChange={setSelectedStrokeIds}
-              onMoveStrokes={onMoveCanvasInkStrokes}
-              onClearNodeSelection={() => setSelectedNodeRef(null)}
-              bindDownRef={inkDragDownRef}
-            />
+            {!isLifeline && (
+              <InkDragHost
+                strokes={canvasInk}
+                selectedStrokeIds={selectedStrokeIds}
+                onSelectionChange={setSelectedStrokeIds}
+                onMoveStrokes={onMoveCanvasInkStrokes}
+                onClearNodeSelection={() => setSelectedNodeRef(null)}
+                bindDownRef={inkDragDownRef}
+              />
+            )}
             <CanvasBoard
             canvasStages={canvasStages}
             canvasIdeas={canvasIdeas}
@@ -3037,17 +3419,17 @@ export function ProjectsCanvas({
             planProgressSegments={planProgressSegments}
             planCheckpoints={planCheckpoints}
             onOpenPlanPanel={handleOpenPlanPanel}
-            canvasInk={canvasInk}
+            canvasInk={isLifeline ? [] : canvasInk}
             inkSurfaceSize={inkSurfaceSize}
-            inkTool={platform.isMobile ? 'pan' : drawTool}
+            inkTool={isLifeline || platform.isMobile ? 'pan' : drawTool}
             inkColor={drawColor}
             inkSize={drawSize}
-            onAddInkStroke={onAddCanvasInkStroke}
-            onRemoveInkStrokes={onRemoveCanvasInkStrokes}
-            inkBindDownRef={inkDownRef}
-            selectedStrokeIds={selectedStrokeIds}
-            selectBindRef={selectDownRef}
-            onInkSelectionChange={setSelectedStrokeIds}
+            onAddInkStroke={isLifeline ? undefined : onAddCanvasInkStroke}
+            onRemoveInkStrokes={isLifeline ? undefined : onRemoveCanvasInkStrokes}
+            inkBindDownRef={isLifeline ? undefined : inkDownRef}
+            selectedStrokeIds={isLifeline ? [] : selectedStrokeIds}
+            selectBindRef={isLifeline ? undefined : selectDownRef}
+            onInkSelectionChange={isLifeline ? undefined : setSelectedStrokeIds}
             autoEditStickyId={autoEditStickyId}
             onAutoEditStickyConsumed={() => setAutoEditStickyId(null)}
             isLifeline={isLifeline}
@@ -3059,13 +3441,16 @@ export function ProjectsCanvas({
             onOpenLifelineProject={onOpenLifelineProject}
             lifelineDays={lifelineDays}
             onDayClick={handleOpenLifelineDay}
+            onPeriodClick={handleOpenLifelinePeriod}
             lifelinePlanContext={lifelinePlanContext}
             lifelinePlanDateLabels={lifelinePlanDateLabels}
             lifelineHiddenTickRanges={lifelineHiddenTickRanges}
             lifelineZoomLevel={lifelineZoomLevel}
             lifelineDayBands={lifelineDayBands}
-            selectedDayDate={dayView.date}
-            dayViewPhase={dayView.phase}
+            periodBrackets={periodBrackets}
+            selectedDayDate={null}
+            selectedPeriod={null}
+            dayViewPhase={DAY_VIEW_PHASE.timeline}
             routineTemplates={(mapTheme || activeTheme)?.lifeline?.routineTemplates ?? []}
           />
           </ZoomCanvas>
@@ -3097,10 +3482,17 @@ export function ProjectsCanvas({
                 {isLifeline && lifelineZoomMeta && !platform.isMobile ? (
                   <>
                     <span className="projects-canvas__spacing-level">{lifelineZoomMeta.shortLabel}</span>
-                    <span className="projects-canvas__spacing-sublabel">{zoomPercent}%</span>
+                    <ZoomPercentLabel
+                      className="projects-canvas__spacing-sublabel"
+                      subscribeRef={zoomPercentSetterRef}
+                      initialPercent={zoomPercent}
+                    />
                   </>
                 ) : (
-                  `${zoomPercent}%`
+                  <ZoomPercentLabel
+                    subscribeRef={zoomPercentSetterRef}
+                    initialPercent={zoomPercent}
+                  />
                 )}
               </button>
               <button
@@ -3177,32 +3569,47 @@ export function ProjectsCanvas({
         </div>
       )}
 
-      <LifelineDayModal
-        open={dayView.isOpen}
-        date={dayView.date}
-        phase={dayView.phase}
-        originRect={dayView.originRect}
-        lifelineDays={lifelineDays}
-        selfHubDays={selfHubDays}
-        routineTemplates={(mapTheme || activeTheme)?.lifeline?.routineTemplates ?? []}
-        projectActivity={projectActivity}
-        stages={stages}
-        pathBundle={pathBundle}
-        onUpdateDay={onUpdateLifelineDay}
-        onUpdateRoutineTemplates={(templates) => {
-          handleMapThemeChange({
-            lifeline: {
-              ...(mapTheme?.lifeline || activeTheme?.lifeline || {}),
-              routineTemplates: templates,
-            },
-          });
-        }}
-        onPromoteThought={onPromoteThought}
-        onKeepThought={onKeepThought}
-        onDismissThought={onDismissThought}
-        onAddThought={onAddThought}
-        onClose={handleCloseLifelineDay}
-      />
+      {dayView.isPeriod ? (
+        <LifelinePeriodModal
+          open={dayView.isOpen}
+          date={dayView.date}
+          kind={dayView.kind}
+          phase={dayView.phase}
+          origin={dayView.origin}
+          lifelineDays={lifelineDays}
+          selfHubDays={selfHubDays}
+          routineTemplates={(mapTheme || activeTheme)?.lifeline?.routineTemplates ?? []}
+          projectActivity={projectActivity}
+          stages={stages}
+          obstacles={canvasObstacles}
+          pathBundle={pathBundle}
+          onClose={handleCloseLifelineDay}
+          onNavigate={(next) => handleOpenLifelineDay(next.startDate, null, next.kind)}
+        />
+      ) : (
+        <LifelineDayModal
+          open={dayView.isOpen}
+          date={dayView.date}
+          phase={dayView.phase}
+          origin={dayView.origin}
+          lifelineDays={lifelineDays}
+          selfHubDays={selfHubDays}
+          routineTemplates={(mapTheme || activeTheme)?.lifeline?.routineTemplates ?? []}
+          projectActivity={projectActivity}
+          stages={stages}
+          pathBundle={pathBundle}
+          onUpdateDay={onUpdateLifelineDay}
+          onOpenPathRoutines={() => {
+            handleCloseLifelineDay();
+            onOpenPath?.('routines');
+          }}
+          onPromoteThought={onPromoteThought}
+          onKeepThought={onKeepThought}
+          onDismissThought={onDismissThought}
+          onAddThought={onAddThought}
+          onClose={handleCloseLifelineDay}
+        />
+      )}
       </div>
 
       <AddCheckpointModal
@@ -3257,20 +3664,22 @@ export function ProjectsCanvas({
         onClose={handleCloseEditCheckpoint}
       />
 
-      <InkConvertModal
-        open={convertModal.open}
-        loading={convertModal.loading}
-        error={convertModal.error}
-        text={convertModal.text}
-        convertType={convertModal.convertType}
-        previewUrl={convertModal.previewUrl}
-        removeInk={convertModal.removeInk}
-        onTextChange={(text) => setConvertModal((m) => ({ ...m, text }))}
-        onTypeChange={(convertType) => setConvertModal((m) => ({ ...m, convertType }))}
-        onRemoveInkChange={(removeInk) => setConvertModal((m) => ({ ...m, removeInk }))}
-        onConfirm={handleConvertConfirm}
-        onClose={() => setConvertModal((m) => ({ ...m, open: false, error: null }))}
-      />
+      {!isLifeline && (
+        <InkConvertModal
+          open={convertModal.open}
+          loading={convertModal.loading}
+          error={convertModal.error}
+          text={convertModal.text}
+          convertType={convertModal.convertType}
+          previewUrl={convertModal.previewUrl}
+          removeInk={convertModal.removeInk}
+          onTextChange={(text) => setConvertModal((m) => ({ ...m, text }))}
+          onTypeChange={(convertType) => setConvertModal((m) => ({ ...m, convertType }))}
+          onRemoveInkChange={(removeInk) => setConvertModal((m) => ({ ...m, removeInk }))}
+          onConfirm={handleConvertConfirm}
+          onClose={() => setConvertModal((m) => ({ ...m, open: false, error: null }))}
+        />
+      )}
     </section>
   );
 }

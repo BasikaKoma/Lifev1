@@ -2,6 +2,7 @@ export const PATH_TABS = [
   { id: 'goals', label: 'Goals' },
   { id: 'week', label: 'Week' },
   { id: 'metrics', label: 'Metrics' },
+  { id: 'routines', label: 'Routines' },
   { id: 'review', label: 'Review' },
 ];
 

@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { SAVE_REQUEST_TIMEOUT_MS } from '../constants/save';
+import { createElectronAuthStorage } from './electronAuth';
 
 export const DEFAULT_SUPABASE_URL = 'https://fxdnbepmiphyzebqdkyf.supabase.co';
 
@@ -95,11 +96,15 @@ export function getSupabaseClient() {
     return cachedClient;
   }
 
+  const electronStorage = createElectronAuthStorage();
+  const isElectron = Boolean(electronStorage);
+
   cachedClient = createClient(url, key, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
-      detectSessionInUrl: true,
+      detectSessionInUrl: !isElectron,
+      ...(electronStorage ? { storage: electronStorage } : {}),
     },
     global: {
       fetch: fetchWithTimeout,

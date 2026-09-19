@@ -3,6 +3,12 @@ import {
   normalizeWeightReadings,
   shouldAppendWeightReading,
 } from './weightReadings';
+import {
+  WAIST_METRIC_TYPE,
+  WAIST_SOURCE,
+  WAIST_UNIT,
+  parseWaistCm,
+} from './waistReadings';
 
 export function todayIsoDate() {
   const now = new Date();
@@ -295,6 +301,38 @@ export async function appendWeightReading({
       deviceName,
       stable,
       impedance,
+    },
+  };
+
+  await upsertMetricsBatch([metric]);
+  notifyHealthMetricsChanged();
+  return metric;
+}
+
+export async function appendWaistReading({
+  waistCm,
+  day = todayIsoDate(),
+  recordedAt = new Date().toISOString(),
+}) {
+  const cm = parseWaistCm(waistCm);
+  if (cm == null) return null;
+
+  const existingRows = await fetchMetricsForDay(day);
+  const existing = existingRows.find(
+    (metric) => metric.metricType === WAIST_METRIC_TYPE && metric.source === WAIST_SOURCE,
+  );
+  if (existing?.value != null) return existing;
+
+  const metric = {
+    day,
+    metricType: WAIST_METRIC_TYPE,
+    value: cm,
+    unit: WAIST_UNIT,
+    source: WAIST_SOURCE,
+    recordedAt,
+    payload: {
+      readings: [{ value: cm, recordedAt }],
+      latestRecordedAt: recordedAt,
     },
   };
 

@@ -1,6 +1,9 @@
 import { listOpenConversations, normalizeConversation } from '../conversations';
 import { pullCloudBundle, pushCloudBundle, deleteCloudConversation } from './cloudStore';
 import { loadLocalBundle, loadLocalProfile, saveLocalBundle, saveLocalMemories, saveLocalProfile } from './localStore';
+import { isCloudSyncEnabled } from '../../lib/vault/config';
+import { readVaultJsonIfEnabled } from '../../lib/vault/mirror';
+import { brainConversationsPath, brainMemoriesPath, brainProfilePath } from '../../lib/vault/paths';
 import { createMemory, isNewer, normalizeMemory, normalizeProfile, nowIso } from './normalize';
 import { DURABLE_KINDS, IDENTITY_KINDS } from './kinds';
 import { normalizeSearchText } from '../snapshot/loadAppCatalog';
@@ -117,6 +120,25 @@ function mergeProfile(local, cloud) {
   return isNewer(local.updatedAt, cloud.updatedAt) ? normalizeProfile(local) : normalizeProfile(cloud);
 }
 
+function pushBrainCloud(bundle) {
+  if (!isCloudSyncEnabled()) return;
+  pushCloudBundle(bundle || loadLocalBundle()).catch(() => {});
+}
+
+async function loadVaultBrainBundle() {
+  const [profile, memories, conversationsWrap] = await Promise.all([
+    readVaultJsonIfEnabled(brainProfilePath()),
+    readVaultJsonIfEnabled(brainMemoriesPath()),
+    readVaultJsonIfEnabled(brainConversationsPath()),
+  ]);
+  if (!profile && !memories && !conversationsWrap) return null;
+  return {
+    profile,
+    memories: Array.isArray(memories) ? memories : [],
+    conversations: Array.isArray(conversationsWrap?.conversations) ? conversationsWrap.conversations : [],
+  };
+}
+
 export function loadMemoryRepository() {
   const local = loadLocalBundle();
   return {
@@ -128,23 +150,35 @@ export function loadMemoryRepository() {
 
 export async function syncMemoryRepository() {
   const local = loadLocalBundle();
+  const vault = await loadVaultBrainBundle();
   let cloud = null;
-  try {
-    cloud = await pullCloudBundle();
-  } catch {
-    cloud = null;
+  if (isCloudSyncEnabled()) {
+    try {
+      cloud = await pullCloudBundle();
+    } catch {
+      cloud = null;
+    }
   }
 
+  const withVault = vault
+    ? {
+      profile: mergeProfile(local.profile, vault.profile),
+      conversations: mergeConversations(local.conversations, vault.conversations),
+      memories: mergeById(local.memories, vault.memories, (item) => item.updatedAt).map(normalizeMemory).filter(Boolean),
+      activeConversationId: local.activeConversationId,
+    }
+    : local;
+
   const merged = {
-    profile: mergeProfile(local.profile, cloud?.profile),
-    conversations: mergeConversations(local.conversations, cloud?.conversations),
-    memories: mergeById(local.memories, cloud?.memories, (item) => item.updatedAt).map(normalizeMemory).filter(Boolean),
-    activeConversationId: local.activeConversationId,
+    profile: mergeProfile(withVault.profile, cloud?.profile),
+    conversations: mergeConversations(withVault.conversations, cloud?.conversations),
+    memories: mergeById(withVault.memories, cloud?.memories, (item) => item.updatedAt).map(normalizeMemory).filter(Boolean),
+    activeConversationId: withVault.activeConversationId,
   };
 
   saveLocalBundle(merged);
   try {
-    await pushCloudBundle(merged);
+    if (isCloudSyncEnabled()) await pushCloudBundle(merged);
   } catch {
     /* offline or unsigned-in is fine; local copy remains */
   }
@@ -161,7 +195,7 @@ export function persistConversations(conversations, activeConversationId) {
     conversations,
     activeConversationId: activeConversationId || undefined,
   });
-  pushCloudBundle(bundle).catch(() => {});
+  pushBrainCloud(bundle);
   return listOpenConversations(bundle.conversations);
 }
 
@@ -171,7 +205,7 @@ export function persistProfile(profile) {
   const next = saveLocalProfile({ ...profile, updatedAt: nowIso() });
   if (profilePushTimer) window.clearTimeout(profilePushTimer);
   profilePushTimer = window.setTimeout(() => {
-    pushCloudBundle(loadLocalBundle()).catch(() => {});
+    pushBrainCloud(loadLocalBundle());
   }, 800);
   return next;
 }
@@ -181,7 +215,7 @@ export function persistMemory(partial) {
   const memories = [memory, ...loadLocalBundle().memories.filter((item) => item.id !== memory.id)];
   saveLocalMemories(memories);
   const bundle = loadLocalBundle();
-  pushCloudBundle(bundle).catch(() => {});
+  pushBrainCloud(bundle);
   return memory;
 }
 
@@ -193,7 +227,7 @@ export function persistMemories(incoming = []) {
   for (const item of incomingList) map.set(item.id, item);
   const memories = [...map.values()];
   saveLocalMemories(memories);
-  pushCloudBundle(loadLocalBundle()).catch(() => {});
+  pushBrainCloud();
   return memories;
 }
 
@@ -206,11 +240,12 @@ export function supersedeMemory(id, nextPartial) {
   ));
   memories.unshift(next);
   saveLocalMemories(memories);
-  pushCloudBundle(loadLocalBundle()).catch(() => {});
+  pushBrainCloud();
   return next;
 }
 
 export async function archiveConversationRemote(id) {
+  if (!isCloudSyncEnabled()) return;
   try {
     await deleteCloudConversation(id);
   } catch {
@@ -262,7 +297,7 @@ export function persistLearnedMemories(incoming = [], { conversationId = null } 
     String(b.updatedAt || '').localeCompare(String(a.updatedAt || ''))
   ));
   saveLocalMemories(memories);
-  pushCloudBundle(loadLocalBundle()).catch(() => {});
+  pushBrainCloud();
   foldMemoriesIntoProfile(created);
   return created;
 }

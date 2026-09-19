@@ -81,6 +81,8 @@ export const emptySelfData = {
       value: '—',
       kg: null,
       unit: 'kg',
+      waistCm: null,
+      waistDelta: null,
       status: NO_DATA,
       icon: 'weight',
       chart: { type: 'progressBar' },

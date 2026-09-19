@@ -15,12 +15,14 @@ import { WorkspaceView } from './components/WorkspaceView';
 import { SettingsView } from './components/SettingsView';
 import { SelfView } from './components/SelfView';
 import { OuraConnectModal } from './components/OuraConnectModal';
+import { MetaConnectModal } from './components/brand/MetaConnectModal';
 import { AssistantOrb } from './components/AssistantOrb';
 import { QuickNoteOrb } from './components/QuickNoteOrb';
 import { AuthView } from './components/AuthView';
 import { ConfigErrorView } from './components/ConfigErrorView';
 import { APP_NAME } from './constants/branding';
 import { useOura, useOuraOAuthReturn } from './hooks/useOura';
+import { useMeta, useMetaOAuthReturn } from './hooks/useMeta';
 import { useProfile } from './hooks/useProfile';
 import { useHealthSelfHubSync } from './hooks/useHealthSelfHubSync';
 import { useHealthLifelineSync } from './hooks/useHealthLifelineSync';
@@ -220,6 +222,18 @@ function MainApp({ user, onSignOut }) {
   } = useOura({ enabled: Boolean(user), pollWhenActive: activeView === 'self' });
 
   const {
+    status: metaStatus,
+    loading: metaLoading,
+    busy: metaBusy,
+    error: metaError,
+    connect: connectMeta,
+    disconnect: disconnectMetaAccount,
+    refreshDestinations: refreshMetaDestinations,
+    saveDestinations: saveMetaDestinations,
+    refreshAll: refreshMeta,
+  } = useMeta({ enabled: Boolean(user) });
+
+  const {
     displayName: selfDisplayName,
     setDisplayName: setSelfDisplayName,
     saveDisplayName: saveSelfDisplayName,
@@ -261,6 +275,7 @@ function MainApp({ user, onSignOut }) {
         : ouraSelfData;
 
   const [ouraModalOpen, setOuraModalOpen] = useState(false);
+  const [metaModalOpen, setMetaModalOpen] = useState(false);
   const [scaleModalOpen, setScaleModalOpen] = useState(false);
   const [camerasModalOpen, setCamerasModalOpen] = useState(false);
   const [canvasFullscreen, setCanvasFullscreen] = useState(false);
@@ -422,16 +437,22 @@ function MainApp({ user, onSignOut }) {
 
   useEffect(() => {
     return deepLink.onDeepLink((url) => {
-      const result = deepLink.parseOuraCallback(url);
-      if (result?.success) {
+      const oura = deepLink.parseOuraCallback(url);
+      if (oura?.success) {
         refreshOura()
           .then(() => pushHealthToSelfHub())
           .catch(() => {});
         setActiveView('self');
         setOuraModalOpen(true);
       }
+      const meta = deepLink.parseMetaCallback(url);
+      if (meta) {
+        refreshMeta().catch(() => {});
+        setActiveView('brand');
+        setMetaModalOpen(true);
+      }
     });
-  }, [pushHealthToSelfHub, refreshOura, setActiveView]);
+  }, [pushHealthToSelfHub, refreshMeta, refreshOura, setActiveView]);
 
   useOuraOAuthReturn({
     onConnected: () => {
@@ -440,6 +461,19 @@ function MainApp({ user, onSignOut }) {
         .catch(() => {});
       setActiveView('self');
       setOuraModalOpen(true);
+    },
+  });
+
+  useMetaOAuthReturn({
+    onConnected: () => {
+      refreshMeta().catch(() => {});
+      setActiveView('brand');
+      setMetaModalOpen(true);
+    },
+    onError: () => {
+      refreshMeta().catch(() => {});
+      setActiveView('brand');
+      setMetaModalOpen(true);
     },
   });
 
@@ -468,6 +502,19 @@ function MainApp({ user, onSignOut }) {
   const handleOuraDisconnect = async () => {
     if (!window.confirm('Αποσύνδεση Oura; Τα tokens θα διαγραφούν από το cloud.')) return;
     await disconnectOura();
+  };
+
+  const handleMetaConnect = async () => {
+    try {
+      await connectMeta();
+    } catch {
+      setMetaModalOpen(true);
+    }
+  };
+
+  const handleMetaDisconnect = async () => {
+    if (!window.confirm('Αποσύνδεση Meta; Τα tokens θα διαγραφούν από το cloud.')) return;
+    await disconnectMetaAccount();
   };
 
   const selectedStage = stages.find((s) => s.id === selectedStageId) || null;
@@ -772,10 +819,8 @@ function MainApp({ user, onSignOut }) {
             notes={notes}
             selfHubDays={selfHubDays}
             mapTheme={mapTheme}
-            onMapThemeChange={updateMapTheme}
             isLifeline={isLifeline}
             routineTemplates={lifelineRoutineTemplates}
-            onUpdateRoutineTemplates={updateLifelineRoutineTemplates}
             onRefreshProjectActivity={refreshProjectActivity}
             pathBundle={pathBundle}
             onOpenPath={openPath}
@@ -796,6 +841,9 @@ function MainApp({ user, onSignOut }) {
             canvasTasks={canvasTasks}
             projectActivity={hubProjectActivity}
             initialTab={pathTab}
+            onTabChange={setPathTab}
+            routineTemplates={lifelineRoutineTemplates}
+            onUpdateRoutineTemplates={updateLifelineRoutineTemplates}
             lifelineDays={lifelineDays}
             onCompleteLinkedTask={(linked) => {
               if (!linked?.taskId) return;
@@ -820,6 +868,8 @@ function MainApp({ user, onSignOut }) {
             selfHubDays={selfHubDays}
             projectActivity={hubProjectActivity}
             projectList={projectList}
+            metaStatus={metaStatus}
+            onOpenMetaModal={() => setMetaModalOpen(true)}
           />
         );
       case 'nutrition':
@@ -849,6 +899,8 @@ function MainApp({ user, onSignOut }) {
             onSignOut={onSignOut}
             ouraStatus={ouraStatus}
             onOpenOuraModal={() => setOuraModalOpen(true)}
+            metaStatus={metaStatus}
+            onOpenMetaModal={() => setMetaModalOpen(true)}
             onOpenScaleModal={() => setScaleModalOpen(true)}
             onOpenCamerasModal={() => setCamerasModalOpen(true)}
             onOpenCamerasView={() => handleNavigate('devices')}
@@ -955,6 +1007,18 @@ function MainApp({ user, onSignOut }) {
         onConnect={handleOuraConnect}
         onSync={handleOuraSync}
         onDisconnect={handleOuraDisconnect}
+      />
+      <MetaConnectModal
+        open={metaModalOpen}
+        onClose={() => setMetaModalOpen(false)}
+        status={metaStatus}
+        loading={metaLoading}
+        busy={metaBusy}
+        error={metaError}
+        onConnect={handleMetaConnect}
+        onDisconnect={handleMetaDisconnect}
+        onRefresh={refreshMetaDestinations}
+        onSaveDestinations={saveMetaDestinations}
       />
       <ScaleConnectModal
         open={scaleModalOpen}

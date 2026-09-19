@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { usePersonalBrand } from '../../hooks/usePersonalBrand';
 import { BRAND_TABS } from '../../lib/brand/schema';
+import { metaStatusLabel } from '../../lib/meta';
 import { getVoiceRecorderMimeType, transcribeAudio } from '../../utils/voiceTranscribe';
 import { BrandHub, SignalDetail } from './BrandHub';
 import { BrandIdeas, BrandLibrary, BrandPipeline } from './BrandPages';
@@ -13,6 +14,8 @@ export function PersonalBrandView({
   selfHubDays = {},
   projectActivity = [],
   projectList = [],
+  metaStatus,
+  onOpenMetaModal,
 }) {
   const brand = usePersonalBrand({
     displayName,
@@ -133,6 +136,15 @@ export function PersonalBrandView({
           <p className="brand-view__handle">{brand.handle || 'Set your handle in Brand DNA'}</p>
         </div>
         <div className="brand-view__actions">
+          {onOpenMetaModal ? (
+            <button
+              type="button"
+              className="brand-btn brand-btn--outline brand-view__meta-btn"
+              onClick={onOpenMetaModal}
+            >
+              {metaStatusLabel(metaStatus)}
+            </button>
+          ) : null}
           <button type="button" className="brand-btn brand-btn--outline" onClick={handleNewIdea}>
             New idea
           </button>
@@ -193,7 +205,6 @@ export function PersonalBrandView({
           activeDraft={brand.activeDraft}
           pipeline={brand.pipeline}
           stats={brand.stats}
-          balance={brand.balance}
           weekly={brand.weekly}
           weeklyAi={weeklyAi}
           captureText={captureText}
@@ -210,6 +221,8 @@ export function PersonalBrandView({
           onVariations={handleVariationsFromHub}
           onViewPipeline={() => setTab('pipeline')}
           onViewSignals={() => setTab('ideas')}
+          metaStatus={metaStatus}
+          onManageMeta={onOpenMetaModal}
         />
       )}
 

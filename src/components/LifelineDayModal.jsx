@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   createDayTodo,
-  createRoutineTemplate,
   formatFullDayLabel,
   getDayEntry,
   getRoutineDayScore,
@@ -11,8 +10,6 @@ import {
   formatNoteClock,
   mergeDayRoutines,
   normalizeRoutineTemplates,
-  ROUTINE_STACK_ORDER,
-  ROUTINE_STACKS,
   stampNewJournalBlocks,
   toggleRoutineDone,
 } from '../utils/lifelineDays';
@@ -30,20 +27,37 @@ import { getDayLabView } from '../utils/lifelineSelfMetrics';
 import { healthMetricsToLifelinePatch } from '../lib/health/healthToLifeline';
 import { getSelfMetricVariant } from '../utils/selfMetricVariant';
 import { fetchOuraMetricsForDay } from '../lib/oura';
-import { fetchMetricsForDay } from '../lib/health/healthMetrics';
+import { fetchMetricsForDay, appendWaistReading } from '../lib/health/healthMetrics';
 import {
   buildWeightCardFromReadings,
   getWeightReadingsForDay,
 } from '../lib/health/weightReadings';
-import { DAY_VIEW_PHASE } from '../hooks/useLifelineDayView';
+import {
+  buildWaistCardFromReadings,
+  getWaistReadingsForDay,
+} from '../lib/health/waistReadings';
+import { DAY_VIEW_PHASE, DAY_VIEW_BODY_MS, originPercentFromRects, originToCssVars } from '../hooks/useLifelineDayView';
 import { SelfMetricCard } from './self/SelfMetricCard';
 import { SelfChart } from './self/SelfCharts';
 import { SelfIcon } from './self/SelfIcons';
+import { WaistLogForm } from './self/WaistLogForm';
 import { ThoughtItem } from './ThoughtItem';
 import { appendThought, visibleThoughts } from '../utils/dayThoughts';
 import './SelfView.css';
 import './selfHub.css';
 import './DayLab.css';
+
+function hasDayLabChart(card) {
+  return card?.chart?.type === 'weightLine';
+}
+
+function dayLabMetricCardClass(kind, card) {
+  return [
+    'day-lab__weight-card',
+    kind === 'waist' ? 'day-lab__weight-card--waist' : '',
+    hasDayLabChart(card) ? 'day-lab__weight-card--chart' : '',
+  ].filter(Boolean).join(' ');
+}
 
 /**
  * Premium Day Lab — Self-style emerald panels inside Projects panel.
@@ -53,6 +67,100 @@ export function LifelineDayModal({
   open,
   date,
   phase = DAY_VIEW_PHASE.timeline,
+  origin = null,
+  originRect = null,
+  onClose,
+  backLabel = '← Lifeline',
+  ...bodyProps
+}) {
+  const closeBtnRef = useRef(null);
+  const returning = phase === DAY_VIEW_PHASE.returningToTimeline;
+  const visible =
+    open
+    && date
+    && phase !== DAY_VIEW_PHASE.timeline
+    && phase !== DAY_VIEW_PHASE.daySelected;
+  const [bodyReady, setBodyReady] = useState(false);
+  const originCss = origin?.x && origin?.y
+    ? origin
+    : originPercentFromRects(originRect, null);
+
+  useEffect(() => {
+    if (!visible) {
+      setBodyReady(false);
+      return undefined;
+    }
+    if (returning) return undefined;
+    const reduced = typeof window !== 'undefined'
+      && window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+    const t = window.setTimeout(() => setBodyReady(true), reduced ? 0 : DAY_VIEW_BODY_MS);
+    return () => window.clearTimeout(t);
+  }, [visible, returning]);
+
+  useEffect(() => {
+    if (!visible) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') onClose?.();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [visible, onClose]);
+
+  useEffect(() => {
+    if (!bodyReady) return undefined;
+    const id = window.requestAnimationFrame(() => {
+      closeBtnRef.current?.focus?.({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [bodyReady]);
+
+  if (!visible) return null;
+
+  return (
+    <div
+      className={[
+        'lifeline-day-view',
+        returning ? 'lifeline-day-view--returning' : 'lifeline-day-view--expanded',
+      ].join(' ')}
+      style={originToCssVars(originCss)}
+      role="region"
+      aria-label={`Ημέρα ${formatFullDayLabel(date)}`}
+    >
+      <div className="lifeline-day-view__veil" aria-hidden="true" />
+      <div className="lifeline-day-view__slit" aria-hidden="true" />
+      <div className="lifeline-day-view__surface" aria-hidden="true" />
+      {bodyReady ? (
+        <div className="lifeline-day-view__content">
+          <header className="day-lab__header">
+            <button
+              ref={closeBtnRef}
+              type="button"
+              className="day-lab__back"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onClose?.();
+              }}
+            >
+              {backLabel}
+            </button>
+          </header>
+          <div className="day-lab__body">
+            <DayLabBody
+              open={open}
+              date={date}
+              {...bodyProps}
+            />
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function DayLabBody({
+  open,
+  date,
   lifelineDays,
   selfHubDays = {},
   routineTemplates = [],
@@ -60,13 +168,11 @@ export function LifelineDayModal({
   stages = [],
   pathBundle = null,
   onUpdateDay,
-  onUpdateRoutineTemplates,
+  onOpenPathRoutines,
   onPromoteThought,
   onKeepThought,
   onDismissThought,
   onAddThought,
-  onClose,
-  backLabel = '← Lifeline',
 }) {
   const entry = useMemo(() => {
     const lifelineEntry = getDayEntry(lifelineDays, date);
@@ -89,11 +195,6 @@ export function LifelineDayModal({
   const [newThought, setNewThought] = useState('');
   const [savingThought, setSavingThought] = useState(false);
   const [newTodo, setNewTodo] = useState('');
-  const [newRoutineLabel, setNewRoutineLabel] = useState('');
-  const [newRoutineTime, setNewRoutineTime] = useState('');
-  const [newRoutineStack, setNewRoutineStack] = useState('morning');
-  const closeBtnRef = useRef(null);
-  const [arrived, setArrived] = useState(false);
   const [ouraRowForDay, setOuraRowForDay] = useState(null);
   const [healthMetricsForDay, setHealthMetricsForDay] = useState([]);
 
@@ -107,7 +208,7 @@ export function LifelineDayModal({
     [templates, entry.routines]
   );
   const routineStacks = useMemo(
-    () => groupRoutinesByStack(dayRoutines, { includeEmpty: true }),
+    () => groupRoutinesByStack(dayRoutines),
     [dayRoutines]
   );
   const routineScore = useMemo(
@@ -144,11 +245,7 @@ export function LifelineDayModal({
     [date, timeline.segments],
   );
 
-  const visible =
-    open
-    && date
-    && phase !== DAY_VIEW_PHASE.timeline
-    && phase !== DAY_VIEW_PHASE.daySelected;
+  const visible = Boolean(open && date);
 
   useEffect(() => {
     if (!visible || !date) {
@@ -158,17 +255,23 @@ export function LifelineDayModal({
     }
 
     let cancelled = false;
-    Promise.all([
-      fetchOuraMetricsForDay(date).catch(() => null),
-      fetchMetricsForDay(date).catch(() => []),
-    ]).then(([ouraRow, healthMetrics]) => {
-      if (cancelled) return;
-      setOuraRowForDay(ouraRow);
-      setHealthMetricsForDay(healthMetrics ?? []);
-    });
+    const load = () => {
+      Promise.all([
+        fetchOuraMetricsForDay(date).catch(() => null),
+        fetchMetricsForDay(date).catch(() => []),
+      ]).then(([ouraRow, healthMetrics]) => {
+        if (cancelled) return;
+        setOuraRowForDay(ouraRow);
+        setHealthMetricsForDay(healthMetrics ?? []);
+      });
+    };
+
+    load();
+    window.addEventListener('lifev1:health-metrics-changed', load);
 
     return () => {
       cancelled = true;
+      window.removeEventListener('lifev1:health-metrics-changed', load);
     };
   }, [visible, date]);
 
@@ -183,45 +286,32 @@ export function LifelineDayModal({
     });
 
     const readings = getWeightReadingsForDay(healthMetricsForDay, date);
-    if (!readings.length) return view;
+    const waistReadings = getWaistReadingsForDay(healthMetricsForDay, date);
+    const waistCard = buildWaistCardFromReadings(waistReadings, {
+      delta: view.waist?.delta ?? null,
+    });
+
+    if (!readings.length) {
+      return { ...view, waist: waistCard ?? view.waist ?? null };
+    }
 
     const weightCard = buildWeightCardFromReadings(readings, {
       delta: view.weight?.delta ?? null,
     });
-    if (!weightCard) return view;
+    if (!weightCard) return { ...view, waist: waistCard ?? view.waist ?? null };
 
     return {
       ...view,
       preview: false,
       weight: weightCard,
+      waist: waistCard ?? view.waist ?? null,
     };
   }, [entry.metrics, date, ouraRowForDay, healthMetricsForDay]);
-
-  useEffect(() => {
-    if (!visible) {
-      setArrived(false);
-      return undefined;
-    }
-    if (phase === DAY_VIEW_PHASE.returningToTimeline) {
-      setArrived(false);
-      return undefined;
-    }
-    let raf2 = 0;
-    const raf1 = requestAnimationFrame(() => {
-      raf2 = requestAnimationFrame(() => setArrived(true));
-    });
-    return () => {
-      cancelAnimationFrame(raf1);
-      cancelAnimationFrame(raf2);
-    };
-  }, [visible, phase]);
 
   useEffect(() => {
     if (!visible) return;
     setNotes(entry.notes);
     setNewTodo('');
-    setNewRoutineLabel('');
-    setNewRoutineTime('');
   }, [visible, date, entry.notes]);
 
   const persistNotes = useCallback(
@@ -295,46 +385,13 @@ export function LifelineDayModal({
     [date, entry.routines, onUpdateDay]
   );
 
-  const handleAddRoutineTemplate = (e) => {
-    e.preventDefault();
-    const label = newRoutineLabel.trim();
-    if (!label) return;
-    const next = [
-      ...templates,
-      createRoutineTemplate(label, { defaultTime: newRoutineTime, stack: newRoutineStack }),
-    ];
-    onUpdateRoutineTemplates?.(next);
-    setNewRoutineLabel('');
-    setNewRoutineTime('');
-  };
-
-  const handleRemoveRoutineTemplate = (templateId) => {
-    onUpdateRoutineTemplates?.(templates.filter((t) => t.id !== templateId));
-    if (!date) return;
-    const { [templateId]: _, ...rest } = entry.routines;
-    onUpdateDay?.(date, { routines: rest });
-  };
-
-  useEffect(() => {
-    if (!visible) return undefined;
-    const onKey = (e) => {
-      if (e.key === 'Escape') onClose?.();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [visible, onClose]);
-
-  useEffect(() => {
-    if (phase !== DAY_VIEW_PHASE.dayExpanded) return;
-    const id = window.requestAnimationFrame(() => {
-      closeBtnRef.current?.focus?.({ preventScroll: true });
-    });
-    return () => cancelAnimationFrame(id);
-  }, [phase]);
-
-  const isOpenSurface = arrived && phase !== DAY_VIEW_PHASE.returningToTimeline;
-  const returning = phase === DAY_VIEW_PHASE.returningToTimeline;
-  const expanded = phase === DAY_VIEW_PHASE.dayExpanded;
+  const handleSaveWaist = useCallback(async (cm) => {
+    if (!date) return null;
+    const saved = await appendWaistReading({ waistCm: cm, day: date });
+    const rows = await fetchMetricsForDay(date).catch(() => []);
+    setHealthMetricsForDay(rows ?? []);
+    return saved;
+  }, [date]);
 
   if (!visible) return null;
 
@@ -342,43 +399,30 @@ export function LifelineDayModal({
   const doneTodos = entry.todos.filter((todo) => todo.done);
 
   return (
-    <div
-      className={[
-        'lifeline-day-view',
-        isOpenSurface ? 'lifeline-day-view--open' : '',
-        expanded ? 'lifeline-day-view--expanded' : '',
-        returning ? 'lifeline-day-view--returning' : '',
-      ].filter(Boolean).join(' ')}
-      role="region"
-      aria-label={`Ημέρα ${formatFullDayLabel(date)}`}
-    >
-      <div className="lifeline-day-view__surface">
-        <header className="day-lab__header">
-          <button
-            ref={closeBtnRef}
-            type="button"
-            className="day-lab__back"
-            onClick={onClose}
-          >
-            {backLabel}
-          </button>
-
-          <div className="day-lab__title-block">
-            <p className="day-lab__eyebrow">Ημέρα</p>
-            <h2 id="lifeline-day-modal-title" className="day-lab__title">
-              {formatFullDayLabel(date)}
-            </h2>
-          </div>
-
-          <div className="day-lab__status" title={dayLab.source === 'oura' ? 'Oura metrics' : 'Day metrics'}>
-            <span className="day-lab__status-dot" aria-hidden="true" />
-            <div className="day-lab__status-text">
-              <span className="day-lab__status-label">{dayLab.systemStatus.label}</span>
-              <span className="day-lab__status-sub">{dayLab.systemStatus.sublabel}</span>
+    <>
+        <div className="day-lab__hero">
+          <p className="day-lab__eyebrow">Ημέρα</p>
+          <h2 id="lifeline-day-modal-title" className="day-lab__title">
+            {formatFullDayLabel(date)}
+          </h2>
+          {dayLab.dayScore ? (
+            <div
+              className="day-lab__hero-score"
+              style={{ '--score': String(Math.max(0, Math.min(100, Number(dayLab.dayScore.value) || 0))) }}
+            >
+              <div className="day-lab__hero-score-ring" aria-hidden="true">
+                <div className="day-lab__hero-score-core">
+                  <span className="day-lab__hero-score-value">{dayLab.dayScore.display}</span>
+                </div>
+              </div>
+              <p className="day-lab__hero-score-label">Day score</p>
             </div>
-          </div>
-        </header>
-
+          ) : (
+            <div className="day-lab__hero-score day-lab__hero-score--empty">
+              <p className="day-lab__hero-score-label">Day score</p>
+            </div>
+          )}
+        </div>
         <div className="day-lab__dashboard">
           <aside className="day-lab__column day-lab__column--left">
             <p className="day-lab__preview-tag">
@@ -401,15 +445,25 @@ export function LifelineDayModal({
                 {routineWeek.label ? ` · ${routineWeek.label}` : ''}
               </h3>
               <p className="day-lab__panel-hint">
-                Ορίζεις τις πράξεις μία φορά. Κάθε μέρα κάνεις μόνο check — η ώρα γράφεται μόνη της.
+                Check για σήμερα. Οι ρουτίνες ορίζονται στο Path.
               </p>
 
-              {routineStacks.map((stack) => (
-                <div key={stack.id} className="day-lab__routine-stack">
-                  <p className="day-lab__routine-stack-label">{stack.label}</p>
-                  {stack.items.length === 0 ? (
-                    <p className="day-lab__empty">Τίποτα ακόμα σε αυτό το μπλοκ.</p>
-                  ) : (
+              {routineStacks.length === 0 ? (
+                <p className="day-lab__empty">
+                  Δεν υπάρχουν ρουτίνες. Πρόσθεσέ τις στο Path → Routines.
+                  {onOpenPathRoutines ? (
+                    <>
+                      {' '}
+                      <button type="button" className="day-lab__link" onClick={onOpenPathRoutines}>
+                        Άνοιξε Path
+                      </button>
+                    </>
+                  ) : null}
+                </p>
+              ) : (
+                routineStacks.map((stack) => (
+                  <div key={stack.id} className="day-lab__routine-stack">
+                    <p className="day-lab__routine-stack-label">{stack.label}</p>
                     <ul className="day-lab__routine-list">
                       {stack.items.map((routine) => (
                         <li
@@ -424,58 +478,15 @@ export function LifelineDayModal({
                             />
                             <span className="day-lab__routine-label">{routine.label}</span>
                           </label>
-                          <input
-                            type="time"
-                            className="day-lab__routine-time input"
-                            value={routine.time}
-                            onChange={(e) => patchRoutineLog(routine, { time: e.target.value })}
-                            aria-label={`Ώρα για ${routine.label}`}
-                          />
-                          <button
-                            type="button"
-                            className="day-lab__routine-remove"
-                            onClick={() => handleRemoveRoutineTemplate(routine.id)}
-                            aria-label={`Αφαίρεση ρουτίνας ${routine.label}`}
-                            title="Αφαίρεση από όλες τις ημέρες"
-                          >
-                            ×
-                          </button>
+                          {routine.done && routine.time ? (
+                            <span className="day-lab__routine-time-stamp">{routine.time}</span>
+                          ) : null}
                         </li>
                       ))}
                     </ul>
-                  )}
-                </div>
-              ))}
-
-              <form className="day-lab__routine-form" onSubmit={handleAddRoutineTemplate}>
-                <select
-                  className="input day-lab__routine-form-stack"
-                  value={newRoutineStack}
-                  onChange={(e) => setNewRoutineStack(e.target.value)}
-                  aria-label="Στοίβα ρουτίνας"
-                >
-                  {ROUTINE_STACK_ORDER.map((id) => (
-                    <option key={id} value={id}>{ROUTINE_STACKS[id].label}</option>
-                  ))}
-                </select>
-                <input
-                  type="text"
-                  className="input"
-                  placeholder="π.χ. Ξύπνημα, Φως, Χωρίς οθόνη…"
-                  value={newRoutineLabel}
-                  onChange={(e) => setNewRoutineLabel(e.target.value)}
-                />
-                <input
-                  type="time"
-                  className="input day-lab__routine-form-time"
-                  value={newRoutineTime}
-                  onChange={(e) => setNewRoutineTime(e.target.value)}
-                  aria-label="Προεπιλεγμένη ώρα (προαιρετικά)"
-                />
-                <button type="submit" className="btn btn--primary btn--sm">
-                  + Ρουτίνα
-                </button>
-              </form>
+                  </div>
+                ))
+              )}
             </section>
 
             <section className="day-lab__panel">
@@ -647,14 +658,14 @@ export function LifelineDayModal({
                 variant={getSelfMetricVariant(metric)}
               />
             ))}
-            {dayLab.weight && (
-              <article className="day-lab__weight-card">
+            {dayLab.weight?.kg != null && (
+              <article className={dayLabMetricCardClass('weight', dayLab.weight)}>
                 <header className="day-lab__weight-header">
                   <span className="day-lab__weight-icon" aria-hidden="true">
                     <SelfIcon name="weight" />
                   </span>
                   <span className="day-lab__weight-label">{dayLab.weight.label}</span>
-                  {dayLab.weight.delta != null && (
+                  {dayLab.weight.delta != null ? (
                     <span
                       className={`day-lab__weight-delta${
                         dayLab.weight.delta > 0.1
@@ -667,29 +678,66 @@ export function LifelineDayModal({
                       {dayLab.weight.delta > 0 ? '+' : ''}
                       {dayLab.weight.delta.toFixed(1)} {dayLab.weight.unit}
                     </span>
-                  )}
+                  ) : !hasDayLabChart(dayLab.weight) && dayLab.weight.status ? (
+                    <span className="day-lab__weight-status">{dayLab.weight.status}</span>
+                  ) : null}
                 </header>
-                {dayLab.weight.kg != null ? (
-                  <p className="day-lab__weight-value">
-                    {typeof dayLab.weight.kg === 'number'
-                      ? dayLab.weight.kg.toFixed(1)
-                      : dayLab.weight.kg}
-                    <span className="day-lab__weight-unit">{dayLab.weight.unit}</span>
-                  </p>
-                ) : null}
-                {dayLab.weight.chart?.type === 'weightLine' ? (
+                <p className="day-lab__weight-value">
+                  {typeof dayLab.weight.kg === 'number'
+                    ? dayLab.weight.kg.toFixed(1)
+                    : dayLab.weight.kg}
+                  <span className="day-lab__weight-unit">{dayLab.weight.unit}</span>
+                </p>
+                {hasDayLabChart(dayLab.weight) ? (
                   <SelfChart chart={dayLab.weight.chart} />
-                ) : (
-                  <p className="day-lab__weight-status">{dayLab.weight.status || 'No data'}</p>
-                )}
+                ) : null}
               </article>
             )}
-            {dayLab.dayScore && (
-              <div className="day-lab__score-card">
-                <p className="day-lab__score-label">{dayLab.dayScore.label}</p>
-                <p className="day-lab__score-value">{dayLab.dayScore.display}</p>
-                <p className="day-lab__score-status">{dayLab.dayScore.status}</p>
-              </div>
+            {dayLab.waist?.cm != null ? (
+              <article className={dayLabMetricCardClass('waist', dayLab.waist)}>
+                <header className="day-lab__weight-header">
+                  <span className="day-lab__weight-icon" aria-hidden="true">
+                    <SelfIcon name="waist" />
+                  </span>
+                  <span className="day-lab__weight-label">{dayLab.waist.label || 'Μέση'}</span>
+                  {dayLab.waist.delta != null ? (
+                    <span
+                      className={`day-lab__weight-delta${
+                        dayLab.waist.delta > 0.3
+                          ? ' day-lab__weight-delta--up'
+                          : dayLab.waist.delta < -0.3
+                            ? ' day-lab__weight-delta--down'
+                            : ''
+                      }`}
+                    >
+                      {dayLab.waist.delta > 0 ? '+' : ''}
+                      {dayLab.waist.delta.toFixed(1)} {dayLab.waist.unit}
+                    </span>
+                  ) : !hasDayLabChart(dayLab.waist) && dayLab.waist.status ? (
+                    <span className="day-lab__weight-status">{dayLab.waist.status}</span>
+                  ) : null}
+                </header>
+                <p className="day-lab__weight-value">
+                  {typeof dayLab.waist.cm === 'number'
+                    ? dayLab.waist.cm.toFixed(1)
+                    : dayLab.waist.cm}
+                  <span className="day-lab__weight-unit">cm</span>
+                </p>
+                {hasDayLabChart(dayLab.waist) ? (
+                  <SelfChart chart={dayLab.waist.chart} />
+                ) : null}
+              </article>
+            ) : (
+              <article className="day-lab__weight-card day-lab__weight-card--waist day-lab__weight-card--log">
+                <header className="day-lab__weight-header">
+                  <span className="day-lab__weight-icon" aria-hidden="true">
+                    <SelfIcon name="waist" />
+                  </span>
+                  <span className="day-lab__weight-label">Μέση</span>
+                </header>
+                <p className="day-lab__weight-status">Καταχώρισε μέση σε εκατοστά</p>
+                <WaistLogForm compact onSave={handleSaveWaist} />
+              </article>
             )}
           </aside>
         </div>
@@ -702,7 +750,6 @@ export function LifelineDayModal({
             live={date === localTodayIsoDate()}
           />
         </div>
-      </div>
-    </div>
+    </>
   );
 }

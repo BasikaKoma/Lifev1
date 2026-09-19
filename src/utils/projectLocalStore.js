@@ -1,4 +1,5 @@
 import { LOCAL_INK_WRITE_MS } from '../constants/save';
+import { queueVaultProjectDelete, queueVaultProjectWrite } from '../lib/vault/projects';
 import {
   INK_COLUMNS,
   PERSISTABLE_COLUMNS,
@@ -81,6 +82,17 @@ export async function readLocalMeta(projectId) {
 export async function readLastActiveProjectId() {
   const row = await readLocalMeta(ACTIVE_KEY);
   return row?.activeProjectId || null;
+}
+
+export async function listLocalProjectMetas() {
+  try {
+    const db = await openDb();
+    const tx = db.transaction(META_STORE, 'readonly');
+    const rows = await requestToPromise(tx.objectStore(META_STORE).getAll());
+    return (rows || []).filter((row) => row?.projectId && row.projectId !== ACTIVE_KEY);
+  } catch {
+    return [];
+  }
 }
 
 export async function readLocalColumns(projectId, columns) {
@@ -220,6 +232,7 @@ function queueLocalColumnWrites(state, columns, dirtyColumns, { touchActive = tr
     });
   }
   scheduleFlush(delay);
+  queueVaultProjectWrite(state, columns, dirtyColumns);
 }
 
 export function writeLocalColumns(state, columns, dirtyColumns) {
@@ -280,6 +293,7 @@ export async function mergeUnsyncedLocal(projectState) {
 
 export async function clearLocalProject(projectId) {
   if (!projectId) return;
+  queueVaultProjectDelete(projectId);
   await flushLocalWrites();
   try {
     const db = await openDb();

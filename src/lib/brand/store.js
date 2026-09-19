@@ -7,6 +7,8 @@ import {
   normalizeDna,
   nowIso,
 } from './schema';
+import { isCloudSyncEnabled, mirrorVaultJson, readVaultJsonIfEnabled } from '../vault/mirror';
+import { brandPath } from '../vault/paths';
 
 const STORAGE_KEY = 'lifev1-personal-brand';
 
@@ -28,6 +30,7 @@ function readLocal() {
 function writeLocal(bundle) {
   const next = normalizeBundle(bundle);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  mirrorVaultJson(brandPath(), next);
   return next;
 }
 
@@ -242,9 +245,12 @@ export function syncDnaToBrain(dna) {
 
 export async function loadBrandBundle() {
   const local = readLocal();
+  const vault = await readVaultJsonIfEnabled(brandPath());
+  const vaultBundle = vault ? normalizeBundle(vault) : null;
+  const base = mergeBundles(local, vaultBundle);
   try {
-    const cloud = await pullBrandBundle();
-    const merged = mergeBundles(local, cloud);
+    const cloud = isCloudSyncEnabled() ? await pullBrandBundle() : null;
+    const merged = mergeBundles(base, cloud);
     const seeded = {
       ...merged,
       dna: seedDnaFromBrain(merged.dna),
@@ -253,8 +259,8 @@ export async function loadBrandBundle() {
     return seeded;
   } catch {
     return {
-      ...local,
-      dna: seedDnaFromBrain(local.dna),
+      ...base,
+      dna: seedDnaFromBrain(base.dna),
     };
   }
 }
@@ -269,6 +275,7 @@ export async function saveBrandBundle(bundle) {
   } catch {
     /* local brain profile is best-effort */
   }
+  if (!isCloudSyncEnabled()) return next;
   try {
     await pushBrandBundle(next);
   } catch {

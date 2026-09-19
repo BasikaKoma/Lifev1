@@ -5,6 +5,10 @@ import {
   buildWeightCardFromReadings,
   getWeightReadingsForDay,
 } from './weightReadings';
+import {
+  buildWaistCardFromReadings,
+  getWaistReadingsForDay,
+} from './waistReadings';
 
 function buildWeightCard(kg, delta = null, readings = []) {
   const card = buildWeightCardFromReadings(readings.length ? readings : [{ value: kg, recordedAt: new Date().toISOString() }], { delta });
@@ -39,6 +43,28 @@ function weightDeltaForDay(dayMetrics, previousDayMetrics, day) {
   return Math.round((weight - prevWeight) * 10) / 10;
 }
 
+function latestWaistValue(dayMetrics, day) {
+  const readings = getWaistReadingsForDay(dayMetrics, day);
+  if (readings.length) return readings[readings.length - 1].value;
+  return dayMetrics.find((metric) => metric.metricType === 'waist')?.value ?? null;
+}
+
+function waistDeltaForDay(dayMetrics, previousDayMetrics, day) {
+  const waist = latestWaistValue(dayMetrics, day);
+  const prevDay = previousDayMetrics?.[0]?.day;
+  const prevWaist = latestWaistValue(previousDayMetrics ?? [], prevDay);
+  if (waist == null || prevWaist == null) return null;
+  return Math.round((waist - prevWaist) * 10) / 10;
+}
+
+function attachWaistCard(patch, dayMetrics, day, delta = null) {
+  const readings = getWaistReadingsForDay(dayMetrics, day);
+  if (!readings.length) return patch;
+  const card = buildWaistCardFromReadings(readings, { delta });
+  if (!card) return patch;
+  return { ...patch, waist: card, preview: false };
+}
+
 function metricsByDay(healthMetrics) {
   const byDay = {};
   for (const m of healthMetrics) {
@@ -54,6 +80,7 @@ export function healthMetricsToLifelinePatch(day, dayMetrics, { delta = null, sy
   const ouraActivity = dayMetrics.find((m) => m.metricType === 'activity' && m.source === 'oura');
   const ouraCalories = dayMetrics.find((m) => m.metricType === 'active_calories' && m.source === 'oura');
   const weight = dayMetrics.find((m) => m.metricType === 'weight');
+  const waist = dayMetrics.find((m) => m.metricType === 'waist');
 
   const avgHr = dayMetrics.find((m) => m.metricType === 'avg_heart_rate' && m.source === 'oura')?.value ?? null;
   const restingHr = dayMetrics.find((m) => m.metricType === 'resting_heart_rate' && m.source === 'oura')?.value ?? null;
@@ -96,7 +123,7 @@ export function healthMetricsToLifelinePatch(day, dayMetrics, { delta = null, sy
     );
   }
 
-  if (!baseMetrics && !weight) return null;
+  if (!baseMetrics && !weight && !waist) return null;
 
   const sources = new Set(dayMetrics.map((m) => m.source));
   const source = sources.size > 1 ? 'merged' : sources.values().next().value ?? 'health';
@@ -119,7 +146,7 @@ export function healthMetricsToLifelinePatch(day, dayMetrics, { delta = null, sy
     patch.preview = false;
   }
 
-  return patch;
+  return attachWaistCard(patch, dayMetrics, day, null);
 }
 
 export function buildLifelineMetricsPatchesFromHealth(healthMetrics, ouraRows = []) {
@@ -140,6 +167,7 @@ export function buildLifelineMetricsPatchesFromHealth(healthMetrics, ouraRows = 
     const dayIndex = sortedDays.indexOf(day);
     const prevDay = dayIndex > 0 ? sortedDays[dayIndex - 1] : null;
     const delta = prevDay ? weightDeltaForDay(dayMetrics, byDay[prevDay], day) : null;
+    const waistDelta = prevDay ? waistDeltaForDay(dayMetrics, byDay[prevDay], day) : null;
 
     let metrics = ouraRow
       ? ouraRowToLifelineMetrics(ouraRow)
@@ -161,6 +189,7 @@ export function buildLifelineMetricsPatchesFromHealth(healthMetrics, ouraRows = 
       };
     }
 
+    metrics = attachWaistCard(metrics, dayMetrics, day, waistDelta);
     patches[day] = { metrics };
   }
 

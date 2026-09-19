@@ -11,6 +11,8 @@ import {
   normalizePantryItem,
   nowIso,
 } from './schema';
+import { isCloudSyncEnabled, mirrorVaultJson, readVaultJsonIfEnabled } from '../vault/mirror';
+import { nutritionPath } from '../vault/paths';
 
 const STORAGE_KEY = 'lifev1-nutrition';
 
@@ -31,6 +33,7 @@ function readLocal() {
 function writeLocal(bundle) {
   const next = withSeededMeals(normalizeBundle(bundle));
   localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  mirrorVaultJson(nutritionPath(), next);
   return next;
 }
 
@@ -435,13 +438,17 @@ export async function pushNutritionBundle(bundle) {
 
 export async function loadNutritionBundle() {
   const local = readLocal();
+  const vault = await readVaultJsonIfEnabled(nutritionPath());
+  const vaultBundle = vault ? normalizeBundle(vault) : null;
   try {
-    const cloud = await pullNutritionBundle();
-    const merged = withSeededMeals(mergeBundles(local, cloud));
+    const cloud = isCloudSyncEnabled() ? await pullNutritionBundle() : null;
+    const merged = withSeededMeals(mergeBundles(mergeBundles(local, vaultBundle), cloud));
     writeLocal(merged);
     return merged;
   } catch {
-    return local;
+    const merged = withSeededMeals(mergeBundles(local, vaultBundle));
+    if (vaultBundle) writeLocal(merged);
+    return merged;
   }
 }
 
@@ -450,6 +457,7 @@ export async function saveNutritionBundle(bundle) {
     ...normalizeBundle(bundle),
     updatedAt: nowIso(),
   });
+  if (!isCloudSyncEnabled()) return next;
   try {
     await pushNutritionBundle(next);
   } catch {

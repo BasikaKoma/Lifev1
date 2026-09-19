@@ -1,3 +1,4 @@
+import { memo, useState } from 'react';
 import {
   formatDayLabel,
   formatMonthLabel,
@@ -6,10 +7,12 @@ import {
   LIFELINE_ZOOM,
   LIFELINE_ZOOM_LEVEL,
 } from '../utils/lifeline';
+import { formatPeriodAriaLabel } from '../utils/periodSummary';
 import { isLifelineTickLabelHidden } from '../utils/stageLayout';
 import { getDayEntry, getRoutineDayScore, normalizeRoutineTemplates } from '../utils/lifelineDays';
 
 const PLAN_LABEL_MIN_SPACING = 7;
+const MIN_BRACE_PX = 28;
 
 function formatTickLabel(tick) {
   if (tick.labelKind === 'year') return formatYearLabel(tick.date);
@@ -17,12 +20,32 @@ function formatTickLabel(tick) {
   return formatDayLabel(tick.date);
 }
 
-export function LifelineDayTicks({
+function PeriodBraceShape() {
+  return (
+    <svg
+      className="lifeline-period-brace__shape"
+      viewBox="0 0 24 100"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M4 3 C16 3 18 6 18 14 L18 42 C18 47 14 50 6 50 C14 50 18 53 18 58 L18 86 C18 94 16 97 4 97"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.4"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+export const LifelineDayTicks = memo(function LifelineDayTicks({
   ticks,
   dayBands = [],
+  periodBrackets = [],
   lineTop,
-  lifelineDays = {},
   onDayClick,
+  onPeriodClick,
   planLabels = null,
   daySpacing = 0,
   zoomLevel = LIFELINE_ZOOM_LEVEL.week,
@@ -31,16 +54,23 @@ export function LifelineDayTicks({
   layout = null,
   hiddenTickRanges = [],
   selectedDate = null,
+  selectedPeriod = null,
+  lifelineDays = {},
   routineTemplates = [],
 }) {
-  if (!ticks?.length && !daySpacing && !dayBands?.length) return null;
+  const [hoveredPeriod, setHoveredPeriod] = useState(null);
+  if (!ticks?.length && !daySpacing && !dayBands?.length && !periodBrackets?.length) return null;
 
   const detailZoom = daySpacing >= LIFELINE_ZOOM.everyDaySpacing;
   const templates = normalizeRoutineTemplates(routineTemplates);
+  const visibleBrackets = (periodBrackets || []).filter(
+    (bracket) => (Number(bracket.dayCount) || 0) * (Number(daySpacing) || 0) >= MIN_BRACE_PX
+  );
 
   const handleGridClick = (e) => {
     if (e.button !== 0) return;
     if (e.target.closest('.lifeline-day-tick')) return;
+    if (e.target.closest('.lifeline-period-brace')) return;
     if (!lifelineConfig || !lineMetrics || !layout) return;
     e.stopPropagation();
     e.preventDefault();
@@ -56,9 +86,7 @@ export function LifelineDayTicks({
       data-detail={detailZoom ? '1' : '0'}
       data-zoom-level={zoomLevel}
       data-day-selected={selectedDate ? '1' : '0'}
-      onPointerDown={(e) => {
-        if (e.target.classList.contains('lifeline-day-grid')) e.stopPropagation();
-      }}
+      data-has-braces={visibleBrackets.length ? '1' : '0'}
     >
       {daySpacing > 0 && (
         <button
@@ -69,24 +97,66 @@ export function LifelineDayTicks({
         />
       )}
 
-      {dayBands.map((band) => {
-        const relTop = band.top - lineTop;
-        return (
+      {dayBands.map((band) => (
           <span
             key={`band-${band.date}`}
             className="lifeline-day-band"
             style={{
-              top: relTop,
-              height: Math.max(2, band.height),
+              '--ll-day-index': String(band.dayIndex ?? 0),
               '--ll-band-intensity': band.intensity,
             }}
             aria-hidden="true"
           />
+      ))}
+
+      {hoveredPeriod ? (
+        <span
+          className="lifeline-period-hover-band"
+          style={{
+            '--ll-brace-start-index': String(hoveredPeriod.startIndex ?? 0),
+            '--ll-brace-days': String(hoveredPeriod.dayCount ?? 7),
+          }}
+          aria-hidden="true"
+        />
+      ) : null}
+
+      {visibleBrackets.map((bracket) => {
+        const selected = selectedPeriod?.kind === bracket.kind
+          && selectedPeriod?.startDate === bracket.startDate;
+        const label = formatPeriodAriaLabel(bracket.kind, bracket.startDate, bracket.endDate);
+        return (
+          <button
+            key={`${bracket.kind}-${bracket.startDate}`}
+            type="button"
+            className={[
+              'lifeline-period-brace',
+              `lifeline-period-brace--${bracket.kind}`,
+              selected ? 'lifeline-period-brace--selected' : '',
+            ].filter(Boolean).join(' ')}
+            style={{
+              '--ll-brace-start-index': String(bracket.startIndex ?? 0),
+              '--ll-brace-days': String(bracket.dayCount ?? 7),
+            }}
+            title={label}
+            aria-label={label}
+            aria-pressed={selected ? 'true' : undefined}
+            onPointerDown={(e) => e.stopPropagation()}
+            onPointerEnter={() => setHoveredPeriod(bracket)}
+            onPointerLeave={() => setHoveredPeriod((current) => (
+              current?.startDate === bracket.startDate ? null : current
+            ))}
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              onPeriodClick?.(bracket, e.currentTarget);
+            }}
+          >
+            <PeriodBraceShape />
+          </button>
         );
       })}
 
       {ticks.map((tick) => {
-        const relTop = tick.top - lineTop;
         const hasContent = tick.hasContent ?? false;
         const planLabel = planLabels?.get?.(tick.date);
         const showPlanLabel = Boolean(planLabel && daySpacing >= PLAN_LABEL_MIN_SPACING);
@@ -116,7 +186,7 @@ export function LifelineDayTicks({
             ]
               .filter(Boolean)
               .join(' ')}
-            style={{ top: relTop }}
+            style={{ '--ll-day-index': String(tick.dayIndex ?? 0) }}
             onPointerDown={(e) => {
               e.stopPropagation();
             }}
@@ -130,6 +200,7 @@ export function LifelineDayTicks({
             aria-current={isSelected ? 'date' : undefined}
           >
             <span className="lifeline-day-tick__line" />
+            <span className="lifeline-day-tick__open">Άνοιγμα</span>
             {showPlanLabel ? (
               <span className="lifeline-day-tick__plan-label">{planLabel}</span>
             ) : (
@@ -150,4 +221,4 @@ export function LifelineDayTicks({
       })}
     </div>
   );
-}
+});
