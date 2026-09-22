@@ -214,6 +214,10 @@
 
 .brand-signal__meta {
   margin: 4px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
   font-size: 0.78rem;
   color: var(--brand-muted);
 }
@@ -234,6 +238,47 @@
 .brand-chip--linkedin { color: #93c5fd; background: rgba(59, 130, 246, 0.16); }
 .brand-chip--x { color: #e2e8f0; background: rgba(255, 255, 255, 0.08); }
 .brand-chip--reel { color: #fda4af; background: rgba(244, 63, 94, 0.16); }
+.brand-chip--thought { color: #fde68a; background: rgba(245, 158, 11, 0.16); }
+.brand-chip--thread { color: #c4b5fd; background: rgba(139, 92, 246, 0.18); }
+
+.brand-brief {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--brand-border);
+}
+
+.brand-brief__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.brand-brief__platform {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 10px;
+}
+
+.brand-brief__platform p {
+  margin: 0;
+  width: 100%;
+  color: var(--brand-muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.brand-verdict {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.brand-verdict--strong { color: var(--brand-accent-bright); }
+.brand-verdict--thin { color: #fbbf24; }
+.brand-verdict--not-yet { color: var(--brand-muted); }
 
 .brand-signal__arrow {
   color: var(--brand-muted);
@@ -525,6 +570,18 @@
 .brand-weekly__item h4 {
   margin: 0 0 4px;
   font-size: 0.95rem;
+}
+
+.brand-thread {
+  width: 100%;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.brand-thread:hover {
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .brand-weekly__item p {

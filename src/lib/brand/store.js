@@ -5,8 +5,10 @@ import {
   createEmptyDna,
   normalizeBrandItem,
   normalizeDna,
+  normalizeSignalBriefs,
   nowIso,
 } from './schema';
+import { mergeNarrativeThreads, normalizeNarrativeThreads } from './threads';
 import { isCloudSyncEnabled, mirrorVaultJson, readVaultJsonIfEnabled } from '../vault/mirror';
 import { brandPath } from '../vault/paths';
 
@@ -40,6 +42,8 @@ export function createEmptyBundle() {
     dna: createEmptyDna(),
     items: [],
     dismissedSignalIds: [],
+    signalBriefs: {},
+    threads: normalizeNarrativeThreads([]),
     activeItemId: null,
     updatedAt: nowIso(),
   };
@@ -57,6 +61,8 @@ export function normalizeBundle(raw) {
       : Array.isArray(source.dismissed_signal_ids)
         ? source.dismissed_signal_ids.map(String)
         : [],
+    signalBriefs: normalizeSignalBriefs(source.signalBriefs || source.signal_briefs),
+    threads: normalizeNarrativeThreads(source.threads),
     activeItemId: source.activeItemId || source.active_item_id || null,
     updatedAt: source.updatedAt || source.updated_at || nowIso(),
   };
@@ -123,6 +129,17 @@ function requireClient() {
   return supabase;
 }
 
+function mergeSignalBriefs(cloud = {}, local = {}) {
+  const out = { ...(cloud || {}) };
+  for (const [id, brief] of Object.entries(local || {})) {
+    const existing = out[id];
+    if (!existing || String(brief.generatedAt || '') >= String(existing.generatedAt || '')) {
+      out[id] = brief;
+    }
+  }
+  return out;
+}
+
 function mergeBundles(local, cloud) {
   if (!cloud) return local;
   if (!local) return cloud;
@@ -140,6 +157,8 @@ function mergeBundles(local, cloud) {
     dna: localNewer ? local.dna : cloud.dna,
     items: [...byId.values()].sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt))),
     dismissedSignalIds: [...new Set([...(cloud.dismissedSignalIds || []), ...(local.dismissedSignalIds || [])])],
+    signalBriefs: mergeSignalBriefs(cloud.signalBriefs, local.signalBriefs),
+    threads: mergeNarrativeThreads(cloud.threads, local.threads),
     activeItemId: localNewer ? local.activeItemId : (cloud.activeItemId || local.activeItemId),
     updatedAt: localNewer ? local.updatedAt : cloud.updatedAt,
   };
@@ -167,6 +186,7 @@ export async function pullBrandBundle() {
     handle: meta?.handle || '',
     dna: meta?.dna || {},
     dismissedSignalIds: meta?.dismissed_signal_ids || [],
+    threads: meta?.dna?.threads || meta?.threads || [],
     activeItemId: meta?.active_item_id || null,
     updatedAt: meta?.updated_at,
     items: (itemsRes.data || []).map(rowToItem),
@@ -181,7 +201,10 @@ export async function pushBrandBundle(bundle) {
   const { error: metaError } = await supabase.from('personal_brand').upsert({
     user_id: user.id,
     handle: next.handle || next.dna.handle || null,
-    dna: next.dna,
+    dna: {
+      ...next.dna,
+      threads: next.threads,
+    },
     dismissed_signal_ids: next.dismissedSignalIds,
     active_item_id: next.activeItemId,
     updated_at: next.updatedAt || nowIso(),

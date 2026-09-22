@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { BRAND_PLATFORMS, PIPELINE_STAGES, kindLabel } from '../../lib/brand/schema';
+import { NARRATIVE_THREADS, threadTitle } from '../../lib/brand/threads';
 import { isOpenAiConfigured } from '../../lib/openai';
 
 export function BrandCreate({
@@ -21,7 +22,7 @@ export function BrandCreate({
       <section className="brand-card">
         <h2 className="brand-draft__title">Διάλεξε μια ιδέα από πραγματικό γεγονός</h2>
         <p className="brand-empty">
-          Το Create ξεκινά από Idea Inbox ή από Content Signal. Δεν γεννά θέματα από το πουθενά.
+          Το Create ξεκινά από ένα signal ή από μια ιδέα στο Pipeline. Δεν γεννά θέματα από το πουθενά.
         </p>
       </section>
     );
@@ -51,6 +52,7 @@ export function BrandCreate({
           <textarea id="brand-body" rows={12} value={item.body} onChange={(event) => onChange({ ...item, body: event.target.value })} />
           {item.why ? <p className="brand-empty">Γιατί αξίζει: {item.why}</p> : null}
           {item.sourceLabel ? <p className="brand-empty">Πηγή: {item.sourceLabel} · {kindLabel(item.kind)}</p> : null}
+          {item.threadId ? <p className="brand-empty">Ιστορία: {threadTitle(item.threadId)}</p> : null}
         </section>
       </div>
 
@@ -72,6 +74,21 @@ export function BrandCreate({
                 onClick={() => togglePlatform(platform.id)}
               >
                 {platform.label}
+              </button>
+            ))}
+          </div>
+        </section>
+        <section className="brand-card">
+          <p className="brand-card__title">Ιστορία</p>
+          <div className="brand-platforms" style={{ marginTop: 10 }}>
+            {NARRATIVE_THREADS.map((thread) => (
+              <button
+                key={thread.id}
+                type="button"
+                aria-pressed={item.threadId === thread.id}
+                onClick={() => onChange({ ...item, threadId: item.threadId === thread.id ? '' : thread.id })}
+              >
+                {thread.title}
               </button>
             ))}
           </div>

@@ -2,11 +2,13 @@ import { addDays, toDateString } from '../../utils/lifeline';
 import { getDayEntry, collectCompletedItemsForDate } from '../../utils/lifelineDays';
 import { getSelfHubDayEntry } from '../../utils/selfHubDays';
 import { localTodayIsoDate } from '../../utils/selfDateUtils';
+import { visibleThoughts } from '../../utils/dayThoughts';
 import {
   isCoreBrandProject,
   isExcludedProject,
   isLessonOnlyProject,
 } from './schema';
+import { attachThreadToFragment } from './threads';
 
 const LOOKBACK_DAYS = 7;
 
@@ -57,7 +59,10 @@ function suggestedFormat(kind) {
   return 'LinkedIn post / X';
 }
 
-function whyFor(kind) {
+function whyFor(kind, sourceKind = '') {
+  if (sourceKind === 'thought') {
+    return 'Σκέψη από τη μέρα σου. Άνοιξέ την για να δεις πώς αναπτύσσεται σε post και πού ταιριάζει.';
+  }
   if (kind === 'failure') return 'Η δυσκολία είναι το σημείο που ο αναγνώστης βλέπει τον εαυτό του — όχι τη νίκη.';
   if (kind === 'decision') return 'Μια αλλαγή κατεύθυνσης δείχνει πώς σκέφτεσαι, όχι τι πουλάς.';
   if (kind === 'lesson') return 'Κάτι που κατάλαβες δουλεύοντας αξίζει περισσότερο από οποιαδήποτε λίστα συμβουλών.';
@@ -94,7 +99,8 @@ export function detectBrandSignals({
 
   const push = (signal) => {
     if (!signal?.id || dismissed.has(signal.id) || usedSources.has(signal.id)) return;
-    if (!signal.what || signal.what.length < 12) return;
+    const minLength = signal.sourceKind === 'thought' ? 8 : 12;
+    if (!signal.what || signal.what.length < minLength) return;
     signals.push(signal);
   };
 
@@ -115,6 +121,28 @@ export function detectBrandSignals({
         sourceLabel: `Lifeline · ${date}`,
         sourceKind: 'lifeline',
         title: compact(notes, 72),
+      });
+    }
+
+    for (const thought of visibleThoughts(day.thoughts)) {
+      const text = compact(thought.text, 280);
+      if (text.length < 8) continue;
+      const kind = classifyText(text, thought.pathBlockTitle || '');
+      const block = thought.pathBlockTitle ? ` ενώ δούλευες στο ${thought.pathBlockTitle}` : '';
+      const capacity = thought.capacityLabel ? ` · ${thought.capacityLabel}` : '';
+      push({
+        id: hashId(['thought', date, thought.id]),
+        date,
+        kind,
+        pillarId: pillarFor(kind, text, thought.pathBlockTitle || ''),
+        what: text,
+        why: whyFor(kind, 'thought'),
+        angle: suggestedFormat(kind),
+        sourceLabel: thought.pathBlockTitle ? `Σκέψη · ${thought.pathBlockTitle}` : `Σκέψη · ${date}`,
+        sourceKind: 'thought',
+        sourceId: thought.id,
+        title: compact(text, 72),
+        context: `Γράφτηκε ${date}${block}${capacity}.`,
       });
     }
 
@@ -223,6 +251,7 @@ export function detectBrandSignals({
     .map((signal, index) => ({
       ...signal,
       score:
+        (signal.sourceKind === 'thought' ? 10 : 0) +
         (signal.kind === 'lesson' ? 8 : 0) +
         (signal.kind === 'failure' || signal.kind === 'decision' ? 7 : 0) +
         (isCoreBrandProject(signal.sourceLabel) ? 6 : 0) +
@@ -238,9 +267,9 @@ export function detectBrandSignals({
     if (seenWhat.has(key)) continue;
     seenWhat.add(key);
     unique.push(signal);
-    if (unique.length >= 8) break;
+    if (unique.length >= 12) break;
   }
-  return unique;
+  return unique.map((signal) => attachThreadToFragment(signal));
 }
 
 export function buildWeeklyDirection(signals = [], items = []) {

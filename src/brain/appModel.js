@@ -4,7 +4,7 @@ export const APP_MODEL = {
     self: 'Body, energy, sleep, readiness, capacity, focus window. Not a project.',
     lifeline: 'One special timeline of the person\'s life (days, routines, how each day went). Unique. Never duplicate it as a normal project.',
     path: 'Path is the 90-day commitment layer: goals → weekly plan → time blocks → execution → measurements. Not a task manager. Goals are decided when the user is clear, then followed without daily re-evaluation.',
-    brand: 'Personal Brand turns lived events into content: signal → idea → draft → platform variation → approval → publish. Brand DNA (who, voice, donts, pillars) lives in the app, not in the model.',
+    brand: 'Personal Brand turns lived events into content: signal → idea → draft → platform variation → approval → publish. Fresh signals look back 7 days. Narrative threads are long-term stories (Symphon, first customers, vibecoding doubt, Market Portal → systems, exposure/first video, entrepreneurship and life). Brand DNA and threads live in the app, not in the model.',
     nutrition: 'Nutrition turns the user\'s own dietary instructions into a 7/14-day meal plan and supermarket list. Calorie and protein numbers are user targets or editable suggestions, never medical advice. Not a project.',
     projects: 'Separate workstreams with their own canvas. Each project has stages, checkpoints, goals, notes, ideas, obstacles, canvas tasks, and a brief.',
     brain: 'Advisor over the whole app. MEMORY.whoYouAre is voice/preferences. SNAPSHOT.brand is the content system and DNA.',

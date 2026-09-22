@@ -239,10 +239,18 @@ export function buildSnapshot({
         kind: item.kind,
         title: compactText(item.title, 80),
         sourceLabel: compactText(item.sourceLabel, 60),
+        threadId: item.threadId || null,
         sourceId: sourceId('brand', item.id),
       })),
+      threads: (brand.threads || []).map((thread) => ({
+        id: thread.id,
+        title: thread.title,
+        story: compactText(thread.story, 140),
+        lastSeenAt: thread.lastSeenAt || null,
+        beats: (thread.beats || []).slice(0, 4).map((beat) => compactText(`${beat.date || ''} ${beat.summary}`, 100)),
+      })),
       sourceId: sourceId('brand', 'dna'),
-      rule: 'Content must start from lived experience in items/signals. Never invent generic LinkedIn advice. Nobelle is out. Market Portal only as a lesson.',
+      rule: 'Content must start from lived experience in items/signals. Continue narrative threads rather than inventing new topics. Never invent generic LinkedIn advice. Nobelle is out. Market Portal only as a lesson.',
     };
     sources.push(snapshot.brand.sourceId);
   }

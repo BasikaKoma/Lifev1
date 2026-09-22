@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { usePersonalBrand } from '../../hooks/usePersonalBrand';
 import { BRAND_TABS } from '../../lib/brand/schema';
+import { isOpenAiConfigured } from '../../lib/openai';
 import { metaStatusLabel } from '../../lib/meta';
 import { getVoiceRecorderMimeType, transcribeAudio } from '../../utils/voiceTranscribe';
-import { BrandHub, SignalDetail } from './BrandHub';
-import { BrandIdeas, BrandLibrary, BrandPipeline } from './BrandPages';
+import { BrandHub, SignalDetail, ThreadDetail } from './BrandHub';
+import { BrandPipeline } from './BrandPages';
 import { BrandCreate, BrandDna } from './BrandCreate';
 import './brand.css';
 
@@ -31,18 +32,31 @@ export function PersonalBrandView({
   const [transcribing, setTranscribing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [openSignal, setOpenSignal] = useState(null);
+  const [openThread, setOpenThread] = useState(null);
   const [weeklyAi, setWeeklyAi] = useState(null);
   const recorderRef = useRef(null);
   const chunksRef = useRef([]);
+  const developedRef = useRef(new Set());
 
   useEffect(() => () => {
     recorderRef.current?.stream?.getTracks?.().forEach((track) => track.stop());
   }, []);
 
+  useEffect(() => {
+    if (!openSignal?.id) return;
+    if (openSignal.sourceKind !== 'thought') return;
+    if (brand.briefs?.[openSignal.id]) return;
+    if (!isOpenAiConfigured() || brand.busy === 'develop') return;
+    if (developedRef.current.has(openSignal.id)) return;
+    developedRef.current.add(openSignal.id);
+    brand.runDevelopSignal(openSignal);
+  }, [openSignal, brand.briefs, brand.busy, brand.runDevelopSignal]);
+
   const openCreate = (item) => {
     if (item?.id) brand.setActiveItem(item.id);
     setTab('create');
     setOpenSignal(null);
+    setOpenThread(null);
   };
 
   const handleCapture = () => {
@@ -117,6 +131,7 @@ export function PersonalBrandView({
   const handleNewIdea = () => {
     setTab('hub');
     setOpenSignal(null);
+    setOpenThread(null);
     requestAnimationFrame(() => document.getElementById('brand-capture')?.focus());
   };
 
@@ -164,7 +179,6 @@ export function PersonalBrandView({
             {menuOpen && (
               <div className="brand-menu__pop">
                 <button type="button" onClick={() => { setTab('dna'); setMenuOpen(false); }}>Brand DNA</button>
-                <button type="button" onClick={() => { setTab('library'); setMenuOpen(false); }}>Library</button>
                 <button
                   type="button"
                   onClick={async () => {
@@ -190,7 +204,7 @@ export function PersonalBrandView({
             key={item.id}
             type="button"
             aria-current={tab === item.id ? 'page' : undefined}
-            onClick={() => { setTab(item.id); setOpenSignal(null); }}
+            onClick={() => { setTab(item.id); setOpenSignal(null); setOpenThread(null); }}
           >
             {item.label}
           </button>
@@ -199,14 +213,36 @@ export function PersonalBrandView({
 
       {brand.error ? <p className="brand-error">{brand.error}</p> : null}
 
-      {tab === 'hub' && !openSignal && (
+      {openSignal && (
+        <SignalDetail
+          signal={openSignal}
+          brief={brand.briefs?.[openSignal.id]}
+          thread={(brand.threads || []).find((row) => row.id === (openSignal.threadId || brand.briefs?.[openSignal.id]?.threadId))}
+          busy={brand.busy}
+          onClose={() => setOpenSignal(null)}
+          onCreate={handleFromSignal}
+          onDevelop={brand.runDevelopSignal}
+          onAssignThread={brand.assignThread}
+        />
+      )}
+
+      {openThread && !openSignal && (
+        <ThreadDetail
+          thread={openThread}
+          items={brand.items}
+          onClose={() => setOpenThread(null)}
+          onOpenItem={openCreate}
+        />
+      )}
+
+      {tab === 'hub' && !openSignal && !openThread && (
         <BrandHub
           signals={brand.signals}
+          briefs={brand.briefs}
+          threads={brand.threads}
           activeDraft={brand.activeDraft}
           pipeline={brand.pipeline}
           stats={brand.stats}
-          weekly={brand.weekly}
-          weeklyAi={weeklyAi}
           captureText={captureText}
           captureKind={captureKind}
           recording={recording}
@@ -220,26 +256,9 @@ export function PersonalBrandView({
           onAskBrain={handleAskFromHub}
           onVariations={handleVariationsFromHub}
           onViewPipeline={() => setTab('pipeline')}
-          onViewSignals={() => setTab('ideas')}
+          onOpenThread={setOpenThread}
           metaStatus={metaStatus}
           onManageMeta={onOpenMetaModal}
-        />
-      )}
-
-      {tab === 'hub' && openSignal && (
-        <SignalDetail
-          signal={openSignal}
-          onClose={() => setOpenSignal(null)}
-          onCreate={handleFromSignal}
-        />
-      )}
-
-      {tab === 'ideas' && (
-        <BrandIdeas
-          items={brand.items}
-          signals={brand.signals}
-          onOpen={(item) => openCreate(item)}
-          onFromSignal={handleFromSignal}
         />
       )}
 
@@ -252,20 +271,16 @@ export function PersonalBrandView({
           onGenerate={brand.runGenerateDraft}
           onVariations={brand.runVariations}
           onAsk={brand.runAskBrain}
-          onDelete={(id) => { brand.deleteItem(id); setTab('ideas'); }}
+          onDelete={(id) => { brand.deleteItem(id); setTab('pipeline'); }}
         />
       )}
 
-      {tab === 'pipeline' && (
+      {tab === 'pipeline' && !openSignal && !openThread && (
         <BrandPipeline
           pipeline={brand.pipeline}
           onOpen={openCreate}
           onMove={brand.moveItem}
         />
-      )}
-
-      {tab === 'library' && (
-        <BrandLibrary items={brand.items} onOpen={openCreate} />
       )}
 
       {tab === 'dna' && (

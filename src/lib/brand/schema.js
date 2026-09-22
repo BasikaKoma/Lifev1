@@ -1,9 +1,7 @@
 export const BRAND_TABS = [
   { id: 'hub', label: 'Hub' },
-  { id: 'ideas', label: 'Ideas' },
   { id: 'create', label: 'Create' },
   { id: 'pipeline', label: 'Pipeline' },
-  { id: 'library', label: 'Library' },
   { id: 'dna', label: 'Brand DNA' },
 ];
 
@@ -70,9 +68,8 @@ export function createBrandId(prefix = 'brand') {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-export function nowIso() {
-  return new Date().toISOString();
-}
+import { nowIso } from './schema';
+import { isNarrativeThreadId } from './threads';
 
 export function createEmptyDna() {
   return {
@@ -154,6 +151,7 @@ export function normalizeBrandItem(raw = {}) {
     pillarId: BRAND_PILLARS.some((pillar) => pillar.id === raw.pillarId || pillar.id === raw.pillar_id)
       ? (raw.pillarId || raw.pillar_id)
       : null,
+    threadId: String(raw.threadId || raw.thread_id || ''),
     progress: Number.isFinite(Number(raw.progress)) ? Number(raw.progress) : 0,
     variations: raw.variations && typeof raw.variations === 'object' ? raw.variations : {},
     publishedAt: raw.publishedAt || raw.published_at || null,
@@ -216,4 +214,47 @@ export function kindLabel(id) {
 
 export function platformLabel(id) {
   return BRAND_PLATFORMS.find((platform) => platform.id === id)?.label || id;
+}
+
+export const SIGNAL_VERDICTS = [
+  { id: 'strong', label: 'Αξίζει' },
+  { id: 'thin', label: 'Θέλει ανάπτυξη' },
+  { id: 'not-yet', label: 'Όχι ακόμα post' },
+];
+
+export function verdictLabel(id) {
+  return SIGNAL_VERDICTS.find((row) => row.id === id)?.label || id;
+}
+
+export function normalizeSignalBrief(raw = {}) {
+  const platform = BRAND_PLATFORMS.some((row) => row.id === raw.platform)
+    ? raw.platform
+    : 'linkedin';
+  const also = Array.isArray(raw.also)
+    ? raw.also.filter((id) => BRAND_PLATFORMS.some((row) => row.id === id) && id !== platform).slice(0, 3)
+    : [];
+  const verdict = SIGNAL_VERDICTS.some((row) => row.id === raw.verdict) ? raw.verdict : 'thin';
+  return {
+    verdict,
+    core: String(raw.core || '').trim(),
+    develop: String(raw.develop || '').trim(),
+    betterPost: String(raw.betterPost || raw.better_post || '').trim(),
+    platform,
+    platformWhy: String(raw.platformWhy || raw.platform_why || '').trim(),
+    also,
+    hook: String(raw.hook || '').trim(),
+    missing: String(raw.missing || '').trim(),
+    threadId: String(raw.threadId || raw.thread_id || ''),
+    generatedAt: raw.generatedAt || raw.generated_at || nowIso(),
+  };
+}
+
+export function normalizeSignalBriefs(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out = {};
+  for (const [id, brief] of Object.entries(raw)) {
+    if (!id || !brief || typeof brief !== 'object') continue;
+    out[String(id)] = normalizeSignalBrief(brief);
+  }
+  return out;
 }

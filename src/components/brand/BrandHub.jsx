@@ -1,4 +1,5 @@
-import { CAPTURE_KINDS, kindLabel, PIPELINE_STAGES } from '../../lib/brand/schema';
+import { CAPTURE_KINDS, kindLabel, PIPELINE_STAGES, platformLabel, verdictLabel } from '../../lib/brand/schema';
+import { NARRATIVE_THREADS } from '../../lib/brand/threads';
 import { isOpenAiConfigured } from '../../lib/openai';
 import { metaStatusHint, metaStatusLabel } from '../../lib/meta';
 
@@ -41,12 +42,12 @@ export function BrandHub({
   activeDraft,
   pipeline,
   stats,
-  weekly,
   captureText,
   captureKind,
   recording,
   transcribing,
-  weeklyAi,
+  briefs = {},
+  threads = [],
   metaStatus,
   onCaptureText,
   onCaptureKind,
@@ -57,7 +58,7 @@ export function BrandHub({
   onAskBrain,
   onVariations,
   onViewPipeline,
-  onViewSignals,
+  onOpenThread,
   onManageMeta,
 }) {
   const openAi = isOpenAiConfigured();
@@ -74,21 +75,30 @@ export function BrandHub({
               Δεν εντοπίστηκαν ακόμα γεγονότα από τις τελευταίες ημέρες. Γράψε κάτι στο Quick Capture — όχι generic ιδέες.
             </p>
           )}
-          {signals.slice(0, 4).map((signal) => (
-            <button key={signal.id} type="button" className="brand-signal" onClick={() => onOpenSignal(signal)}>
-              <span>
-                <p className="brand-signal__title">{signal.title}</p>
-                <p className="brand-signal__meta">
-                  <span className={chipClass(signal.angle)}>{signal.angle.split('/')[0].trim()}</span>
-                  {' · '}
-                  {signal.sourceLabel}
-                </p>
-              </span>
-              <span className="brand-signal__arrow" aria-hidden>→</span>
-            </button>
-          ))}
-          {signals.length > 0 && (
-            <button type="button" className="brand-link" onClick={onViewSignals}>View all signals</button>
+          {signals.slice(0, 6).map((signal) => {
+            const brief = briefs[signal.id];
+            const chip = brief?.platform || signal.angle;
+            return (
+              <button key={signal.id} type="button" className="brand-signal" onClick={() => onOpenSignal(signal)}>
+                <span>
+                  <p className="brand-signal__title">{signal.title}</p>
+                  <p className="brand-signal__meta">
+                    {signal.threadTitle ? (
+                      <span className="brand-chip brand-chip--thread">{signal.threadTitle}</span>
+                    ) : null}
+                    <span className={chipClass(chip)}>
+                      {brief ? platformLabel(brief.platform) : signal.angle.split('/')[0].trim()}
+                    </span>
+                    {' · '}
+                    {signal.sourceLabel}
+                  </p>
+                </span>
+                <span className="brand-signal__arrow" aria-hidden>→</span>
+              </button>
+            );
+          })}
+          {signals.length > 6 && (
+            <button type="button" className="brand-link" onClick={onViewPipeline}>Όλα στο Pipeline</button>
           )}
         </section>
 
@@ -232,40 +242,193 @@ export function BrandHub({
 
       <section className="brand-card">
         <div className="brand-card__head">
-          <h2 className="brand-card__title">Weekly Direction</h2>
+          <h2 className="brand-card__title">Ιστορίες</h2>
         </div>
-        <p className="brand-empty">{weeklyAi?.headline || weekly.headline}</p>
-        <div className="brand-weekly">
-          {(weeklyAi?.directions || weekly.directions).map((item) => (
-            <article key={item.id || item.title} className="brand-weekly__item">
-              <h4>{item.title}</h4>
-              <p>{item.why} {item.sourceLabel ? `· ${item.sourceLabel}` : ''}</p>
-            </article>
-          ))}
+        <p className="brand-empty">
+          Τα 7 ημέρες είναι για φρέσκα signals. Εδώ φαίνεται η εξέλιξη των ίδιων ιστοριών στον χρόνο.
+        </p>
+        <div className="brand-weekly" style={{ marginTop: 12 }}>
+          {threads.map((thread) => {
+            const latest = thread.beats?.[0];
+            return (
+              <button
+                key={thread.id}
+                type="button"
+                className="brand-weekly__item brand-thread"
+                onClick={() => onOpenThread?.(thread)}
+              >
+                <h4>{thread.title}</h4>
+                <p>
+                  {thread.beats?.length
+                    ? `${thread.beats.length} ${thread.beats.length === 1 ? 'σημείο' : 'σημεία'}`
+                    : 'Δεν έχει συνδεθεί ακόμα σήμα'}
+                  {latest ? ` · ${latest.date || ''} ${latest.summary}` : ''}
+                </p>
+              </button>
+            );
+          })}
         </div>
       </section>
     </div>
   );
 }
 
-export function SignalDetail({ signal, onCreate, onClose }) {
+export function SignalDetail({
+  signal,
+  brief,
+  thread,
+  busy,
+  onCreate,
+  onDevelop,
+  onAssignThread,
+  onClose,
+}) {
   if (!signal) return null;
+  const openAi = isOpenAiConfigured();
+  const developing = busy === 'develop';
+
   return (
     <section className="brand-card">
       <div className="brand-card__head">
         <h2 className="brand-card__title">Signal</h2>
-        <button type="button" className="brand-link" onClick={onClose}>Close</button>
+        <button type="button" className="brand-link" onClick={onClose}>Πίσω</button>
       </div>
       <h3 className="brand-draft__title">{signal.title}</h3>
-      <p className="brand-draft__body"><strong>Τι συνέβη. </strong>{signal.what}</p>
-      <p className="brand-draft__body"><strong>Γιατί αξίζει. </strong>{signal.why}</p>
-      <p className="brand-draft__body"><strong>Οπτική. </strong>{signal.angle}</p>
+      <p className="brand-draft__body"><strong>Τι γράφτηκε. </strong>{signal.what}</p>
+      {signal.context ? <p className="brand-signal__meta">{signal.context}</p> : null}
       <p className="brand-signal__meta">Από: {signal.sourceLabel} · {kindLabel(signal.kind)}</p>
+      <div className="brand-brief" style={{ marginTop: 12 }}>
+        <p className="brand-card__title">Ιστορία</p>
+        {thread ? (
+          <>
+            <h3 className="brand-draft__title" style={{ fontSize: '1.05rem', marginTop: 8 }}>{thread.title}</h3>
+            <p className="brand-draft__body">{thread.story}</p>
+            {thread.beats?.length ? (
+              <div className="brand-weekly">
+                {thread.beats.slice(0, 5).map((beat) => (
+                  <article key={beat.id} className="brand-weekly__item">
+                    <h4>{beat.date || '—'}</h4>
+                    <p>{beat.summary}</p>
+                  </article>
+                ))}
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <p className="brand-empty" style={{ marginTop: 8 }}>Διάλεξε σε ποια ιστορία ανήκει αυτή η σκέψη.</p>
+        )}
+        <div className="brand-platforms" style={{ marginTop: 10 }}>
+          {NARRATIVE_THREADS.map((row) => (
+            <button
+              key={row.id}
+              type="button"
+              aria-pressed={thread?.id === row.id}
+              onClick={() => onAssignThread?.(signal, row.id)}
+            >
+              {row.title}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="brand-brief">
+        <div className="brand-card__head">
+          <h3 className="brand-card__title">Κρίση για post</h3>
+          {brief ? (
+            <span className={`brand-verdict brand-verdict--${brief.verdict}`}>{verdictLabel(brief.verdict)}</span>
+          ) : null}
+        </div>
+        {!openAi ? (
+          <p className="brand-empty">Βάλε OpenAI key στις ρυθμίσεις για να κριθεί πώς γίνεται καλύτερο post και πού.</p>
+        ) : developing && !brief ? (
+          <p className="brand-empty">Κρίνει τη σκέψη και ψάχνει πού ταιριάζει…</p>
+        ) : brief ? (
+          <div className="brand-brief__body">
+            {brief.core ? (
+              <p className="brand-draft__body"><strong>Το ενδιαφέρον. </strong>{brief.core}</p>
+            ) : null}
+            {brief.develop ? (
+              <p className="brand-draft__body"><strong>Πώς να το αναπτύξεις. </strong>{brief.develop}</p>
+            ) : null}
+            {brief.missing ? (
+              <p className="brand-draft__body"><strong>Τι λείπει. </strong>{brief.missing}</p>
+            ) : null}
+            {brief.betterPost ? (
+              <p className="brand-draft__body"><strong>Καλύτερο post. </strong>{brief.betterPost}</p>
+            ) : null}
+            <div className="brand-brief__platform">
+              <span className={chipClass(brief.platform)}>{platformLabel(brief.platform)}</span>
+              {brief.also.map((id) => (
+                <span key={id} className={chipClass(id)}>{platformLabel(id)}</span>
+              ))}
+              {brief.platformWhy ? <p>{brief.platformWhy}</p> : null}
+            </div>
+            {brief.hook ? (
+              <p className="brand-draft__body"><strong>Hook. </strong>{brief.hook}</p>
+            ) : null}
+          </div>
+        ) : (
+          <p className="brand-empty">
+            Πάτα «Κρίνε» για να δεις πώς αναπτύσσεται και σε ποια πλατφόρμα αξίζει.
+          </p>
+        )}
+      </div>
+
       <div className="brand-draft__actions" style={{ marginTop: 12 }}>
         <button type="button" className="brand-btn brand-btn--green" onClick={() => onCreate(signal)}>
           Create post
         </button>
+        {openAi ? (
+          <button
+            type="button"
+            className="brand-btn brand-btn--ghost"
+            disabled={developing}
+            onClick={() => onDevelop?.(signal, { force: Boolean(brief) })}
+          >
+            {developing ? 'Κρίνει…' : brief ? 'Κρίνε ξανά' : 'Κρίνε'}
+          </button>
+        ) : null}
       </div>
+    </section>
+  );
+}
+
+export function ThreadDetail({ thread, items = [], onOpenItem, onClose }) {
+  if (!thread) return null;
+  const related = (items || []).filter((item) => item.threadId === thread.id);
+  return (
+    <section className="brand-card">
+      <div className="brand-card__head">
+        <h2 className="brand-card__title">Ιστορία</h2>
+        <button type="button" className="brand-link" onClick={onClose}>Πίσω</button>
+      </div>
+      <h3 className="brand-draft__title">{thread.title}</h3>
+      <p className="brand-draft__body">{thread.story}</p>
+      <div className="brand-weekly">
+        {(thread.beats || []).map((beat) => (
+          <article key={beat.id} className="brand-weekly__item">
+            <h4>{beat.date || '—'}</h4>
+            <p>{beat.summary}</p>
+          </article>
+        ))}
+      </div>
+      {!thread.beats?.length ? (
+        <p className="brand-empty">Όταν ένα signal ή μια σκέψη ταιριάζει εδώ, θα μείνει ως κεφάλαιο.</p>
+      ) : null}
+      {related.length > 0 && (
+        <div className="brand-draft__actions" style={{ marginTop: 12 }}>
+          {related.slice(0, 6).map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className="brand-btn brand-btn--ghost"
+              onClick={() => onOpenItem?.(item)}
+            >
+              {item.title || item.body.slice(0, 40)}
+            </button>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
