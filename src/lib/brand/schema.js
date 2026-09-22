@@ -68,8 +68,9 @@ export function createBrandId(prefix = 'brand') {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-import { nowIso } from './schema';
-import { isNarrativeThreadId } from './threads';
+export function nowIso() {
+  return new Date().toISOString();
+}
 
 export function createEmptyDna() {
   return {
