@@ -1,4 +1,4 @@
-const { app, dialog, ipcMain, safeStorage, BrowserWindow } = require('electron');
+const { app, dialog, ipcMain, safeStorage, BrowserWindow, shell } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -151,6 +151,69 @@ function readImage(rootId, relativePath) {
     mime,
     dataUrl: `data:${mime};base64,${base64}`,
   };
+}
+
+function resolveWritableFile(rootId, relativePath) {
+  const rel = String(relativePath || '').replace(/\\/g, '/').replace(/^\/+/, '');
+  if (!rel || path.isAbsolute(rel) || rel.split('/').some((part) => part === '..' || part === '.')) {
+    throw new Error('Invalid path');
+  }
+  const parentRel = path.posix.dirname(rel);
+  const base = path.posix.basename(rel);
+  const ext = path.extname(base).toLowerCase();
+  if (!ALLOWED_TEXT.has(ext)) throw new Error('File type not allowed');
+  const parent = parentRel === '.' ? '' : parentRel;
+  const { targetReal } = resolveSafePath(rootId, parent);
+  return path.join(targetReal, base);
+}
+
+function openLocalFile(rootId, relativePath) {
+  const { targetReal } = resolveSafePath(rootId, relativePath);
+  return shell.openPath(targetReal).then((result) => {
+    if (result) throw new Error(result);
+    return { opened: true, relativePath };
+  });
+}
+
+function openExternalUrl(url) {
+  let parsed;
+  try {
+    parsed = new URL(String(url || ''));
+  } catch {
+    throw new Error('Invalid URL');
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('Only http(s) links can be opened');
+  }
+  return shell.openExternal(parsed.toString()).then(() => ({ opened: true, url: parsed.toString() }));
+}
+
+function writeTextFile(rootId, relativePath, text) {
+  const target = resolveWritableFile(rootId, relativePath);
+  const body = String(text || '');
+  if (body.length > TEXT_MAX) throw new Error('Text too large');
+  fs.writeFileSync(target, body, 'utf8');
+  return { wrote: true, relativePath };
+}
+
+function fillTextFile(rootId, relativePath, pairs) {
+  const { targetReal } = resolveSafePath(rootId, relativePath);
+  const ext = path.extname(targetReal).toLowerCase();
+  if (!ALLOWED_TEXT.has(ext)) throw new Error('File type not allowed');
+  const stat = fs.statSync(targetReal);
+  if (!stat.isFile()) throw new Error('Not a file');
+  if (stat.size > TEXT_MAX) throw new Error('File too large');
+  let text = fs.readFileSync(targetReal, 'utf8');
+  const list = Array.isArray(pairs) ? pairs.slice(0, 20) : [];
+  for (const pair of list) {
+    const from = String(pair?.from || '');
+    if (!from || from.length > 2000) continue;
+    const to = String(pair?.to || '').slice(0, 2000);
+    text = text.split(from).join(to);
+  }
+  if (text.length > TEXT_MAX) throw new Error('Text too large');
+  fs.writeFileSync(targetReal, text, 'utf8');
+  return { filled: true, relativePath };
 }
 
 function buildResponsesInput(input, attachments) {
@@ -341,6 +404,10 @@ function setupBrainIpc() {
   ipcMain.removeHandler('brain:list-dir');
   ipcMain.removeHandler('brain:read-text');
   ipcMain.removeHandler('brain:read-image');
+  ipcMain.removeHandler('brain:open-file');
+  ipcMain.removeHandler('brain:open-url');
+  ipcMain.removeHandler('brain:write-text');
+  ipcMain.removeHandler('brain:fill-text');
   ipcMain.removeHandler('brain:has-cloud-key');
   ipcMain.removeHandler('brain:set-cloud-key');
   ipcMain.removeHandler('brain:clear-cloud-key');
@@ -357,6 +424,10 @@ function setupBrainIpc() {
   ipcMain.handle('brain:list-dir', wrap(async (_event, rootId, relativePath) => listDir(rootId, relativePath)));
   ipcMain.handle('brain:read-text', wrap(async (_event, rootId, relativePath) => readText(rootId, relativePath)));
   ipcMain.handle('brain:read-image', wrap(async (_event, rootId, relativePath) => readImage(rootId, relativePath)));
+  ipcMain.handle('brain:open-file', wrap(async (_event, rootId, relativePath) => openLocalFile(rootId, relativePath)));
+  ipcMain.handle('brain:open-url', wrap(async (_event, url) => openExternalUrl(url)));
+  ipcMain.handle('brain:write-text', wrap(async (_event, rootId, relativePath, text) => writeTextFile(rootId, relativePath, text)));
+  ipcMain.handle('brain:fill-text', wrap(async (_event, rootId, relativePath, pairs) => fillTextFile(rootId, relativePath, pairs)));
   ipcMain.handle('brain:has-cloud-key', wrap(async () => ({ configured: Boolean(getCloudKey()) })));
   ipcMain.handle('brain:set-cloud-key', wrap(async (_event, key) => setCloudKey(key)));
   ipcMain.handle('brain:clear-cloud-key', wrap(async () => clearCloudKey()));

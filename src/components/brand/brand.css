@@ -626,6 +626,50 @@
   font-size: 0.85rem;
 }
 
+.brand-publish__file {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--brand-muted);
+}
+
+.brand-publish__file input {
+  font: inherit;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.brand-publish__preview {
+  width: 100%;
+  max-height: 180px;
+  object-fit: cover;
+  border-radius: 12px;
+  margin-top: 10px;
+  border: 1px solid var(--brand-border);
+}
+
+.brand-publish__results {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: var(--brand-muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.brand-publish__results a {
+  color: var(--brand-accent-bright);
+}
+
+.brand-card code {
+  font-size: 0.78em;
+}
+
 .brand-create {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.7fr);

@@ -870,6 +870,7 @@ function MainApp({ user, onSignOut }) {
             projectList={projectList}
             metaStatus={metaStatus}
             onOpenMetaModal={() => setMetaModalOpen(true)}
+            onConnectMeta={handleMetaConnect}
           />
         );
       case 'nutrition':

@@ -105,6 +105,18 @@ contextBridge.exposeInMainWorld('electronBrain', {
   readImage(rootId, relativePath) {
     return ipcRenderer.invoke('brain:read-image', rootId, relativePath);
   },
+  openFile(rootId, relativePath) {
+    return ipcRenderer.invoke('brain:open-file', rootId, relativePath);
+  },
+  openUrl(url) {
+    return ipcRenderer.invoke('brain:open-url', url);
+  },
+  writeText(rootId, relativePath, text) {
+    return ipcRenderer.invoke('brain:write-text', rootId, relativePath, text);
+  },
+  fillText(rootId, relativePath, pairs) {
+    return ipcRenderer.invoke('brain:fill-text', rootId, relativePath, pairs);
+  },
   hasCloudKey() {
     return ipcRenderer.invoke('brain:has-cloud-key');
   },

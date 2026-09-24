@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { BRAND_PLATFORMS, PIPELINE_STAGES, kindLabel } from '../../lib/brand/schema';
 import { NARRATIVE_THREADS, threadTitle } from '../../lib/brand/threads';
 import { isOpenAiConfigured } from '../../lib/openai';
+import { BrandPublish } from './BrandPublish';
 
 export function BrandCreate({
   item,
@@ -12,6 +13,9 @@ export function BrandCreate({
   onVariations,
   onAsk,
   onDelete,
+  metaStatus,
+  onOpenMeta,
+  onConnectMeta,
 }) {
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState('');
@@ -108,6 +112,13 @@ export function BrandCreate({
             ))}
           </div>
         </section>
+        <BrandPublish
+          item={item}
+          metaStatus={metaStatus}
+          onOpenMeta={onOpenMeta}
+          onConnectMeta={onConnectMeta}
+          onPublished={onChange}
+        />
         <section className="brand-card">
           <p className="brand-card__title">From this experience</p>
           <div className="brand-draft__actions" style={{ marginTop: 10 }}>
@@ -143,10 +154,10 @@ export function BrandCreate({
         {item.variations && Object.keys(item.variations).length > 0 && (
           <section className="brand-card">
             <p className="brand-card__title">Variations</p>
-            {Object.entries(item.variations).map(([key, value]) => (
+            {Object.entries(item.variations).filter(([key]) => key !== '_published').map(([key, value]) => (
               <div key={key} className="brand-weekly__item">
                 <h4>{key}</h4>
-                <p>{Array.isArray(value) ? value.join(' · ') : String(value)}</p>
+                <p>{Array.isArray(value) ? value.join(' · ') : (typeof value === 'string' ? String(value) : JSON.stringify(value))}</p>
               </div>
             ))}
           </section>

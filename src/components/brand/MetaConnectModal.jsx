@@ -173,6 +173,16 @@ export function MetaConnectModal({
           </button>
           {connected ? (
             <>
+              {status?.needs_publish_reconnect ? (
+                <button
+                  type="button"
+                  className="oura-modal__btn oura-modal__btn--primary"
+                  disabled={busy}
+                  onClick={onConnect}
+                >
+                  {busy ? 'Άνοιγμα Meta…' : 'Ενεργοποίηση δημοσίευσης'}
+                </button>
+              ) : null}
               {destinations.length > 0 && (
                 <button
                   type="button"

@@ -14,6 +14,7 @@ import {
   SelfSummaryStrip,
   SelfProjectDayCard,
   SelfThoughtsCard,
+  SelfOpenItems,
   SelfRoutinesCard,
   SelfPathWeekCard,
   SelfHubMenu,
@@ -253,6 +254,11 @@ export function SelfView({
             dayProgress={dayProgress}
             events={timeline.events}
             onOpenDayDetails={handleOpenDayDetails}
+          />
+
+          <SelfOpenItems
+            lifelineDays={lifelineDays}
+            onUpdateLifelineDay={onUpdateLifelineDay}
           />
 
           <SelfSummaryStrip

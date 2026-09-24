@@ -65,6 +65,11 @@ export const ZoomCanvas = forwardRef(function ZoomCanvas({
   scrollToCanvasPoint = null,
   /** Return true to skip default wheel handling (pan / ctrl zoom). */
   interceptWheel = null,
+  /**
+   * Return true when a pinch should grow day spacing instead of CSS scale.
+   * Used once the lifeline is already at maxScale.
+   */
+  interceptPinch = null,
   /** `xy` free pan, `y` vertical only, `none` zoom-only. */
   panAxis = 'xy',
   /** Canvas X to keep at the viewport's horizontal center. */
@@ -88,6 +93,8 @@ export const ZoomCanvas = forwardRef(function ZoomCanvas({
   onTransformChangeRef.current = onTransformChange;
   const interceptWheelRef = useRef(interceptWheel);
   interceptWheelRef.current = interceptWheel;
+  const interceptPinchRef = useRef(interceptPinch);
+  interceptPinchRef.current = interceptPinch;
   // Keep in sync during render so layout scroll math never reads a stale pan.
   // Skip while a DOM-driven animation or live gesture owns the transform.
   if (!animatingRef.current && !gesturePaintRef.current) {
@@ -488,10 +495,41 @@ export const ZoomCanvas = forwardRef(function ZoomCanvas({
 
       const distance = getTouchDistance(event.touches);
       const ratio = distance / pinchState.startDistance;
-      const targetScale = clampScale(pinchState.startScale * ratio, minScale, maxScale);
+      const rawScale = pinchState.startScale * ratio;
       const { x: midX, y: midY } = getTouchMidpoint(event.touches);
       const { x: pointX, y: pointY } = viewportClientPoint(midX, midY, viewport);
+      const scale = transformRef.current.scale;
+      const atCap = scale >= maxScale - 0.005;
 
+      if (atCap && rawScale > maxScale) {
+        if (rawScale >= pinchState.startScale * 1.07) {
+          pinchState.startDistance = distance;
+          pinchState.startScale = scale;
+          interceptPinchRef.current?.({
+            zoomIn: true,
+            clientX: midX,
+            clientY: midY,
+            scale,
+          });
+        }
+        return;
+      }
+
+      if (atCap && rawScale <= pinchState.startScale * 0.93) {
+        const handled = interceptPinchRef.current?.({
+          zoomIn: false,
+          clientX: midX,
+          clientY: midY,
+          scale,
+        });
+        if (handled) {
+          pinchState.startDistance = distance;
+          pinchState.startScale = scale;
+          return;
+        }
+      }
+
+      const targetScale = clampScale(rawScale, minScale, maxScale);
       applyScaleAtViewportPoint(targetScale, pointX, pointY, 'idle');
     };
 

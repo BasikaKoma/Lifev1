@@ -1,6 +1,7 @@
 export const APP_VIEWS = ['projects', 'workspace', 'self', 'path', 'brand', 'nutrition', 'settings', 'devices'];
 
 const VIEW_ALIASES = {
+  open: 'self',
   overview: 'projects',
   calls: 'path',
   review: 'path',

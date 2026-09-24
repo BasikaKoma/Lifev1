@@ -9,6 +9,7 @@ export { SelfNextBestActionCard } from './SelfNextBestActionCard';
 export { SelfSummaryStrip } from './SelfSummaryStrip';
 export { SelfProjectDayCard } from './SelfProjectDayCard';
 export { SelfThoughtsCard } from './SelfThoughtsCard';
+export { SelfOpenItems } from './SelfOpenItems';
 export { SelfRoutinesCard } from './SelfRoutinesCard';
 export { SelfPathWeekCard } from './SelfPathWeekCard';
 export { SelfHubMenu } from './SelfHubMenu';

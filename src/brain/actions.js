@@ -15,6 +15,15 @@ export const BRAIN_ACTION_TYPES = [
   'update_checkpoint',
   'update_note',
   'open_project',
+  'create_open_item',
+  'complete_open_item',
+  'delete_open_item',
+  'send_mail',
+  'commit_customer',
+  'record_payment',
+  'computer_open',
+  'computer_write',
+  'computer_fill',
 ];
 
 const MUTATION_TYPES = [
@@ -30,6 +39,12 @@ const MUTATION_TYPES = [
 
 function clean(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function cleanPath(value) {
+  const path = String(value || '').trim().replace(/\\/g, '/').replace(/^\/+/, '');
+  if (!path || path.split('/').some((part) => part === '..' || part === '.')) return '';
+  return path;
 }
 
 function makeCheckpoint(title) {
@@ -61,6 +76,11 @@ export function normalizeBrainActions(raw = []) {
         body: clean(item.body),
         stageTitle: clean(item.stageTitle),
         projectTitle: clean(item.projectTitle),
+        dueOn: /^\d{4}-\d{2}-\d{2}$/.test(clean(item.dueOn)) ? clean(item.dueOn) : '',
+        target: clean(item.target).slice(0, 300),
+        rootId: clean(item.rootId),
+        relativePath: cleanPath(item.relativePath),
+        amount: clean(item.amount).slice(0, 80),
         items: (Array.isArray(item.items) ? item.items : [])
           .map(clean)
           .filter(Boolean)

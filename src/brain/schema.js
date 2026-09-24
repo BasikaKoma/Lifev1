@@ -39,7 +39,7 @@ export const BRAIN_INSIGHTS_SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['type', 'title', 'body', 'stageTitle', 'projectTitle', 'items'],
+        required: ['type', 'title', 'body', 'stageTitle', 'projectTitle', 'items', 'dueOn', 'target', 'rootId', 'relativePath', 'amount'],
         properties: {
           type: {
             type: 'string',
@@ -54,6 +54,15 @@ export const BRAIN_INSIGHTS_SCHEMA = {
               'update_checkpoint',
               'update_note',
               'open_project',
+              'create_open_item',
+              'complete_open_item',
+              'delete_open_item',
+              'send_mail',
+              'commit_customer',
+              'record_payment',
+              'computer_open',
+              'computer_write',
+              'computer_fill',
             ],
           },
           title: { type: 'string' },
@@ -61,6 +70,11 @@ export const BRAIN_INSIGHTS_SCHEMA = {
           stageTitle: { type: 'string' },
           projectTitle: { type: 'string' },
           items: { type: 'array', items: { type: 'string' } },
+          dueOn: { type: 'string' },
+          target: { type: 'string' },
+          rootId: { type: 'string' },
+          relativePath: { type: 'string' },
+          amount: { type: 'string' },
         },
       },
     },
@@ -135,6 +149,45 @@ export const BRAIN_TOOLS = [
       properties: {
         rootId: { type: 'string' },
         relativePath: { type: 'string' },
+      },
+    },
+  },
+  {
+    name: 'list_open_items',
+    description: 'List open items kept in the app. They are tied to mail, calls, and the day, and the morning briefing reads them.',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['level'],
+      properties: {
+        level: { type: 'string', enum: ['human', 'business', 'all'] },
+      },
+    },
+  },
+  {
+    name: 'list_mail',
+    description: 'Read synced mail summaries and which ones are urgent. Does not return the mailbox token.',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['urgentOnly'],
+      properties: {
+        urgentOnly: { type: 'boolean' },
+      },
+    },
+  },
+  {
+    name: 'request_erp',
+    description: 'Request one ERP domain so the answer uses real numbers. Credentials stay on the server and are not returned.',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['domain'],
+      properties: {
+        domain: {
+          type: 'string',
+          enum: ['cash', 'customers', 'sales', 'prices', 'operations', 'people', 'suppliers', 'documents'],
+        },
       },
     },
   },

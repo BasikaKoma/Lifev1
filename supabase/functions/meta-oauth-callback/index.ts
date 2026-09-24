@@ -1,11 +1,11 @@
 import { getServiceClient } from '../_shared/supabase.ts';
 import {
-  META_SCOPES,
   buildDestinationRows,
   exchangeCodeForTokens,
   exchangeLongLivedToken,
   fallbackMetaRedirect,
   fetchFacebookUserId,
+  fetchGrantedScopes,
   fetchPageAccounts,
   tokenExpiresAt,
   withMetaResult,
@@ -57,6 +57,7 @@ Deno.serve(async (req) => {
 
     const fbUserId = await fetchFacebookUserId(userToken);
     const pages = await fetchPageAccounts(userToken);
+    const grantedScopes = await fetchGrantedScopes(userToken);
 
     const { data: previousRows } = await admin
       .from('meta_destinations')
@@ -70,7 +71,7 @@ Deno.serve(async (req) => {
       fb_user_id: fbUserId,
       user_access_token: userToken,
       user_token_expires_at: tokenExpiresAt(expiresIn),
-      scopes: META_SCOPES,
+      scopes: grantedScopes,
       connected_at: now,
       updated_at: now,
     });

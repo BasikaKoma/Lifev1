@@ -36,6 +36,7 @@ import {
   buildWaistCardFromReadings,
   getWaistReadingsForDay,
 } from '../lib/health/waistReadings';
+import { openSourceLabel } from '../lib/assistant/openItems';
 import { DAY_VIEW_PHASE, DAY_VIEW_BODY_MS, originPercentFromRects, originToCssVars } from '../hooks/useLifelineDayView';
 import { SelfMetricCard } from './self/SelfMetricCard';
 import { SelfChart } from './self/SelfCharts';
@@ -643,6 +644,46 @@ function DayLabBody({
                     </li>
                   ))}
                 </ul>
+              )}
+            </section>
+
+            <section className="day-lab__panel">
+              <h3 className="day-lab__panel-title">Εκκρεμότητες της μέρας</h3>
+              {!entry.openRecord?.done?.length && !entry.openRecord?.missed?.length ? (
+                <p className="day-lab__empty">Τίποτα καταγεγραμμένο για αυτή τη μέρα.</p>
+              ) : (
+                <>
+                  <h4 className="day-lab__panel-title">Έγινε</h4>
+                  {entry.openRecord.done.length === 0 ? (
+                    <p className="day-lab__empty">Τίποτα δεν έκλεισε.</p>
+                  ) : (
+                    <ul className="day-lab__list">
+                      {entry.openRecord.done.map((item) => (
+                        <li key={item.id || item.title} className="day-lab__completed-item">
+                          <span className="day-lab__kind">{openSourceLabel(item.source)}</span>
+                          <div>
+                            <span className="day-lab__completed-title">{item.title}</span>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <h4 className="day-lab__panel-title">Δεν έγινε</h4>
+                  {entry.openRecord.missed.length === 0 ? (
+                    <p className="day-lab__empty">Δεν έμεινε τίποτα ανοιχτό.</p>
+                  ) : (
+                    <ul className="day-lab__list">
+                      {entry.openRecord.missed.map((item) => (
+                        <li key={item.id || item.title} className="day-lab__todo-item">
+                          <span>{item.title}</span>
+                          {item.source ? (
+                            <span className="day-lab__completed-meta">{openSourceLabel(item.source)}</span>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
               )}
             </section>
           </main>

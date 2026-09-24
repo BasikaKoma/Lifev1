@@ -9,6 +9,7 @@ import { CANVAS_INSERT_SHORTCUTS } from '../utils/canvasInsertShortcuts';
 import { platform } from '../platform';
 import { ShareProjectPanel } from './ShareProjectPanel';
 import { VaultSettings } from './VaultSettings';
+import { AssistantConnections } from './AssistantConnections';
 
 export function SettingsView({
   focusMode,
@@ -368,6 +369,8 @@ export function SettingsView({
                   {metaStatus?.connected ? 'Διαχείριση Meta' : 'Connect Meta'}
                 </button>
               </div>
+
+              <AssistantConnections />
             </>
           ) : (
             <div className="settings-block">

@@ -1,7 +1,7 @@
 import { NO_DATA, createEmptyCapacity, createEmptyMetric } from './selfHubSchema';
 import { emptySelfData } from '../data/emptySelfData';
 import { enrichDayLabMetrics } from './lifelineSelfMetrics';
-import { formatSelfDataDate, formatSelfUpdatedTime, buildTimelineFromReference, localTodayIsoDate } from './selfDateUtils';
+import { formatSelfDataDate, formatSelfMonth, formatSelfUpdatedTime, buildTimelineFromReference, localTodayIsoDate } from './selfDateUtils';
 import { computeCapacity, deriveCircadianContext, deriveCurrentState } from './capacityEngine';
 import {
   computeFocusWindow,
@@ -301,6 +301,7 @@ function buildFromSelfData(selfData, { displayName, stages, ouraRow, projectActi
     hasData,
     header: {
       dateLabel: formatSelfDataDate(referenceTime),
+      monthLabel: formatSelfMonth(referenceTime),
       updatedLabel: referenceTime
         ? `Updated ${formatSelfUpdatedTime(referenceTime)}${dataDay ? ` · data ${dataDay}` : ''}`
         : null,
@@ -441,6 +442,7 @@ function buildEmptyView({ displayName, ouraStatus, scaleConnected, projectActivi
     hasData: false,
     header: {
       dateLabel: formatSelfDataDate(null),
+      monthLabel: formatSelfMonth(null),
       updatedLabel: null,
       dataDay: null,
       systemStatusLabel: NO_DATA,

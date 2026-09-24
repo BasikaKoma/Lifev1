@@ -7,7 +7,7 @@ export const APP_MODEL = {
     brand: 'Personal Brand turns lived events into content: signal → idea → draft → platform variation → approval → publish. Fresh signals look back 7 days. Narrative threads are long-term stories (Symphon, first customers, vibecoding doubt, Market Portal → systems, exposure/first video, entrepreneurship and life). Brand DNA and threads live in the app, not in the model.',
     nutrition: 'Nutrition turns the user\'s own dietary instructions into a 7/14-day meal plan and supermarket list. Calorie and protein numbers are user targets or editable suggestions, never medical advice. Not a project.',
     projects: 'Separate workstreams with their own canvas. Each project has stages, checkpoints, goals, notes, ideas, obstacles, canvas tasks, and a brief.',
-    brain: 'Advisor over the whole app. MEMORY.whoYouAre is voice/preferences. SNAPSHOT.brand is the content system and DNA.',
+    brain: 'One assistant over both levels. Human: day, body, time, communication, people, money, work, obligations, home, memory. Business: cash, customers, sales, prices, operations, people, suppliers, documents, outward image, weekly risk. Morning says what happened, what is left, and one next move. Evening says what was scheduled and what happened. Mail, open items, and the desktop computer are jobs it does. Anything that leaves the app waits for yes.',
   },
   whatIsAProject: 'Create a project only when the thing needs its own execution: milestones, decisions, blockers, and progress over weeks/months. Opening a project gives it a canvas.',
   notAProject: [
@@ -31,5 +31,6 @@ export function appModelText() {
 - Nutrition is already an app screen. Do not create a Nutrition project. Calories/macros come from the user or from editable suggestions.
 - Before saying "create a project", look at SNAPSHOT.projects and SNAPSHOT.lifelineProject. Prefer fewer, sharper projects.
 - Standing personal laws in MEMORY.laws override generic advice. Strategic answers must respect them.
-- You can CREATE or UPDATE inside the app via actions, but only when the user asked you to make it now. Then actually emit create_project / complete_checkpoint / update_note / open_project as needed.`;
+- You can CREATE or UPDATE inside the app via actions, but only when the user asked you to make it now. Then actually emit create_project / complete_checkpoint / update_note / open_project as needed.
+- Mail replies are send_mail actions and wait for yes. Open items are create_open_item. Computer actions exist only on the desktop app. request_erp fetches business numbers; do not invent them.`;
 }

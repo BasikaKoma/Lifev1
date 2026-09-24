@@ -17,9 +17,15 @@ import { BRAIN_INSIGHTS_SCHEMA, BRAIN_TOOLS } from './schema';
 import { transportRun } from './transport';
 import { applyRouteToSnapshot, routeQuestion } from './router';
 import { buildSourceIndex } from './sources';
+import { assistantInstructionBlock } from './levels';
+import { redactSecrets } from './redact';
+import { loadAssistantPack } from '../lib/assistant/pack';
+import { listOpenItems } from '../lib/assistant/openItems';
+import { listMailMessages } from '../lib/assistant/mail';
+import { queryErp } from '../lib/assistant/erp';
 import { brainListDir, brainListRoots, brainReadImage, brainReadText, hasElectronBrain } from '../platform/brain';
 
-const MAX_TOOL_ROUNDS = 4;
+const MAX_TOOL_ROUNDS = 6;
 
 function buildInstructions(kind, routeMode) {
   const briefing = kind === 'briefing' || routeMode === 'briefing';
@@ -42,11 +48,13 @@ ${briefing
     : (kind === 'ask'
       ? 'Answer as their advisor using APP MODEL + SNAPSHOT first, then MEMORY for tone and MEMORY.laws for strategy. If they ask whether something should be a project, use APP MODEL.personalBrandRule / decisionRule and the existing SNAPSHOT.projects. If they asked you to create it in the app (φτιάξτο, δημιούργησε, κάνε το, create it, πρόσθεσέ το), fill actions. Advice-only questions must have actions=[]. Never duplicate an existing SNAPSHOT.projects title. For create_project: title, body=purpose, stageTitle=first milestone, items=checkpoint titles (max 8). After creating, also emit open_project with the same title. To add/complete/update on an EXISTING project, set projectTitle to that project and use create_checkpoint, complete_checkpoint, update_note, or update_checkpoint — this works from Lifeline.'
       : 'Analyze across Self, Lifeline days, and every project. Produce 3-6 concrete insights with real source IDs from projects, checkpoints, notes, or days. actions=[] unless they asked to create something.')}
-Every insight must include real source IDs from SNAPSHOT (project:, checkpoint:, note:, lifeline-day:, self:).`;
+Every insight must include real source IDs from SNAPSHOT (project:, checkpoint:, note:, lifeline-day:, self:).
+${assistantInstructionBlock(kind)}`;
 }
 
 function allowedTools(policy, destination, kind) {
-  const tools = [];
+  const tools = ['list_open_items', 'list_mail', 'request_erp']
+    .map((name) => BRAIN_TOOLS.find((tool) => tool.name === name));
   if (kind !== 'ask') tools.push(BRAIN_TOOLS.find((tool) => tool.name === 'search_memory'));
   if (policy.appScopes.projects) tools.push(BRAIN_TOOLS.find((tool) => tool.name === 'get_project'));
   if (hasElectronBrain() && canCloudSeeLocalFiles(policy, destination)) {
@@ -115,6 +123,24 @@ async function executeTool(name, args, { policy, destination, catalog, conversat
     if (!policy.appScopes.projects) throw new Error('Projects scope is off.');
     const query = args.query || args.projectId || args.name;
     return resolveProjectQuery(query, catalog);
+  }
+  if (name === 'list_open_items') {
+    const items = await listOpenItems();
+    const level = args.level === 'human' || args.level === 'business' ? args.level : 'all';
+    return items
+      .filter((item) => item.status === 'open' && (level === 'all' || item.level === level))
+      .slice(0, 30);
+  }
+  if (name === 'list_mail') {
+    try {
+      const messages = await listMailMessages({ urgentOnly: args.urgentOnly === true, limit: 20 });
+      return { connected: true, messages };
+    } catch (err) {
+      return { connected: false, messages: [], error: err.message };
+    }
+  }
+  if (name === 'request_erp') {
+    return queryErp(args.domain);
   }
 
   if (!hasElectronBrain()) throw new Error('Local files are only available in the desktop app.');
@@ -237,6 +263,7 @@ export async function runBrainJob({
   const canUseLocalFiles = hasElectronBrain() && (roots.length > 0 || canCloudSeeLocalFiles(policyWithRoots, destination));
   const localFolders = hasElectronBrain() && roots.length ? await loadLocalFolders(roots) : [];
 
+  const assistantPack = await loadAssistantPack().catch(() => null);
   let snapshot = buildSnapshot({
     context,
     policy,
@@ -244,6 +271,7 @@ export async function runBrainJob({
     projectCatalog: catalog,
     mentionedProjects,
     localFolders,
+    assistantPack,
   });
   if (!canCloudSeeAppData(policy, destination)) {
     snapshot = redactSnapshotForCloud(snapshot);
@@ -256,7 +284,13 @@ export async function runBrainJob({
     ? questionText || 'Τι βλέπεις στο τρέχον context;'
     : kind === 'briefing'
       ? questionText || 'Κάνε weekly briefing: τι κινήθηκε, τι έχει κολλήσει, ποια είναι η επόμενη κίνηση.'
-      : questionText || 'Ανάλυσε το τρέχον Lifeline context και βγάλε insights.';
+      : kind === 'morning'
+        ? questionText || 'Πρωινή ενημέρωση: τι έγινε, τι μένει, η μία επόμενη κίνηση.'
+        : kind === 'evening'
+          ? questionText || 'Βραδινή ενημέρωση: τι είχε προγραμματιστεί και τι έγινε.'
+          : kind === 'business'
+            ? questionText || 'Επιχειρηματική εικόνα: τα νούμερα, ο κίνδυνος της εβδομάδας, μία σύσταση.'
+            : questionText || 'Ανάλυσε το τρέχον Lifeline context και βγάλε insights.';
 
   const tools = capabilities.supportsTools ? allowedTools(policyWithRoots, destination, kind) : [];
   const memory = buildMemoryPack({
@@ -321,7 +355,7 @@ export async function runBrainJob({
             ok: true,
             output: call.name === 'read_image'
               ? { name: output.name, sourceId: output.sourceId, mime: output.mime, attached: true }
-              : output,
+              : redactSecrets(output),
           });
         } catch (err) {
           toolResults.push({ name: call.name, ok: false, error: err.message });

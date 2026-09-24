@@ -165,7 +165,8 @@
   text-overflow: ellipsis;
 }
 
-.self-hub-header__date-btn {
+.self-hub-header__date-btn,
+.self-hub-header__date-static {
   display: flex;
   align-items: flex-start;
   gap: 0.4rem;
@@ -174,8 +175,25 @@
   border: none;
   background: transparent;
   color: inherit;
-  cursor: pointer;
   text-align: left;
+}
+
+.self-hub-header__date-btn {
+  cursor: pointer;
+}
+
+.self-hub-header__center {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.self-hub-header__month {
+  display: none;
 }
 
 .self-hub-header__date-btn:hover .self-hub-header__date {
@@ -199,8 +217,6 @@
 
 .self-hub-header__name {
   margin: 0;
-  grid-column: 2;
-  grid-row: 1;
   text-align: center;
   font-size: clamp(1rem, 3.8vw, 1.25rem);
   font-weight: 700;
@@ -209,8 +225,7 @@
 }
 
 .self-hub-header__name-spacer {
-  grid-column: 2;
-  grid-row: 1;
+  display: none;
 }
 
 .self-hub-header__right {
@@ -2605,6 +2620,44 @@
   .self-project-day__panel {
     min-height: 168px;
     max-height: 188px;
+  }
+}
+
+@media (max-width: 767px) {
+  .self-view--hub .lifeline-north-stars--hub {
+    display: none;
+  }
+
+  .self-hub-header__when {
+    display: none;
+  }
+
+  .self-hub-header__month {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .self-hub-header__month .self-hub-header__calendar {
+    margin-top: 0;
+  }
+
+  .self-hub-header__month .self-hub-header__date {
+    overflow: visible;
+    text-overflow: unset;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: rgba(248, 250, 252, 0.88);
+  }
+
+  .self-hub-header__pill {
+    display: none;
+  }
+
+  .self-hub-header__updated {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding-left: 0;
   }
 }
 

@@ -25,6 +25,7 @@ export const NO_DATA = 'No data';
 
 /** @typedef {Object} SelfHubHeader
  * @property {string} dateLabel
+ * @property {string} monthLabel
  * @property {string|null} updatedLabel
  * @property {string|null} dataDay
  * @property {string} systemStatusLabel

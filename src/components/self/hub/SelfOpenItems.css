@@ -1,0 +1,80 @@
+.self-open {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem 1rem;
+  border-radius: 18px;
+  background: var(--hub-card);
+  border: 1px solid var(--hub-border);
+}
+
+.self-open__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.self-open__eyebrow {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+
+.self-open__count {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 650;
+  line-height: 1.1;
+}
+
+.self-open__note,
+.self-open__empty,
+.self-open__row p {
+  margin: 0;
+  font-size: 13px;
+  opacity: 0.72;
+}
+
+.self-open__error {
+  margin: 0;
+  color: #fca5a5;
+  font-size: 13px;
+}
+
+.self-open__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.self-open__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--hub-border);
+  border-radius: 12px;
+}
+
+.self-open__row--done {
+  opacity: 0.7;
+}
+
+.self-open__actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.self-open__done {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}

@@ -7,6 +7,35 @@ import { normalizeSelfHubDayEntry } from './selfHubDays';
 import { normalizeRoutineLog } from './lifelineRoutines';
 import { normalizeTimelineSnapshot } from './selfHubTimelineEvents';
 
+function normalizeOpenRecord(raw) {
+  const list = (items) => (Array.isArray(items) ? items : [])
+    .map((item) => ({
+      id: String(item?.id || ''),
+      title: String(item?.title || '').trim(),
+      source: String(item?.source || ''),
+    }))
+    .filter((item) => item.title)
+    .slice(0, 40);
+  return {
+    done: list(raw?.done),
+    missed: list(raw?.missed),
+    updatedAt: typeof raw?.updatedAt === 'string' ? raw.updatedAt : null,
+  };
+}
+
+function openRecordScore(record) {
+  return (record?.done?.length || 0) + (record?.missed?.length || 0);
+}
+
+function pickOpenRecord(local, cloud) {
+  const localAt = typeof local?.updatedAt === 'string' ? local.updatedAt : '';
+  const cloudAt = typeof cloud?.updatedAt === 'string' ? cloud.updatedAt : '';
+  if (localAt || cloudAt) {
+    return normalizeOpenRecord(localAt >= cloudAt ? local : cloud);
+  }
+  return openRecordScore(local) > 0 ? normalizeOpenRecord(local) : normalizeOpenRecord(cloud);
+}
+
 function normalizeDayThoughts(list) {
   if (!Array.isArray(list)) return [];
   const seen = new Set();
@@ -75,6 +104,7 @@ export function createEmptyDayEntry() {
     timelineSnapshot: null,
     archivedAt: null,
     archivedFrom: null,
+    openRecord: { done: [], missed: [] },
   };
 }
 
@@ -102,6 +132,7 @@ export function getDayEntry(lifelineDays, dateStr) {
     timelineSnapshot: normalizeTimelineSnapshot(entry.timelineSnapshot),
     archivedAt: typeof entry.archivedAt === 'string' ? entry.archivedAt : null,
     archivedFrom: typeof entry.archivedFrom === 'string' ? entry.archivedFrom : null,
+    openRecord: normalizeOpenRecord(entry.openRecord),
   };
 }
 
@@ -128,6 +159,7 @@ export function normalizeLifelineDays(raw) {
       timelineSnapshot: normalizeTimelineSnapshot(entry?.timelineSnapshot),
       archivedAt: typeof entry?.archivedAt === 'string' ? entry.archivedAt : null,
       archivedFrom: typeof entry?.archivedFrom === 'string' ? entry.archivedFrom : null,
+      openRecord: normalizeOpenRecord(entry?.openRecord),
     };
   }
   return out;
@@ -168,6 +200,7 @@ export function mergeLifelineDayEntry(cloud, local) {
     timelineSnapshot: pickRicherObject(local.timelineSnapshot, cloud.timelineSnapshot),
     archivedAt: local.archivedAt || cloud.archivedAt || null,
     archivedFrom: local.archivedFrom || cloud.archivedFrom || null,
+    openRecord: pickOpenRecord(local.openRecord, cloud.openRecord),
   };
 }
 

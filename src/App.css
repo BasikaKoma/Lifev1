@@ -11322,14 +11322,9 @@ to {
   display:none
 }
 
-@media (max-width:720px) {
+@media (max-width:767px) {
   .lifeline-north-stars--overlay {
-    left:72px;
-    right:12px;
-    transform:none;
-    max-width:none;
-    border-radius:16px;
-    padding:8px 10px
+    display:none
   }
 }
 

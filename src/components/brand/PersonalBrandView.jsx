@@ -17,6 +17,7 @@ export function PersonalBrandView({
   projectList = [],
   metaStatus,
   onOpenMetaModal,
+  onConnectMeta,
 }) {
   const brand = usePersonalBrand({
     displayName,
@@ -272,6 +273,9 @@ export function PersonalBrandView({
           onVariations={brand.runVariations}
           onAsk={brand.runAskBrain}
           onDelete={(id) => { brand.deleteItem(id); setTab('pipeline'); }}
+          metaStatus={metaStatus}
+          onOpenMeta={onOpenMetaModal}
+          onConnectMeta={onConnectMeta}
         />
       )}
 

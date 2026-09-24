@@ -10,6 +10,9 @@ export const EMPTY_META_STATUS = {
   needs_page_pick: false,
   missing_instagram: false,
   missing_pages: false,
+  can_publish_facebook: false,
+  can_publish_instagram: false,
+  needs_publish_reconnect: false,
   facebook: null,
   instagram: null,
   destinations: [],
@@ -112,6 +115,31 @@ export async function disconnectMeta() {
   }
 }
 
+export async function publishToMeta({ platforms, caption, imageUrl, itemId } = {}) {
+  return invokeFunction('meta-publish', {
+    body: {
+      platforms,
+      caption,
+      image_url: imageUrl || null,
+      item_id: itemId || null,
+    },
+  });
+}
+
+export function captionForMeta(item, platform = 'facebook') {
+  const variations = item?.variations && typeof item.variations === 'object' ? item.variations : {};
+  const keys = platform === 'instagram'
+    ? ['instagram', 'ig', 'reel']
+    : ['facebook', 'fb'];
+  for (const key of keys) {
+    const value = variations[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  const parts = [item?.hook, item?.body].map((value) => String(value || '').trim()).filter(Boolean);
+  if (parts.length) return parts.join('\n\n');
+  return String(item?.title || '').trim();
+}
+
 export async function getMetaStatus() {
   const supabase = getSupabaseOrThrow();
   const { data, error } = await supabase.rpc('get_my_meta_status');
@@ -159,6 +187,7 @@ export function metaStatusHint(status) {
   if (!status.token_valid) return 'Το token έληξε. Ξανασύνδεσε τον λογαριασμό.';
   if (status.missing_pages) return 'Δεν βρέθηκε Facebook Page.';
   if (status.needs_page_pick) return 'Διάλεξε ποια Page θα χρησιμοποιείται.';
+  if (status.needs_publish_reconnect) return 'Για δημοσίευση, ξανασύνδεσε το Meta (νέα δικαιώματα).';
   if (status.missing_instagram) return 'Η Page δεν έχει συνδεδεμένο Instagram Professional.';
   return '';
 }

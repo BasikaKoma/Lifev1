@@ -2,12 +2,18 @@ export const META_GRAPH_VERSION = 'v21.0';
 export const META_GRAPH_BASE = `https://graph.facebook.com/${META_GRAPH_VERSION}`;
 export const META_OAUTH_DIALOG = `https://www.facebook.com/${META_GRAPH_VERSION}/dialog/oauth`;
 
-/** Discovery scopes only — publish permissions come in a later reconnect. */
+/** business_management is required for Pages owned by a Business Portfolio.
+ *  pages_read_user_content is omitted: Meta rejects it unless the Page use case
+ *  has that permission enabled, and listing Pages/IG does not need it.
+ *  Enable pages_manage_posts + instagram_content_publish on the Meta app
+ *  (Page + Instagram use cases) before reconnecting, or Login returns Invalid Scopes. */
 export const META_SCOPES = [
   'instagram_basic',
   'pages_show_list',
   'pages_read_engagement',
-  'pages_read_user_content',
+  'business_management',
+  'pages_manage_posts',
+  'instagram_content_publish',
 ].join(',');
 
 export type MetaTokenResponse = {
@@ -84,6 +90,7 @@ export function buildAuthorizeUrl(state: string): string {
     state,
     scope: META_SCOPES,
     display: 'popup',
+    auth_type: 'rerequest',
   });
   return `${META_OAUTH_DIALOG}?${params.toString()}`;
 }
@@ -236,4 +243,151 @@ export function buildDestinationRows(
       selected_for_instagram: selectedForInstagram,
     };
   });
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function graphGet<T>(path: string, query: Record<string, string>): Promise<T> {
+  const params = new URLSearchParams(query);
+  const res = await fetch(`${META_GRAPH_BASE}/${path}?${params.toString()}`);
+  if (!res.ok) {
+    throw new Error(await readGraphError(res));
+  }
+  return await res.json() as T;
+}
+
+export async function graphPost<T>(path: string, body: Record<string, string>): Promise<T> {
+  const res = await fetch(`${META_GRAPH_BASE}/${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(body),
+  });
+  if (!res.ok) {
+    throw new Error(await readGraphError(res));
+  }
+  return await res.json() as T;
+}
+
+export async function fetchGrantedScopes(accessToken: string): Promise<string> {
+  try {
+    const json = await graphGet<{ data?: { permission?: string; status?: string }[] }>('me/permissions', {
+      access_token: accessToken,
+    });
+    const granted = (json.data || [])
+      .filter((row) => row.status === 'granted' && row.permission)
+      .map((row) => String(row.permission));
+    if (granted.length) return granted.join(',');
+  } catch (err) {
+    console.error('Meta /me/permissions failed:', err);
+  }
+  return META_SCOPES;
+}
+
+function clipCaption(text: string, max: number) {
+  const value = String(text || '').trim();
+  if (value.length <= max) return value;
+  return `${value.slice(0, max - 1).trim()}…`;
+}
+
+export async function publishFacebookPost(options: {
+  pageId: string;
+  pageAccessToken: string;
+  caption: string;
+  imageUrl?: string | null;
+}): Promise<{ media_id: string; permalink: string | null }> {
+  const caption = clipCaption(options.caption, 5000);
+  if (!caption && !options.imageUrl) {
+    throw new Error('Άδειο κείμενο — δεν υπάρχει τίποτα για δημοσίευση στο Facebook.');
+  }
+
+  if (options.imageUrl) {
+    const created = await graphPost<{ id?: string; post_id?: string }>(`${options.pageId}/photos`, {
+      url: options.imageUrl,
+      caption,
+      published: 'true',
+      access_token: options.pageAccessToken,
+    });
+    const mediaId = created.post_id || created.id;
+    if (!mediaId) throw new Error('Το Facebook δεν γύρισε id δημοσίευσης.');
+    let permalink: string | null = null;
+    try {
+      const details = await graphGet<{ permalink_url?: string; link?: string }>(mediaId, {
+        fields: 'permalink_url,link',
+        access_token: options.pageAccessToken,
+      });
+      permalink = details.permalink_url || details.link || null;
+    } catch {
+      permalink = `https://www.facebook.com/${mediaId}`;
+    }
+    return { media_id: mediaId, permalink };
+  }
+
+  const created = await graphPost<{ id?: string }>(`${options.pageId}/feed`, {
+    message: caption,
+    access_token: options.pageAccessToken,
+  });
+  if (!created.id) throw new Error('Το Facebook δεν γύρισε id δημοσίευσης.');
+  let permalink: string | null = null;
+  try {
+    const details = await graphGet<{ permalink_url?: string }>(created.id, {
+      fields: 'permalink_url',
+      access_token: options.pageAccessToken,
+    });
+    permalink = details.permalink_url || null;
+  } catch {
+    permalink = `https://www.facebook.com/${created.id}`;
+  }
+  return { media_id: created.id, permalink };
+}
+
+export async function publishInstagramImage(options: {
+  igUserId: string;
+  pageAccessToken: string;
+  caption: string;
+  imageUrl: string;
+}): Promise<{ media_id: string; permalink: string | null }> {
+  if (!options.imageUrl) {
+    throw new Error('Το Instagram χρειάζεται εικόνα. Το API δεν δέχεται σκέτο κείμενο.');
+  }
+  const caption = clipCaption(options.caption, 2200);
+  const container = await graphPost<{ id?: string }>(`${options.igUserId}/media`, {
+    image_url: options.imageUrl,
+    caption,
+    access_token: options.pageAccessToken,
+  });
+  if (!container.id) throw new Error('Το Instagram δεν έφτιαξε media container.');
+
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const status = await graphGet<{ status_code?: string; status?: string }>(container.id, {
+      fields: 'status_code,status',
+      access_token: options.pageAccessToken,
+    });
+    const code = String(status.status_code || '').toUpperCase();
+    if (code === 'FINISHED' || code === 'PUBLISHED') break;
+    if (code === 'ERROR' || code === 'EXPIRED') {
+      throw new Error(status.status || 'Αποτυχία προετοιμασίας εικόνας Instagram.');
+    }
+    if (!code && attempt >= 1) break;
+    await sleep(1500);
+  }
+
+  const published = await graphPost<{ id?: string }>(`${options.igUserId}/media_publish`, {
+    creation_id: container.id,
+    access_token: options.pageAccessToken,
+  });
+  if (!published.id) throw new Error('Το Instagram δεν ολοκλήρωσε τη δημοσίευση.');
+
+  let permalink: string | null = null;
+  try {
+    const details = await graphGet<{ permalink?: string }>(published.id, {
+      fields: 'permalink',
+      access_token: options.pageAccessToken,
+    });
+    permalink = details.permalink || null;
+  } catch {
+    permalink = null;
+  }
+  return { media_id: published.id, permalink };
 }

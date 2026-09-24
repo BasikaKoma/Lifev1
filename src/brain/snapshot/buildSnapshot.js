@@ -134,6 +134,7 @@ export function buildSnapshot({
   goals = [],
   notes = [],
   northStars = [],
+  assistantPack = null,
 } = {}) {
   const scopes = policy?.appScopes || {};
   const includeSelf = scopes.self !== false;
@@ -162,6 +163,7 @@ export function buildSnapshot({
     projects: [],
     mentionedProjects: [],
     localFolders: [],
+    assistant: null,
     currentProject: null,
     patterns: null,
   };
@@ -343,6 +345,8 @@ export function buildSnapshot({
       sources.push(sourceId('project', currentProject?.id));
     }
   }
+
+  if (assistantPack) snapshot.assistant = assistantPack;
 
   snapshot.patterns = buildPatterns(snapshot.lifeline?.recentDays || [], snapshot.projects || []);
   const coverage = {

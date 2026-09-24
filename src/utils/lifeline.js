@@ -37,6 +37,13 @@ export function getLifelineSpineBudget() {
   }
 }
 
+/** Phone, or a window sized like one. Desktop zoom stays on the full line. */
+export function isLifelineMobileZoom() {
+  if (isMobilePlatform()) return true;
+  if (typeof window === 'undefined' || !window.matchMedia) return false;
+  return window.matchMedia('(max-width: 767px)').matches;
+}
+
 /**
  * Lifeline zoom:
  * - CSS scale only for zooming OUT (overview). Cap at 1 — never stretch the
@@ -206,6 +213,7 @@ export function applyLifelineDayHeightZoom(mapTheme, extraDates, zoomIn, anchorD
       lifeline: {
         ...(working?.lifeline || {}),
         dayHeight: stepped,
+        viewCenterDate: toDateString(anchorDate) || working?.lifeline?.viewCenterDate || null,
       },
     };
   }
@@ -408,24 +416,50 @@ export function getLifelineConfig(mapTheme, extraDates = []) {
     extraDates
   );
   const dayCount = Math.max(1, daysBetween(originStartDate, endDate) + 1);
-  // Whole line always renders: lower the gap (never crop days) to stay within
-  // the GPU budget. Zoom grows the gap on this same fixed line — dates never move.
-  const effectiveDayHeight = fitLifelineDayHeight(preferred, dayCount);
+  // Whole line always renders on desktop: lower the gap (never crop days) to
+  // stay within the GPU budget. On a phone the same cap stops zoom far too
+  // early, so once the preferred gap no longer fits we keep a closer window
+  // of days and let that gap keep growing.
+  const fittedDayHeight = fitLifelineDayHeight(preferred, dayCount);
+  const mobileWindow = isLifelineMobileZoom() && preferred > fittedDayHeight;
+  let renderStart = originStartDate;
+  let renderEnd = endDate;
+  let viewCenterDate = null;
+  if (mobileWindow) {
+    const windowDays = Math.max(14, Math.floor(getLifelineSpineBudget() / preferred));
+    let center = toDateString(raw.viewCenterDate) || today;
+    if (signedDaysBetween(center, originStartDate) > 0) center = originStartDate;
+    if (signedDaysBetween(endDate, center) > 0) center = endDate;
+    let start = addDays(center, -Math.floor((windowDays - 1) / 2));
+    let windowEnd = addDays(start, windowDays - 1);
+    if (signedDaysBetween(start, originStartDate) > 0) {
+      start = originStartDate;
+      windowEnd = addDays(start, windowDays - 1);
+    }
+    if (windowEnd && signedDaysBetween(endDate, windowEnd) > 0) {
+      windowEnd = endDate;
+      start = addDays(windowEnd, -(windowDays - 1));
+      if (signedDaysBetween(start, originStartDate) > 0) start = originStartDate;
+    }
+    renderStart = start || originStartDate;
+    renderEnd = windowEnd || endDate;
+    viewCenterDate = center;
+  }
+  const effectiveDayHeight = mobileWindow ? preferred : fittedDayHeight;
 
   return {
-    startDate: originStartDate,
-    endDate,
-    // `dayHeight` = the actual rendered gap, fitted to the budget so the whole
-    // line stays visible (dates never move — only the spacing grows). Stored
-    // back as the preferred height too, so zoom-out responds on the first click
-    // instead of first burning through an invisible over-cap range.
+    startDate: renderStart,
+    endDate: renderEnd,
+    // `dayHeight` = the actual rendered gap. On desktop it is fitted so the
+    // whole line stays visible. On mobile, past the pixel budget, it is the
+    // preferred gap inside a shorter window.
     dayHeight: effectiveDayHeight,
     futureDays: fullFutureDays,
     originStartDate,
     fullFutureDays,
     preferredDayHeight: effectiveDayHeight,
-    windowed: false,
-    viewCenterDate: null,
+    windowed: mobileWindow,
+    viewCenterDate,
   };
 }
 
@@ -631,9 +665,9 @@ export function syncLifelineMapTheme(mapTheme, extraDates = []) {
       futureDays: config.fullFutureDays ?? config.futureDays,
       dayHeight: config.preferredDayHeight
         ?? clampLifelineDayHeight(mapTheme?.lifeline?.dayHeight || DEFAULT_LIFELINE_CONFIG.dayHeight),
-      viewCenterDate: null,
-      viewStartDate: null,
-      viewEndDate: null,
+      viewCenterDate: config.windowed ? config.viewCenterDate : null,
+      viewStartDate: config.windowed ? config.startDate : null,
+      viewEndDate: config.windowed ? config.endDate : null,
     },
     roadmap: {
       ...roadmap,

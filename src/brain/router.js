@@ -13,6 +13,9 @@ export function routeQuestion(question, { catalog = [], kind = 'ask' } = {}) {
   const mentioned = findMentionedProjects(question, catalog);
 
   if (kind === 'briefing') return { mode: 'briefing', mentioned };
+  if (kind === 'morning') return { mode: 'morning', mentioned };
+  if (kind === 'evening') return { mode: 'evening', mentioned };
+  if (kind === 'business') return { mode: 'business', mentioned };
   if (kind === 'analyze') return { mode: 'analyze', mentioned };
   if (userAskedToCreate(question)) return { mode: 'create', mentioned };
 
@@ -174,13 +177,23 @@ export function applyRouteToSnapshot(snapshot, route, catalog = []) {
     return finish(next);
   }
 
-  if (route?.mode === 'briefing') {
+  if (route?.mode === 'briefing' || route?.mode === 'morning' || route?.mode === 'evening') {
     next.lifeline = {
       focusDay: snapshot.lifeline?.focusDay || null,
-      recentDays: days.slice(-14),
+      recentDays: days.slice(route.mode === 'briefing' ? -14 : -3),
     };
-    next.projects = pickProjects(catalog, { ids: mentionedIds, limit: 16, depth: 'brief' });
-    next.app = { ...(snapshot.app || {}), scope: 'briefing' };
+    next.projects = pickProjects(catalog, {
+      ids: mentionedIds,
+      limit: route.mode === 'briefing' ? 16 : 2,
+      depth: 'brief',
+    });
+    next.app = { ...(snapshot.app || {}), scope: route.mode };
+    return finish(next);
+  }
+
+  if (route?.mode === 'business') {
+    next.projects = pickProjects(catalog, { ids: mentionedIds, limit: 8, depth: 'brief' });
+    next.app = { ...(snapshot.app || {}), scope: 'business' };
     return finish(next);
   }
 

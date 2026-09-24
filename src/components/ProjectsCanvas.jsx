@@ -3049,6 +3049,19 @@ export function ProjectsCanvas({
     Boolean(handleLifelineWheelRef.current?.(e, ctx))
   ), []);
 
+  const handleLifelinePinch = useCallback((gesture) => {
+    if (!isLifeline || !gesture) return false;
+    const dayHeight = (lifelineThemeRef.current || activeTheme)?.lifeline?.dayHeight
+      ?? DEFAULT_LIFELINE_CONFIG.dayHeight;
+    if (gesture.zoomIn && (gesture.scale || 1) >= 0.995) {
+      return queueLifelineDensityZoom(true, gesture.clientX, gesture.clientY, null);
+    }
+    if (!gesture.zoomIn && dayHeight > DEFAULT_LIFELINE_CONFIG.dayHeight && (gesture.scale || 1) >= 0.995) {
+      return queueLifelineDensityZoom(false, gesture.clientX, gesture.clientY, null);
+    }
+    return false;
+  }, [isLifeline, activeTheme, queueLifelineDensityZoom]);
+
   const handleZoomIn = useCallback(() => {
     if (!isLifeline) {
       zoomCanvasRef.current?.zoomBy(0.1);
@@ -3301,6 +3314,7 @@ export function ProjectsCanvas({
             minScale={isLifeline ? LIFELINE_ZOOM.minScale : 0.25}
             maxScale={isLifeline ? LIFELINE_ZOOM.maxScale : 2}
             interceptWheel={isLifeline ? handleLifelineWheel : undefined}
+            interceptPinch={isLifeline ? handleLifelinePinch : undefined}
             panAxis={isLifeline ? 'y' : 'xy'}
             lockCenterX={isLifeline ? (projectsLayout.centerX ?? 480) : null}
             showToolbar={false}

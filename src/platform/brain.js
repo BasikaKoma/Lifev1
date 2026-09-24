@@ -44,6 +44,22 @@ export async function brainReadImage(rootId, relativePath) {
   return invoke('readImage', rootId, relativePath);
 }
 
+export async function brainOpenPath(rootId, relativePath) {
+  return invoke('openFile', rootId, relativePath);
+}
+
+export async function brainOpenUrl(url) {
+  return invoke('openUrl', url);
+}
+
+export async function brainWriteText(rootId, relativePath, text) {
+  return invoke('writeText', rootId, relativePath, text);
+}
+
+export async function brainFillText(rootId, relativePath, pairs) {
+  return invoke('fillText', rootId, relativePath, pairs);
+}
+
 export async function brainHasCloudKey() {
   if (!hasElectronBrain()) return { configured: false };
   return (await invoke('hasCloudKey')) || { configured: false };

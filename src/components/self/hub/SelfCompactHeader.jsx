@@ -1,5 +1,31 @@
 import { SelfIcon } from '../SelfIcons';
 
+function HeaderDate({ label, className = '', onOpenDayDetails }) {
+  const content = (
+    <>
+      <span className="self-hub-header__calendar" aria-hidden>
+        <SelfIcon name="calendar" />
+      </span>
+      <p className="self-hub-header__date">{label}</p>
+    </>
+  );
+
+  if (!onOpenDayDetails) {
+    return <span className={`self-hub-header__date-static ${className}`}>{content}</span>;
+  }
+
+  return (
+    <button
+      type="button"
+      className={`self-hub-header__date-btn ${className}`}
+      onClick={onOpenDayDetails}
+      aria-label="Λεπτομέρειες ημέρας"
+    >
+      {content}
+    </button>
+  );
+}
+
 export function SelfCompactHeader({ header, menuOpen, onMenuToggle, onOpenDayDetails, onNavigateHome, children }) {
   return (
     <header className="self-hub-header">
@@ -22,33 +48,21 @@ export function SelfCompactHeader({ header, menuOpen, onMenuToggle, onOpenDayDet
             </svg>
           </button>
         ) : null}
-        {onOpenDayDetails ? (
-          <button
-            type="button"
-            className="self-hub-header__date-btn"
-            onClick={onOpenDayDetails}
-            aria-label="Λεπτομέρειες ημέρας"
-          >
-            <span className="self-hub-header__calendar" aria-hidden>
-              <SelfIcon name="calendar" />
-            </span>
-            <p className="self-hub-header__date">{header.dateLabel}</p>
-          </button>
-        ) : (
-          <>
-            <span className="self-hub-header__calendar" aria-hidden>
-              <SelfIcon name="calendar" />
-            </span>
-            <p className="self-hub-header__date">{header.dateLabel}</p>
-          </>
-        )}
+        <HeaderDate label={header.dateLabel} className="self-hub-header__when" onOpenDayDetails={onOpenDayDetails} />
       </div>
 
-      {header.displayName ? (
-        <p className="self-hub-header__name">{header.displayName}</p>
-      ) : (
-        <span className="self-hub-header__name-spacer" />
-      )}
+      <div className="self-hub-header__center">
+        <HeaderDate
+          label={header.monthLabel || header.dateLabel}
+          className="self-hub-header__month"
+          onOpenDayDetails={onOpenDayDetails}
+        />
+        {header.displayName ? (
+          <p className="self-hub-header__name">{header.displayName}</p>
+        ) : (
+          <span className="self-hub-header__name-spacer" />
+        )}
+      </div>
 
       <div className="self-hub-header__right">
         <div className="self-hub-header__pill">

@@ -6,20 +6,22 @@ export function localTodayIsoDate() {
   return `${year}-${month}-${day}`;
 }
 
-export function formatSelfDataDate(isoString) {
+function selfDate(isoString) {
   const date = isoString ? new Date(isoString) : new Date();
-  if (Number.isNaN(date.getTime())) {
-    return new Intl.DateTimeFormat('en-US', {
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-    }).format(new Date());
-  }
+  return Number.isNaN(date.getTime()) ? new Date() : date;
+}
+
+export function formatSelfDataDate(isoString) {
   return new Intl.DateTimeFormat('en-US', {
     month: 'long',
     day: 'numeric',
     year: 'numeric',
-  }).format(date);
+  }).format(selfDate(isoString));
+}
+
+export function formatSelfMonth(isoString) {
+  const label = new Intl.DateTimeFormat('el-GR', { month: 'long' }).format(selfDate(isoString));
+  return label.charAt(0).toLocaleUpperCase('el-GR') + label.slice(1);
 }
 
 export function formatSelfUpdatedTime(isoString) {

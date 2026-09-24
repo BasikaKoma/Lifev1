@@ -3,7 +3,9 @@ import { formatBrainContextLabel } from '../../brain/context';
 import { formatActiveBrainLabel, loadBrainConfig, saveBrainConfig, BRAIN_LEVELS } from '../../brain/config';
 import { loadBrainPolicy, saveBrainPolicy } from '../../brain/policy';
 import { runBrainJob } from '../../brain/runBrainJob';
-import { shouldConfirmBrainActions } from '../../brain/actions';
+import { normalizeBrainActions } from '../../brain/actions';
+import { actionLabel, holdActions, OUTBOUND_ACTION_TYPES } from '../../brain/levels';
+import { applyReadyActions } from '../../brain/assistantApply';
 import { resolveSource } from '../../brain/sources';
 import {
   compactConversationHistory,
@@ -189,16 +191,26 @@ function AssistantBubble({ message, onConfirm, onOpenSource, confirming }) {
       {created.message}
     </p>
   ) : null;
+  const outbound = (pendingActions || []).some((item) => OUTBOUND_ACTION_TYPES.includes(item.type));
   const confirmNote = pendingActions?.length ? (
     <div className="brain-msg__confirm">
-      <p>Να το φτιάξω στο app;</p>
+      <p>{outbound ? 'Αυτό φεύγει έξω. Να προχωρήσω;' : 'Να το κάνω;'}</p>
+      <ul className="brain-msg__confirm-list">
+        {pendingActions.map((item) => (
+          <li key={`${item.type}-${item.title}-${item.target}`}>
+            {actionLabel(item)}
+            {item.title ? ` — ${item.title}` : ''}
+            {item.target ? ` → ${item.target}` : ''}
+          </li>
+        ))}
+      </ul>
       <button
         type="button"
         className="btn btn--primary"
         disabled={confirming}
         onClick={() => onConfirm?.(message)}
       >
-        {confirming ? 'Φτιάχνω…' : 'Ναι, φτιάξτο'}
+        {confirming ? 'Προχωράω…' : 'Ναι'}
       </button>
     </div>
   ) : null;
@@ -656,7 +668,13 @@ export function BrainPanel({
       ? text || 'Ανάλυσε ό,τι βλέπεις στην εφαρμογή και πες μου την επόμενη κίνηση.'
       : kind === 'briefing'
         ? text || 'Κάνε weekly briefing: τι κινήθηκε, τι έχει κολλήσει, ποια είναι η επόμενη κίνηση.'
-        : text;
+        : kind === 'morning'
+          ? text || 'Πρωινή ενημέρωση: τι έγινε, τι μένει, η μία επόμενη κίνηση.'
+          : kind === 'evening'
+            ? text || 'Βραδινή ενημέρωση: τι είχε προγραμματιστεί και τι έγινε.'
+            : kind === 'business'
+              ? text || 'Επιχειρηματική εικόνα: τα νούμερα, ο κίνδυνος της εβδομάδας, μία σύσταση.'
+              : text;
     const userMessage = createUserMessage(userText, kind, pendingAttachments);
     const pending = {
       ...active,
@@ -681,19 +699,20 @@ export function BrainPanel({
         userAttachments: pendingAttachments,
       });
       let created = null;
-      const needsConfirm = shouldConfirmBrainActions(result.actions, userText);
-      if (result.actions?.length && onApplyBrainActions && !needsConfirm) {
+      const actions = normalizeBrainActions(result.actions);
+      const { hold, run: ready } = holdActions(actions, userText);
+      if (ready.length) {
         try {
-          created = await onApplyBrainActions(result.actions);
+          created = await applyReadyActions(ready, onApplyBrainActions);
         } catch (err) {
-          created = { created: false, error: err.message || 'Δεν μπόρεσα να το φτιάξω στο app.' };
+          created = { created: false, error: err.message || 'Δεν μπόρεσα να το κάνω.' };
         }
       }
       const assistant = createAssistantMessage({
         insights: result.insights,
         meta: {
           created,
-          pendingActions: needsConfirm ? result.actions : null,
+          pendingActions: hold.length ? hold : null,
           sourceIndex: result.sourceIndex || [],
         },
       });
@@ -724,10 +743,10 @@ export function BrainPanel({
 
   const confirmPending = async (message) => {
     const actions = message?.meta?.pendingActions;
-    if (!actions?.length || !onApplyBrainActions) return;
+    if (!actions?.length) return;
     setBusy(true);
     try {
-      const created = await onApplyBrainActions(actions);
+      const created = await applyReadyActions(actions, onApplyBrainActions);
       setConversations((current) => {
         const latest = current.find((item) => item.id === active.id) || active;
         const saved = upsertConversation(current, {
@@ -1056,6 +1075,15 @@ export function BrainPanel({
                   </button>
                   <button type="button" className="btn btn--outline" disabled={busy} onClick={() => run('briefing')}>
                     Briefing
+                  </button>
+                  <button type="button" className="btn btn--outline" disabled={busy} onClick={() => run('morning')}>
+                    Πρωί
+                  </button>
+                  <button type="button" className="btn btn--outline" disabled={busy} onClick={() => run('evening')}>
+                    Βράδυ
+                  </button>
+                  <button type="button" className="btn btn--outline" disabled={busy} onClick={() => run('business')}>
+                    Επιχείρηση
                   </button>
                 </div>
               </form>
