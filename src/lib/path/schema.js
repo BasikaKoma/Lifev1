@@ -1,4 +1,7 @@
+import { normalizeWheel, wheelHasContent } from './wheel';
+
 export const PATH_TABS = [
+  { id: 'wheel', label: 'Wheel' },
   { id: 'goals', label: 'Goals' },
   { id: 'week', label: 'Week' },
   { id: 'metrics', label: 'Metrics' },
@@ -145,6 +148,7 @@ export function createEmptyPlan(overrides = {}) {
     startDate: asNullableString(overrides.startDate || overrides.start_date),
     endDate: asNullableString(overrides.endDate || overrides.end_date),
     sourceFile: normalizePlanSourceFile(overrides.sourceFile || overrides.source_file),
+    wheel: normalizeWheel(overrides.wheel),
   };
 }
 
@@ -372,6 +376,7 @@ export function createEmptyBundle() {
 
 export function pathBundleHasContent(bundle) {
   if (!bundle) return false;
+  if (wheelHasContent(bundle.plan?.wheel)) return true;
   if ((bundle.goals || []).length) return true;
   if ((bundle.blocks || []).length) return true;
   if ((bundle.templates || []).length) return true;

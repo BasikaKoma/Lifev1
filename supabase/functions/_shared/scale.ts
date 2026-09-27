@@ -81,6 +81,13 @@ export async function ingestScaleWeight(params: {
     deviceName: params.deviceName ?? null,
   });
 
+  const readingValues = readings
+    .map((reading) => asNumber(reading.value))
+    .filter((value): value is number => value != null);
+  const dayAverageKg = readingValues.length
+    ? Math.round((readingValues.reduce((sum, value) => sum + value, 0) / readingValues.length) * 100) / 100
+    : params.weightKg;
+
   const payload = {
     readings,
     latestRecordedAt: params.recordedAt,
@@ -95,7 +102,7 @@ export async function ingestScaleWeight(params: {
       user_id: profile.id,
       day: params.day,
       metric_type: 'weight',
-      value: params.weightKg,
+      value: dayAverageKg,
       unit: 'kg',
       source: 'qn_scale',
       payload,

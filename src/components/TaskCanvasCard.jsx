@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { canvasStyleClasses } from '../utils/canvasNodes';
 import { resolveNodeThemeStyle } from '../utils/mapTheme';
 import { useCanvasNodeCard } from '../hooks/useCanvasNodeCard';
+import { useIsNodeSelected } from '../hooks/useCanvasMultiSelect';
 import { CategoryBadge, CategorySelect } from './CategorySelect';
 import { PriorityBadge, PrioritySelect } from './PrioritySelect';
 
@@ -30,7 +31,8 @@ export function TaskCanvasCard({
   const themeVars = resolveNodeThemeStyle(task, mapTheme, nodeLevel, 'task');
   const nodeRef = { type: 'task', id: task.id };
   const isConnectSource = connectFrom?.type === 'task' && connectFrom?.id === task.id;
-  const isSelected = selectedNodeRef?.type === 'task' && selectedNodeRef?.id === task.id;
+  const isSelected = useIsNodeSelected(nodeRef)
+    || (selectedNodeRef?.type === 'task' && selectedNodeRef?.id === task.id);
   const status = STATUS_MAP[task.status] || STATUS_MAP.Todo;
   const [editing, setEditing] = useState(false);
 

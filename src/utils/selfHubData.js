@@ -6,7 +6,6 @@ import { computeCapacity, deriveCircadianContext, deriveCurrentState } from './c
 import {
   computeFocusWindow,
   formatCapacitySubtext,
-  formatFocusWindowLine,
 } from './focusWindowEngine';
 import { getNextBestMove, getCurrentStage, isCheckpointDone } from './logic';
 import { parseOuraPayload } from './heartRateMetric';
@@ -181,27 +180,94 @@ function extractOuraTempDeviationC(payload) {
   return null;
 }
 
-function buildSummaryStrip({ sleep, restingHr, hrvMs, tempDev, updatedAt }) {
+function formatHubDuration(seconds) {
+  if (typeof seconds !== 'number' || !Number.isFinite(seconds)) return null;
+  const mins = Math.max(0, Math.round(seconds / 60));
+  if (mins < 60) return `${mins}λ`;
+  const hours = Math.floor(mins / 60);
+  const rest = mins % 60;
+  return rest ? `${hours}ώ ${rest}λ` : `${hours}ώ`;
+}
+
+function readSeconds(...values) {
+  for (const value of values) {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+  }
+  return null;
+}
+
+function stressDayStatus(summary) {
+  if (summary === 'stressful') return 'High';
+  if (summary === 'restored') return 'Low';
+  if (summary === 'normal') return 'Normal';
+  return null;
+}
+
+function buildStressStripFields(ouraRow, payload) {
+  const summary = payload?.stress?.day_summary ?? null;
+  const stressLabel = formatHubDuration(
+    readSeconds(ouraRow?.stress_high_seconds, payload?.stress?.stress_high),
+  );
+  const recoveryLabel = formatHubDuration(
+    readSeconds(ouraRow?.recovery_high_seconds, payload?.stress?.recovery_high),
+  );
+  const pairs = [
+    stressLabel != null ? { value: stressLabel, tag: 'stress' } : null,
+    recoveryLabel != null ? { value: recoveryLabel, tag: 'recovery' } : null,
+  ].filter(Boolean);
+  const status = stressDayStatus(summary) ?? (pairs.length ? '' : NO_DATA);
+  const hasStress = pairs.length > 0 || status !== NO_DATA;
+
+  return {
+    pairs: pairs.length ? pairs : undefined,
+    status,
+    source: hasStress ? 'oura' : 'none',
+    confidence: hasStress ? 'medium' : 'none',
+  };
+}
+
+function buildFocusStripFields(focusWindow) {
+  if (!focusWindow || focusWindow.level === 'none' || !focusWindow.status || focusWindow.status === 'No data') {
+    return {
+      value: null,
+      status: NO_DATA,
+      source: 'none',
+      confidence: 'none',
+    };
+  }
+
+  const detail = focusWindow.detail && focusWindow.detail !== focusWindow.status ? focusWindow.detail : '';
+  return {
+    value: focusWindow.status,
+    status: detail,
+    source: 'computed',
+    confidence: 'medium',
+  };
+}
+
+function sleepDayStatus(sleep) {
+  if (sleep == null) return NO_DATA;
+  if (sleep >= 85) return 'Great';
+  if (sleep >= 70) return 'Solid';
+  return 'Light';
+}
+
+function buildSummaryStrip({ restingHr, focus, tempDev, updatedAt }) {
   const tempLabel = formatTempDeviationC(tempDev);
+  const focusFields = focus ?? {
+    value: null,
+    status: NO_DATA,
+    source: 'none',
+    confidence: 'none',
+  };
   return [
     createEmptyMetric({
-      label: 'Sleep',
-      value: sleep,
-      max: 100,
-      status: sleep != null ? (sleep >= 85 ? 'Great' : sleep >= 70 ? 'Solid' : 'Light') : NO_DATA,
-      source: sleep != null ? 'oura' : 'none',
+      label: 'Focus Window',
+      value: focusFields.value,
+      status: focusFields.status,
+      source: focusFields.source,
       updatedAt,
-      confidence: sleep != null ? 'high' : 'none',
-      isLive: false,
-    }),
-    createEmptyMetric({
-      label: 'HRV',
-      value: hrvMs,
-      unit: hrvMs != null ? 'ms' : undefined,
-      status: hrvMs != null ? 'Balanced' : NO_DATA,
-      source: hrvMs != null ? 'oura' : 'none',
-      updatedAt,
-      confidence: hrvMs != null ? 'medium' : 'none',
+      confidence: focusFields.confidence,
       isLive: false,
     }),
     createEmptyMetric({
@@ -246,10 +312,7 @@ function buildFromSelfData(selfData, { displayName, stages, ouraRow, projectActi
   const hrAgo = formatRelativeAgo(referenceTime);
 
   const stressSummary = payload.stress?.day_summary ?? null;
-  let stressStatus = NO_DATA;
-  if (stressSummary === 'stressful') stressStatus = 'High';
-  else if (stressSummary === 'restored') stressStatus = 'Low';
-  else if (stressSummary === 'normal') stressStatus = 'Normal';
+  const stressStrip = buildStressStripFields(ouraRow, payload);
 
   const currentState = deriveCurrentState(stressSummary, readiness);
   const circadian = deriveCircadianContext();
@@ -318,15 +381,14 @@ function buildFromSelfData(selfData, { displayName, stages, ouraRow, projectActi
       displayName: displayName ?? null,
     },
     floatingMetrics: {
-      recovery: createEmptyMetric({
-        label: 'Recovery',
-        value: readiness,
+      sleep: createEmptyMetric({
+        label: 'Sleep',
+        value: sleepScore,
         max: 100,
-        status: metrics.readiness?.status ?? NO_DATA,
-        secondary: readiness != null ? '/100' : undefined,
-        source: readiness != null ? 'oura' : 'none',
+        status: sleepDayStatus(sleepScore),
+        source: sleepScore != null ? 'oura' : 'none',
         updatedAt: referenceTime,
-        confidence: readiness != null ? 'high' : 'none',
+        confidence: sleepScore != null ? 'high' : 'none',
         isLive: false,
       }),
       heartRate: createEmptyMetric({
@@ -343,13 +405,14 @@ function buildFromSelfData(selfData, { displayName, stages, ouraRow, projectActi
         confidence: hrValue != null ? 'medium' : 'none',
         isLive: false,
       }),
-      stress: createEmptyMetric({
-        label: 'Stress',
-        value: null,
-        status: stressStatus,
-        source: stressSummary ? 'oura' : 'none',
+      hrv: createEmptyMetric({
+        label: 'HRV',
+        value: hrvMs,
+        unit: hrvMs != null ? 'ms' : undefined,
+        status: hrvMs != null ? 'Balanced' : NO_DATA,
+        source: hrvMs != null ? 'oura' : 'none',
         updatedAt: referenceTime,
-        confidence: stressSummary ? 'medium' : 'none',
+        confidence: hrvMs != null ? 'medium' : 'none',
         isLive: false,
       }),
       weight: createEmptyMetric({
@@ -380,13 +443,14 @@ function buildFromSelfData(selfData, { displayName, stages, ouraRow, projectActi
               : 'none',
         isLive: false,
       }),
-      focusWindow: createEmptyMetric({
-        label: 'Focus Window',
+      stress: createEmptyMetric({
+        label: 'Stress',
         value: null,
-        status: formatFocusWindowLine(focusWindow),
-        source: readiness != null ? 'computed' : 'none',
+        pairs: stressStrip.pairs,
+        status: stressStrip.status,
+        source: stressStrip.source,
         updatedAt: referenceTime,
-        confidence: readiness != null ? 'medium' : 'none',
+        confidence: stressStrip.confidence,
         isLive: false,
       }),
       movement,
@@ -416,9 +480,8 @@ function buildFromSelfData(selfData, { displayName, stages, ouraRow, projectActi
       source: nextMove?.type ? 'computed' : 'none',
     },
     summaryStrip: buildSummaryStrip({
-      sleep: sleepScore,
       restingHr,
-      hrvMs,
+      focus: buildFocusStripFields(focusWindow),
       tempDev,
       updatedAt: referenceTime,
     }),
@@ -454,11 +517,11 @@ function buildEmptyView({ displayName, ouraStatus, scaleConnected, projectActivi
       displayName: displayName ?? null,
     },
     floatingMetrics: {
-      recovery: emptyMetric('Recovery'),
+      sleep: emptyMetric('Sleep'),
       heartRate: emptyMetric('HR'),
-      stress: emptyMetric('Stress'),
+      hrv: emptyMetric('HRV'),
       weight: emptyMetric('Weight'),
-      focusWindow: emptyMetric('Focus Window'),
+      stress: emptyMetric('Stress'),
       movement: emptyMetric('Movement'),
     },
     capacity: createEmptyCapacity({ subtext: usingOura ? 'Sync Oura for capacity' : 'No data' }),
@@ -479,9 +542,8 @@ function buildEmptyView({ displayName, ouraStatus, scaleConnected, projectActivi
       source: nextMove?.type ? 'computed' : 'none',
     },
     summaryStrip: buildSummaryStrip({
-      sleep: null,
       restingHr: null,
-      hrvMs: null,
+      focus: null,
       tempDev: null,
       updatedAt: referenceTime,
     }),

@@ -23,8 +23,17 @@ export function openMailAuthorizeUrl(url) {
   window.open(url, '_blank', 'noopener,noreferrer');
 }
 
-export async function startMailConnect() {
-  const payload = await invokeAssistantFunction('mail-oauth-start', { return_to: getMailReturnUrl() });
+export const ZOHO_REGIONS = [
+  { id: 'eu', label: 'Ευρώπη (zoho.eu)' },
+  { id: 'us', label: 'ΗΠΑ (zoho.com)' },
+  { id: 'in', label: 'Ινδία (zoho.in)' },
+  { id: 'au', label: 'Αυστραλία (zoho.com.au)' },
+];
+
+export async function startMailConnect({ provider = 'zoho', region = 'eu' } = {}) {
+  const body = { return_to: getMailReturnUrl(), provider };
+  if (provider === 'zoho') body.region = region;
+  const payload = await invokeAssistantFunction('mail-oauth-start', body);
   if (payload?.url) openMailAuthorizeUrl(payload.url);
   return payload;
 }

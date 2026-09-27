@@ -21,6 +21,7 @@ export const NO_DATA = 'No data';
  * @property {number|null} [resting] — resting HR (bpm)
  * @property {number|null} [avg] — average HR (bpm)
  * @property {{ type: string, points?: number[], samples?: unknown[], startLabel?: string, endLabel?: string, sampleCount?: number }|undefined} [chart]
+ * @property {{ value: string, tag: string }[]} [pairs]
  */
 
 /** @typedef {Object} SelfHubHeader
@@ -100,11 +101,11 @@ export const NO_DATA = 'No data';
  */
 
 /** @typedef {Object} SelfHubFloatingMetrics
- * @property {SelfHubMetric} recovery
+ * @property {SelfHubMetric} sleep
  * @property {SelfHubMetric} heartRate
- * @property {SelfHubMetric} stress
+ * @property {SelfHubMetric} hrv
  * @property {SelfHubMetric} weight
- * @property {SelfHubMetric} focusWindow
+ * @property {SelfHubMetric} stress
  * @property {SelfHubMetric} movement
  */
 

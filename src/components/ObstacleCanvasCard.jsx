@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { canvasStyleClasses } from '../utils/canvasNodes';
 import { resolveNodeThemeStyle } from '../utils/mapTheme';
 import { useCanvasNodeCard } from '../hooks/useCanvasNodeCard';
+import { useIsNodeSelected } from '../hooks/useCanvasMultiSelect';
 import { PriorityBadge, PrioritySelect } from './PrioritySelect';
 
 const SEVERITY_CLASS = {
@@ -28,7 +29,8 @@ export function ObstacleCanvasCard({
   const themeVars = resolveNodeThemeStyle(obstacle, mapTheme, nodeLevel, 'obstacle');
   const nodeRef = { type: 'obstacle', id: obstacle.id };
   const isConnectSource = connectFrom?.type === 'obstacle' && connectFrom?.id === obstacle.id;
-  const isSelected = selectedNodeRef?.type === 'obstacle' && selectedNodeRef?.id === obstacle.id;
+  const isSelected = useIsNodeSelected(nodeRef)
+    || (selectedNodeRef?.type === 'obstacle' && selectedNodeRef?.id === obstacle.id);
   const [editing, setEditing] = useState(false);
   const severityClass = SEVERITY_CLASS[obstacle.severity] || 'medium';
 

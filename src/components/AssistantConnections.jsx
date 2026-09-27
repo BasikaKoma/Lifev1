@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { disconnectMail, getMailStatus, startMailConnect, syncMail } from '../lib/assistant/mail';
+import { disconnectMail, getMailStatus, startMailConnect, syncMail, ZOHO_REGIONS } from '../lib/assistant/mail';
 import { connectErp, disconnectErp, getErpStatus } from '../lib/assistant/erp';
 import { hasElectronBrain } from '../platform/brain';
 
@@ -11,6 +11,7 @@ export function AssistantConnections() {
   const [apiKey, setApiKey] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [zohoRegion, setZohoRegion] = useState('eu');
 
   const reload = async () => {
     const [mailStatus, erpStatus] = await Promise.all([
@@ -25,13 +26,18 @@ export function AssistantConnections() {
     reload();
   }, []);
 
-  const connectMail = async () => {
+  const connectMail = async (provider) => {
     setBusy(true);
     setError('');
     try {
-      await startMailConnect();
+      await startMailConnect({ provider, region: zohoRegion });
     } catch (err) {
-      setError(err.message || 'Δεν άνοιξε η σύνδεση mail.');
+      const message = err.message || '';
+      if (message.includes('Missing Zoho OAuth configuration')) {
+        setError('Λείπουν τα ZOHO_CLIENT_ID και ZOHO_CLIENT_SECRET στον server.');
+      } else {
+        setError(message || 'Δεν άνοιξε η σύνδεση mail.');
+      }
     } finally {
       setBusy(false);
     }
@@ -99,13 +105,29 @@ export function AssistantConnections() {
         <h3 className="settings-block__title">Mail</h3>
         <p className="settings-block__desc">
           {mail?.connected
-            ? `Συνδεδεμένο${mail.email ? ` — ${mail.email}` : ''}. Ο βοηθός διαβάζει περιλήψεις και ετοιμάζει απάντηση. Στέλνει μόνο μετά από ναι. Το token δεν φτάνει στο μοντέλο.`
-            : 'Σύνδεσε το Gmail όπως το Oura. Ο βοηθός ξεχωρίζει τα επείγοντα και ετοιμάζει απάντηση στο ύφος σου.'}
+            ? `Συνδεδεμένο${mail.provider === 'gmail' ? ' Gmail' : ' Zoho'}${mail.email ? ` — ${mail.email}` : ''}. Ο βοηθός διαβάζει περιλήψεις και ετοιμάζει απάντηση. Στέλνει μόνο μετά από ναι. Το token δεν φτάνει στο μοντέλο.`
+            : 'Σύνδεσε το Zoho Mail. Αν το ανοίγεις σε zoho.eu, άφησε Ευρώπη. Ο βοηθός ξεχωρίζει τα επείγοντα και ετοιμάζει απάντηση στο ύφος σου.'}
         </p>
+        <select
+          className="input"
+          value={zohoRegion}
+          disabled={busy}
+          onChange={(event) => setZohoRegion(event.target.value)}
+          aria-label="Περιοχή Zoho"
+        >
+          {ZOHO_REGIONS.map((region) => (
+            <option key={region.id} value={region.id}>{region.label}</option>
+          ))}
+        </select>
         <div className="settings-inline-actions">
-          <button type="button" className="btn btn--primary" disabled={busy} onClick={connectMail}>
-            {mail?.connected ? 'Σύνδεση ξανά' : 'Connect Mail'}
+          <button type="button" className="btn btn--primary" disabled={busy} onClick={() => connectMail('zoho')}>
+            {mail?.provider === 'zoho' ? 'Σύνδεση Zoho ξανά' : 'Σύνδεση Zoho'}
           </button>
+          {mail?.connected ? null : (
+            <button type="button" className="btn btn--outline" disabled={busy} onClick={() => connectMail('gmail')}>
+              Σύνδεση Gmail
+            </button>
+          )}
           {mail?.connected ? (
             <>
               <button type="button" className="btn btn--outline" disabled={busy} onClick={refreshMail}>

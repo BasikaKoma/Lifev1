@@ -10934,24 +10934,7 @@ to {
   pointer-events: none;
 }
 
-.lifeline-day-tick__score {
-  position:absolute;
-  left:calc(50% + 88px);
-  top:8px;
-  font-size:.55rem;
-  font-weight:700;
-  letter-spacing:.04em;
-  color:#34d399cc;
-  pointer-events:none;
-  white-space:nowrap
-}
-
-.lifeline-day-tick--today .lifeline-day-tick__score {
-  color:#34d399
-}
-
 .lifeline-day-ticks[data-has-braces="1"] .lifeline-day-tick__label,
-.lifeline-day-ticks[data-has-braces="1"] .lifeline-day-tick__score,
 .lifeline-day-ticks[data-has-braces="1"] .lifeline-day-tick__plan-label {
   left:calc(50% + 112px)
 }

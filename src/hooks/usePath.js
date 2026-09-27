@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { normalizeWheel } from '../lib/path/wheel';
 import {
   createEmptyBlock,
   createEmptyGoal,
@@ -266,6 +267,25 @@ export function usePath() {
     updateBundle((prev) => ({ plan: { ...prev.plan, ...plan } }));
   }, [updateBundle]);
 
+  const updateWheel = useCallback((patch) => {
+    updateBundle((prev) => {
+      const current = normalizeWheel(prev.plan?.wheel);
+      const nextPatch = typeof patch === 'function' ? patch(current) : patch;
+      return {
+        plan: {
+          ...prev.plan,
+          wheel: normalizeWheel({
+            ...current,
+            ...nextPatch,
+            scores: { ...current.scores, ...(nextPatch.scores || {}) },
+            businesses: { ...current.businesses, ...(nextPatch.businesses || {}) },
+            updatedAt: nextPatch.updatedAt || nowIso(),
+          }),
+        },
+      };
+    });
+  }, [updateBundle]);
+
   useEffect(() => {
     const sourceFile = bundle?.plan?.sourceFile;
     if (!sourceFile?.id || sourceFile.storagePath) return undefined;
@@ -348,6 +368,7 @@ export function usePath() {
     metrics,
     stats,
     updatePlan,
+    updateWheel,
     upsertGoal,
     archiveGoal,
     upsertBlock,

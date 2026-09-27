@@ -5,7 +5,9 @@ import { NO_DATA } from '../../../utils/selfHubSchema';
 
 const METRIC_ICONS = {
   Recovery: 'heart',
+  Sleep: 'moon',
   HR: 'pulse',
+  HRV: 'pulse',
   Stress: 'stress',
   Weight: 'weight',
   'Focus Window': 'aura',
@@ -258,7 +260,11 @@ export function SelfFloatingMetric({
     const isMovement = orbKind === 'movement';
 
     return (
-      <div className={`self-float-metric self-float-metric--orb self-float-metric--${position}`}>
+      <div
+        className={`self-float-metric self-float-metric--orb self-float-metric--${position}${
+          metric.label === 'Sleep' ? ' self-float-metric--sleep' : ''
+        }`}
+      >
         <div className="self-float-metric__orb">
           <svg className="self-float-metric__orb-ring" viewBox="0 0 100 100" aria-hidden>
             <circle className="self-float-metric__orb-ring-bg" cx="50" cy="50" r={ORB_RING_RADIUS} />
@@ -299,6 +305,9 @@ export function SelfFloatingMetric({
                   {metric.max ? (
                     <span className="self-float-metric__orb-suffix">/{metric.max}</span>
                   ) : null}
+                  {metric.status && metric.status !== NO_DATA ? (
+                    <span className="self-float-metric__orb-empty">{metric.status}</span>
+                  ) : null}
                 </>
               )
             ) : (
@@ -318,7 +327,16 @@ export function SelfFloatingMetric({
         </span>
         <div className="self-float-metric__content">
           <span className="self-float-metric__label">{metric.label}</span>
-          {hasValue ? (
+          {Array.isArray(metric.pairs) && metric.pairs.length > 0 ? (
+            <span className="self-float-metric__pairs">
+              {metric.pairs.map((pair) => (
+                <span key={pair.tag} className="self-float-metric__pair">
+                  <span className="self-float-metric__value">{pair.value}</span>
+                  <span className="self-float-metric__pair-tag">{pair.tag}</span>
+                </span>
+              ))}
+            </span>
+          ) : hasValue ? (
             <span className="self-float-metric__value">
               {metric.value}
               {metric.unit ? <span className="self-float-metric__unit">{metric.unit}</span> : null}
@@ -331,6 +349,8 @@ export function SelfFloatingMetric({
               <WeightCalories caloriesIn={metric.caloriesIn} caloriesOut={metric.caloriesOut} />
               <WaistFoot waistCm={metric.waistCm} />
             </>
+          ) : Array.isArray(metric.pairs) && metric.pairs.length > 0 && metric.status ? (
+            <span className="self-float-metric__secondary">{metric.status}</span>
           ) : metric.secondary ? (
             <span className="self-float-metric__secondary">{metric.secondary}</span>
           ) : hasValue && metric.status && metric.status !== NO_DATA ? (

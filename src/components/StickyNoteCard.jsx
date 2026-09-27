@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { canvasStyleClasses } from '../utils/canvasNodes';
 import { resolveNodeThemeStyle } from '../utils/mapTheme';
 import { useCanvasNodeCard } from '../hooks/useCanvasNodeCard';
+import { useIsNodeSelected } from '../hooks/useCanvasMultiSelect';
 import { useCanvasNodeResize, STICKY_RESIZE_HANDLES } from '../hooks/useCanvasNodeResize';
 import { formatArchiveDate } from '../utils/archive';
 import { getNotePreviewLine, STICKY_CHIP_W } from '../utils/noteSettle';
@@ -96,8 +97,8 @@ export function StickyNoteCard({
   const sizeLocked = sticky.sizeLocked === true;
   const isConnectSource =
     connectFrom?.type === nodeRef.type && connectFrom?.id === nodeRef.id;
-  const isSelected =
-    selectedNodeRef?.type === nodeRef.type && selectedNodeRef?.id === nodeRef.id;
+  const isSelected = useIsNodeSelected(nodeRef)
+    || (selectedNodeRef?.type === nodeRef.type && selectedNodeRef?.id === nodeRef.id);
   const chip = settled && !settledByCheckpoints && !peeked && !editing;
   const done = settled || sticky.done || sticky.archived;
 

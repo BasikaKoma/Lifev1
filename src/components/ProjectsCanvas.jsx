@@ -59,11 +59,14 @@ import {
   collectCanvasObstacles,
   collectCanvasResources,
   collectCanvasTasks,
+  buildNodeRegistry,
+  findNodesInRect,
   getBoardSizeWithStickies,
   getNodeToolbarPosition,
   sameNodeRef,
   nodeRefKey,
 } from '../utils/canvasNodes';
+import { CanvasGroupDragContext, CanvasMultiSelectContext } from '../hooks/useCanvasMultiSelect';
 import {
   getChildRefs,
   getConnectedRefs,
@@ -700,6 +703,7 @@ const CanvasBoard = memo(function CanvasBoard({
   inkBindDownRef,
   selectBindRef,
   onInkSelectionChange,
+  onSelectionRectCommit,
   autoEditStickyId = null,
   onAutoEditStickyConsumed,
   isLifeline = false,
@@ -720,7 +724,6 @@ const CanvasBoard = memo(function CanvasBoard({
   selectedDayDate = null,
   selectedPeriod = null,
   dayViewPhase = DAY_VIEW_PHASE.timeline,
-  routineTemplates = [],
   onPeriodClick,
 }) {
   const layoutWithOrigin =
@@ -758,6 +761,7 @@ const CanvasBoard = memo(function CanvasBoard({
           <InkSelectionHost
             strokes={canvasInk}
             onSelectionChange={onInkSelectionChange}
+            onRectCommit={onSelectionRectCommit}
             bindDownRef={selectBindRef}
           />
         </>
@@ -803,7 +807,6 @@ const CanvasBoard = memo(function CanvasBoard({
                 hiddenTickRanges={lifelineHiddenTickRanges}
                 selectedDate={selectedDayDate}
                 selectedPeriod={selectedPeriod}
-                routineTemplates={routineTemplates}
               />
             ) : null
           }
@@ -1129,6 +1132,7 @@ export function ProjectsCanvas({
   onAddCanvasTask,
   onUpdateCanvasTask,
   onMoveCanvasTask,
+  onMoveCanvasNodes,
   onRemoveCanvasTask,
   onAddCanvasInkStroke,
   onRemoveCanvasInkStrokes,
@@ -1178,7 +1182,29 @@ export function ProjectsCanvas({
     setConnectFrom(null);
     setConnectPreviewPos(null);
   }, []);
-  const [selectedNodeRef, setSelectedNodeRef] = useState(null);
+  const [selectedNodeRef, setSelectedNodeRefState] = useState(null);
+  const [selectedNodeRefs, setSelectedNodeRefs] = useState([]);
+  const selectedNodeRefsRef = useRef([]);
+  selectedNodeRefsRef.current = selectedNodeRefs;
+
+  const applyNodeSelection = useCallback((refs, primary) => {
+    const list = (refs || []).filter(Boolean);
+    const nextPrimary = primary === undefined ? (list[list.length - 1] || null) : primary;
+    const normalized = nextPrimary && !list.some((item) => sameNodeRef(item, nextPrimary))
+      ? [...list, nextPrimary]
+      : list;
+    setSelectedNodeRefs(normalized);
+    setSelectedNodeRefState(nextPrimary);
+  }, []);
+
+  const setSelectedNodeRef = useCallback((value) => {
+    applyNodeSelection(value ? [value] : [], value || null);
+  }, [applyNodeSelection]);
+
+  const selectedNodeKeys = useMemo(
+    () => new Set(selectedNodeRefs.map((ref) => nodeRefKey(ref))),
+    [selectedNodeRefs]
+  );
 
   useEffect(() => {
     if (!onBrainContextChange) return undefined;
@@ -1493,6 +1519,155 @@ export function ProjectsCanvas({
     onMapThemeChange({ lifeline: synced.lifeline, roadmap: synced.roadmap });
   }, [isLifeline, mapTheme, lifelineBoundDates, onMapThemeChange]);
   const projectsLayout = useMemo(() => getRoadmapLayout(activeTheme), [activeTheme]);
+
+  const canvasEntitiesRef = useRef(null);
+  canvasEntitiesRef.current = {
+    stages,
+    backlog,
+    canvasStickies,
+    canvasObstacles,
+    canvasResources,
+    canvasTasks,
+    canvasConnections,
+    projectsLayout,
+  };
+  const groupDragRef = useRef(null);
+  const onMoveCanvasNodesRef = useRef(onMoveCanvasNodes);
+  onMoveCanvasNodesRef.current = onMoveCanvasNodes;
+
+  const readNodePosition = useCallback((ref) => {
+    const data = canvasEntitiesRef.current;
+    if (!data || !ref) return null;
+    if (ref.type === 'milestone') {
+      const stage = (data.stages || []).find((item) => item.id === ref.id);
+      if (!stage || typeof stage.posX !== 'number' || typeof stage.posY !== 'number') return null;
+      return { x: stage.posX, y: stage.posY };
+    }
+    const fromList = (list) => {
+      const item = (list || []).find((entry) => entry.id === ref.id);
+      if (!item || typeof item.canvasX !== 'number' || typeof item.canvasY !== 'number') return null;
+      return { x: item.canvasX, y: item.canvasY };
+    };
+    if (ref.type === 'sticky') return fromList(data.canvasStickies);
+    if (ref.type === 'obstacle') return fromList(data.canvasObstacles);
+    if (ref.type === 'resource') return fromList(data.canvasResources);
+    if (ref.type === 'task') return fromList(data.canvasTasks);
+    if (ref.type === 'idea') {
+      const list = ref.source === 'backlog'
+        ? data.backlog
+        : ((data.stages || []).find((stage) => stage.id === ref.stageId)?.ideas || []);
+      return fromList(list);
+    }
+    return null;
+  }, []);
+
+  const groupDragHandlers = useRef({
+    start: () => false,
+    move: () => {},
+    end: () => {},
+  });
+  groupDragHandlers.current = {
+    start(nodeRef) {
+      const selected = selectedNodeRefsRef.current;
+      const inGroup = selected.length > 1 && selected.some((item) => sameNodeRef(item, nodeRef));
+      if (!inGroup) {
+        const already = selected.length === 1 && sameNodeRef(selected[0], nodeRef);
+        if (!already) applyNodeSelection([nodeRef], nodeRef);
+        groupDragRef.current = null;
+        return false;
+      }
+      const origins = [];
+      for (const ref of selected) {
+        const pos = readNodePosition(ref);
+        if (pos) origins.push({ ref, x: pos.x, y: pos.y });
+      }
+      const leader = origins.find((origin) => sameNodeRef(origin.ref, nodeRef));
+      if (!leader || origins.length < 2) {
+        groupDragRef.current = null;
+        return false;
+      }
+      groupDragRef.current = { origins };
+      return true;
+    },
+    move(nodeRef, x, y) {
+      const session = groupDragRef.current;
+      if (!session || !onMoveCanvasNodesRef.current) return;
+      const leader = session.origins.find((origin) => sameNodeRef(origin.ref, nodeRef));
+      if (!leader) return;
+      const dx = x - leader.x;
+      const dy = y - leader.y;
+      onMoveCanvasNodesRef.current(session.origins.map((origin) => ({
+        ref: origin.ref,
+        x: origin.x + dx,
+        y: origin.y + dy,
+      })));
+    },
+    end(nodeRef, x, y) {
+      const session = groupDragRef.current;
+      if (session && onMoveCanvasNodesRef.current) {
+        const leader = session.origins.find((origin) => sameNodeRef(origin.ref, nodeRef));
+        if (leader) {
+          const dx = x - leader.x;
+          const dy = y - leader.y;
+          onMoveCanvasNodesRef.current(session.origins.map((origin) => ({
+            ref: origin.ref,
+            x: origin.x + dx,
+            y: origin.y + dy,
+          })), { commitPlanDates: true });
+        }
+      }
+      groupDragRef.current = null;
+    },
+  };
+
+  const groupDragApi = useMemo(() => ({
+    start: (nodeRef) => groupDragHandlers.current.start(nodeRef),
+    move: (nodeRef, x, y) => groupDragHandlers.current.move(nodeRef, x, y),
+    end: (nodeRef, x, y) => groupDragHandlers.current.end(nodeRef, x, y),
+  }), []);
+
+  useEffect(() => onCanvasWorldShift((dy) => {
+    const session = groupDragRef.current;
+    if (!session?.origins) return;
+    session.origins = session.origins.map((origin) => ({ ...origin, y: origin.y + dy }));
+  }), []);
+
+  const handleSelectionRectCommit = useCallback((rect, meta) => {
+    if (!rect) return;
+    const additive = Boolean(meta?.additive);
+    const width = Math.abs(rect.x2 - rect.x1);
+    const height = Math.abs(rect.y2 - rect.y1);
+    if (width < 6 && height < 6) {
+      if (!additive) applyNodeSelection([], null);
+      return;
+    }
+    const data = canvasEntitiesRef.current;
+    if (!data) return;
+    const registry = buildNodeRegistry(
+      data.stages,
+      data.backlog,
+      data.canvasStickies,
+      data.canvasObstacles,
+      data.canvasResources,
+      data.canvasTasks,
+      data.projectsLayout,
+      data.canvasConnections
+    );
+    const hits = findNodesInRect(registry, rect.x1, rect.y1, rect.x2, rect.y2);
+    if (!hits.length) {
+      if (!additive) applyNodeSelection([], null);
+      return;
+    }
+    if (additive) {
+      const merged = [...selectedNodeRefsRef.current];
+      for (const ref of hits) {
+        if (!merged.some((item) => sameNodeRef(item, ref))) merged.push(ref);
+      }
+      applyNodeSelection(merged, hits[hits.length - 1]);
+      return;
+    }
+    applyNodeSelection(hits, hits[hits.length - 1]);
+  }, [applyNodeSelection]);
   const projectsOrigin = useMemo(() => getRoadmapOrigin(activeTheme), [activeTheme]);
   const lifelineConfig = useMemo(
     () => (isLifeline ? getLifelineConfig(activeTheme, lifelineBoundDates) : null),
@@ -2191,7 +2366,7 @@ export function ProjectsCanvas({
     });
   }, [onMapThemeChange, projectsOrigin]);
 
-  const handleNodeSelect = useCallback((nodeRef) => {
+  const handleNodeSelect = useCallback((nodeRef, event) => {
     if (connectFrom) {
       if (sameNodeRef(connectFrom, nodeRef)) {
         cancelConnectMode();
@@ -2201,13 +2376,22 @@ export function ProjectsCanvas({
       cancelConnectMode();
       return;
     }
+    const additive = Boolean(event?.shiftKey || event?.metaKey || event?.ctrlKey);
+    const movable = nodeRef && nodeRef.type !== 'origin' && nodeRef.type !== 'checkpoint';
     startTransition(() => {
-      setSelectedNodeRef(nodeRef);
       setSelectedStrokeIds([]);
       setSpineSelected(false);
       setOriginSelected(nodeRef?.type === 'origin');
+      if (additive && movable) {
+        const prev = selectedNodeRefsRef.current;
+        const exists = prev.some((item) => sameNodeRef(item, nodeRef));
+        const next = exists ? prev.filter((item) => !sameNodeRef(item, nodeRef)) : [...prev, nodeRef];
+        applyNodeSelection(next, exists ? (next[next.length - 1] || null) : nodeRef);
+        return;
+      }
+      applyNodeSelection(nodeRef ? [nodeRef] : [], nodeRef || null);
     });
-  }, [connectFrom, onAddCanvasConnection, cancelConnectMode]);
+  }, [connectFrom, onAddCanvasConnection, cancelConnectMode, applyNodeSelection]);
 
   const handleMoveIdea = useCallback((source, stageId, ideaId, canvasX, canvasY) => {
     if (source === 'backlog') {
@@ -3205,6 +3389,8 @@ export function ProjectsCanvas({
   ]);
 
   return (
+    <CanvasMultiSelectContext.Provider value={selectedNodeKeys}>
+    <CanvasGroupDragContext.Provider value={groupDragApi}>
     <section
       ref={containerRef}
       className={`projects-canvas-view${isFullscreen ? ' projects-canvas-view--fullscreen' : ''}${dayView.isActive ? ' projects-canvas-view--day-view' : ''}`}
@@ -3444,6 +3630,7 @@ export function ProjectsCanvas({
             selectedStrokeIds={isLifeline ? [] : selectedStrokeIds}
             selectBindRef={isLifeline ? undefined : selectDownRef}
             onInkSelectionChange={isLifeline ? undefined : setSelectedStrokeIds}
+            onSelectionRectCommit={isLifeline ? undefined : handleSelectionRectCommit}
             autoEditStickyId={autoEditStickyId}
             onAutoEditStickyConsumed={() => setAutoEditStickyId(null)}
             isLifeline={isLifeline}
@@ -3465,7 +3652,6 @@ export function ProjectsCanvas({
             selectedDayDate={null}
             selectedPeriod={null}
             dayViewPhase={DAY_VIEW_PHASE.timeline}
-            routineTemplates={(mapTheme || activeTheme)?.lifeline?.routineTemplates ?? []}
           />
           </ZoomCanvas>
 
@@ -3597,6 +3783,7 @@ export function ProjectsCanvas({
           stages={stages}
           obstacles={canvasObstacles}
           pathBundle={pathBundle}
+          onUpdateDay={onUpdateLifelineDay}
           onClose={handleCloseLifelineDay}
           onNavigate={(next) => handleOpenLifelineDay(next.startDate, null, next.kind)}
         />
@@ -3695,5 +3882,7 @@ export function ProjectsCanvas({
         />
       )}
     </section>
+    </CanvasGroupDragContext.Provider>
+    </CanvasMultiSelectContext.Provider>
   );
 }

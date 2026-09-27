@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { canvasStyleClasses } from '../utils/canvasNodes';
 import { resolveNodeThemeStyle } from '../utils/mapTheme';
 import { useCanvasNodeCard } from '../hooks/useCanvasNodeCard';
+import { useIsNodeSelected } from '../hooks/useCanvasMultiSelect';
 import { PriorityBadge, PrioritySelect } from './PrioritySelect';
 
 export function ResourceCanvasCard({
@@ -22,7 +23,8 @@ export function ResourceCanvasCard({
   const themeVars = resolveNodeThemeStyle(resource, mapTheme, nodeLevel, 'resource');
   const nodeRef = { type: 'resource', id: resource.id };
   const isConnectSource = connectFrom?.type === 'resource' && connectFrom?.id === resource.id;
-  const isSelected = selectedNodeRef?.type === 'resource' && selectedNodeRef?.id === resource.id;
+  const isSelected = useIsNodeSelected(nodeRef)
+    || (selectedNodeRef?.type === 'resource' && selectedNodeRef?.id === resource.id);
   const [editing, setEditing] = useState(false);
 
   const { dragging, handlePointerDown, handlePointerMove, handlePointerUp } = useCanvasNodeCard({

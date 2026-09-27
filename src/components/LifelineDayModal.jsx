@@ -787,6 +787,23 @@ function DayLabBody({
           <SelfDayProgress
             dayProgress={dayProgress}
             events={timeline.events}
+            eventNotes={entry.eventNotes}
+            onSaveEvent={
+              onUpdateDay
+                ? (eventId, fields) => {
+                    const current = getDayEntry(lifelineDays, date).eventNotes || {};
+                    onUpdateDay(date, {
+                      eventNotes: {
+                        ...current,
+                        [eventId]: {
+                          note: fields.note,
+                          detail: fields.detail,
+                        },
+                      },
+                    });
+                  }
+                : undefined
+            }
             embedded
             live={date === localTodayIsoDate()}
           />

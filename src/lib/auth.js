@@ -50,16 +50,27 @@ export async function getCurrentSession() {
   return data.session;
 }
 
+const PUBLIC_APP_URL = 'https://lifev1-app.pages.dev';
+
+/** Where confirmation and reset emails should land. Local origins stay off this path. */
+export function getAuthRedirectUrl() {
+  if (typeof window === 'undefined') return PUBLIC_APP_URL;
+  const origin = window.location.origin || '';
+  if (!origin || /localhost|127\.0\.0\.1/i.test(origin)) return PUBLIC_APP_URL;
+  return origin.replace(/\/$/, '');
+}
+
 export async function signUpWithEmail(email, password, displayName) {
   const supabase = getSupabaseClient();
   if (!supabase) throw new Error('Supabase is not configured');
 
+  const options = { emailRedirectTo: getAuthRedirectUrl() };
+  if (displayName) options.data = { display_name: displayName.trim() };
+
   const { data, error } = await supabase.auth.signUp({
     email: email.trim(),
     password,
-    options: displayName
-      ? { data: { display_name: displayName.trim() } }
-      : undefined,
+    options,
   });
 
   if (error) throw error;

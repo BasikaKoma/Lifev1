@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useZoomTransform } from '../components/ZoomCanvas';
 import { onCanvasWorldShift } from '../utils/canvasWorld';
+import { useCanvasGroupDrag } from './useCanvasMultiSelect';
 
 export function useCanvasNodeCard({
   readOnly,
@@ -13,10 +14,12 @@ export function useCanvasNodeCard({
   connectModeActive = false,
 }) {
   const { scale } = useZoomTransform();
+  const groupDrag = useCanvasGroupDrag();
   const [dragging, setDragging] = useState(false);
   const dragOrigin = useRef(null);
   const moved = useRef(false);
   const pendingDrag = useRef(false);
+  const groupActive = useRef(false);
   const pointerIdRef = useRef(null);
   const DRAG_THRESHOLD_PX = 5;
 
@@ -51,7 +54,7 @@ export function useCanvasNodeCard({
       if (onNodeSelect) {
         e.preventDefault();
         e.stopPropagation();
-        onNodeSelect(nodeRef);
+        onNodeSelect(nodeRef, e);
       }
       return;
     }
@@ -73,6 +76,7 @@ export function useCanvasNodeCard({
       if (Math.abs(dxPx) <= DRAG_THRESHOLD_PX && Math.abs(dyPx) <= DRAG_THRESHOLD_PX) return;
 
       pendingDrag.current = false;
+      groupActive.current = groupDrag?.start(nodeRef) === true;
       setDragging(true);
       moved.current = true;
       if (pointerIdRef.current != null) {
@@ -85,17 +89,27 @@ export function useCanvasNodeCard({
     const dx = (e.clientX - dragOrigin.current.x) / scale;
     const dy = (e.clientY - dragOrigin.current.y) / scale;
     if (Math.abs(dx) > 2 || Math.abs(dy) > 2) moved.current = true;
-    onMove(dragOrigin.current.posX + dx, dragOrigin.current.posY + dy);
+    const nextX = dragOrigin.current.posX + dx;
+    const nextY = dragOrigin.current.posY + dy;
+    if (groupActive.current) {
+      groupDrag.move(nodeRef, nextX, nextY);
+      return;
+    }
+    onMove(nextX, nextY);
   };
 
   const handlePointerUp = (e) => {
-    if (pendingDrag.current && !dragging) {
+    if (groupActive.current && dragOrigin.current) {
+      const dx = (e.clientX - dragOrigin.current.x) / scale;
+      const dy = (e.clientY - dragOrigin.current.y) / scale;
+      groupDrag?.end(nodeRef, dragOrigin.current.posX + dx, dragOrigin.current.posY + dy);
+    } else if (pendingDrag.current && !dragging) {
       pendingDrag.current = false;
       if (!e.altKey) {
         if (connectModeActive && onConnectClick) {
           onConnectClick(nodeRef);
         } else if (onNodeSelect) {
-          onNodeSelect(nodeRef);
+          onNodeSelect(nodeRef, e);
         }
       }
     } else if (dragging && moved.current && onMoveEnd && dragOrigin.current) {
@@ -106,11 +120,12 @@ export function useCanvasNodeCard({
       if (connectModeActive && onConnectClick) {
         onConnectClick(nodeRef);
       } else if (onNodeSelect) {
-        onNodeSelect(nodeRef);
+        onNodeSelect(nodeRef, e);
       }
     }
 
     pendingDrag.current = false;
+    groupActive.current = false;
     setDragging(false);
     dragOrigin.current = null;
     pointerIdRef.current = null;

@@ -24,8 +24,22 @@ import { listOpenItems } from '../lib/assistant/openItems';
 import { listMailMessages } from '../lib/assistant/mail';
 import { queryErp } from '../lib/assistant/erp';
 import { brainListDir, brainListRoots, brainReadImage, brainReadText, hasElectronBrain } from '../platform/brain';
+import { fetchOuraMetricsRange } from '../lib/oura';
+import { addDays } from '../utils/lifeline';
+import { localTodayIsoDate } from '../utils/selfDateUtils';
 
 const MAX_TOOL_ROUNDS = 6;
+
+async function loadBriefingSleepRows(selectedDate) {
+  try {
+    const endDay = selectedDate || localTodayIsoDate();
+    const startDay = addDays(endDay, -20);
+    if (!startDay) return [];
+    return await fetchOuraMetricsRange({ startDay, endDay, limit: 30 });
+  } catch {
+    return [];
+  }
+}
 
 function buildInstructions(kind, routeMode) {
   const briefing = kind === 'briefing' || routeMode === 'briefing';
@@ -44,7 +58,7 @@ LOCAL FILES is authoritative. If it lists folders, you already have access. Answ
 Never rely on OpenAI conversation_id or previous_response_id. Never invent facts.
 Reply in the user's language (Greek or English).
 ${briefing
-    ? 'WEEKLY BRIEFING. From SNAPSHOT.patterns say: what moved, what is stuck, the next move. 3-6 concrete insights with real source IDs. actions=[] unless they asked to create or complete something.'
+    ? 'WEEKLY BRIEFING. Lead with SNAPSHOT.patterns.sleepClock. Say the typical bedtime and wake time, the typical duration, and how many minutes each drifted (driftMinutes; null means fewer than two nights). Then name nights in sleepClock.entries where a late bedtime, a short duration, or a low sleepScore lined up with wakeDayHadWork false. The entry date is the morning you woke into, and wakeDayHadWork is whether that Lifeline day had work. If sleepClock.count is 0, say the sleep clock is missing and continue. Then from the rest of SNAPSHOT.patterns say what moved, what is stuck, and the next move. 3-6 concrete insights with real source IDs. actions=[] unless they asked to create or complete something.'
     : (kind === 'ask'
       ? 'Answer as their advisor using APP MODEL + SNAPSHOT first, then MEMORY for tone and MEMORY.laws for strategy. If they ask whether something should be a project, use APP MODEL.personalBrandRule / decisionRule and the existing SNAPSHOT.projects. If they asked you to create it in the app (φτιάξτο, δημιούργησε, κάνε το, create it, πρόσθεσέ το), fill actions. Advice-only questions must have actions=[]. Never duplicate an existing SNAPSHOT.projects title. For create_project: title, body=purpose, stageTitle=first milestone, items=checkpoint titles (max 8). After creating, also emit open_project with the same title. To add/complete/update on an EXISTING project, set projectTitle to that project and use create_checkpoint, complete_checkpoint, update_note, or update_checkpoint — this works from Lifeline.'
       : 'Analyze across Self, Lifeline days, and every project. Produce 3-6 concrete insights with real source IDs from projects, checkpoints, notes, or days. actions=[] unless they asked to create something.')}
@@ -264,6 +278,9 @@ export async function runBrainJob({
   const localFolders = hasElectronBrain() && roots.length ? await loadLocalFolders(roots) : [];
 
   const assistantPack = await loadAssistantPack().catch(() => null);
+  const ouraRows = kind === 'briefing'
+    ? await loadBriefingSleepRows(context?.selectedDate)
+    : null;
   let snapshot = buildSnapshot({
     context,
     policy,
@@ -272,6 +289,7 @@ export async function runBrainJob({
     mentionedProjects,
     localFolders,
     assistantPack,
+    ouraRows,
   });
   if (!canCloudSeeAppData(policy, destination)) {
     snapshot = redactSnapshotForCloud(snapshot);
@@ -283,7 +301,7 @@ export async function runBrainJob({
   const userText = kind === 'ask'
     ? questionText || 'Τι βλέπεις στο τρέχον context;'
     : kind === 'briefing'
-      ? questionText || 'Κάνε weekly briefing: τι κινήθηκε, τι έχει κολλήσει, ποια είναι η επόμενη κίνηση.'
+      ? questionText || 'Κάνε weekly briefing: ώρα ύπνου και ξυπνήματος, διάρκεια και απόκλιση, ποιες νύχτες ακολουθήθηκαν από μέρα χωρίς δουλειά. Μετά τι κινήθηκε, τι κόλλησε, η επόμενη κίνηση.'
       : kind === 'morning'
         ? questionText || 'Πρωινή ενημέρωση: τι έγινε, τι μένει, η μία επόμενη κίνηση.'
         : kind === 'evening'

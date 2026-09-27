@@ -93,7 +93,6 @@ export function SelfOpenItems({ lifelineDays = {}, onUpdateLifelineDay }) {
   };
 
   const open = items.filter((item) => item.status === 'open');
-  const done = items.filter((item) => item.status === 'done');
 
   return (
     <section className="self-open" aria-label="Εκκρεμότητες">
@@ -107,7 +106,7 @@ export function SelfOpenItems({ lifelineDays = {}, onUpdateLifelineDay }) {
         </button>
       </header>
       <p className="self-open__note">
-        Κάθε πρωί στις 7 γράφονται μόνες τους. Κάθε μέρα στο Lifeline κρατάει τι έγινε και τι έμεινε.
+        Κάθε πρωί στις 7 γράφονται από το weekly plan. Κάθε μέρα στο Lifeline κρατάει τι έγινε και τι έμεινε.
       </p>
       {run?.pulled_at ? (
         <p className="self-open__note">
@@ -141,25 +140,6 @@ export function SelfOpenItems({ lifelineDays = {}, onUpdateLifelineDay }) {
         ))}
         {!open.length ? <li className="self-open__empty">Τίποτα ανοιχτό σήμερα.</li> : null}
       </ul>
-
-      {done.length ? (
-        <div className="self-open__done">
-          <p className="self-open__eyebrow">Έγιναν</p>
-          <ul className="self-open__list">
-            {done.map((item) => (
-              <li key={item.id} className="self-open__row self-open__row--done">
-                <div>
-                  <strong>{item.title}</strong>
-                  <p>{item.dueOn || 'Χωρίς ημερομηνία'}</p>
-                </div>
-                <button type="button" className="btn btn--outline btn--sm" onClick={() => mark(item, 'open')}>
-                  Ξανά ανοιχτό
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
     </section>
   );
 }

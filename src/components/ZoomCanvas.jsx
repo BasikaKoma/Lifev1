@@ -357,6 +357,11 @@ export const ZoomCanvas = forwardRef(function ZoomCanvas({
       return;
     }
 
+    if (interactionMode === 'pan' && e.shiftKey && e.button === 0 && onSelectPointerDown && !onExcluded) {
+      onSelectPointerDown(e);
+      return;
+    }
+
     if (interactionMode === 'pan' && onInkDragPointerDown && !onExcluded && wantsPan) {
       const handled = onInkDragPointerDown(e);
       if (handled) return;

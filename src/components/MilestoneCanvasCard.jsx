@@ -4,6 +4,7 @@ import { isPlanMode, getPlanDurationDays, formatPlanDateShort, formatPlanDayHead
 import { canvasStyleClasses } from '../utils/canvasNodes';
 import { resolveNodeThemeStyle } from '../utils/mapTheme';
 import { useCanvasNodeCard } from '../hooks/useCanvasNodeCard';
+import { useIsNodeSelected } from '../hooks/useCanvasMultiSelect';
 import { CategoryBadge, CategorySelect } from './CategorySelect';
 import { PrioritySelect } from './PrioritySelect';
 
@@ -40,7 +41,8 @@ export function MilestoneCanvasCard({
   const themeVars = resolveNodeThemeStyle(stage, mapTheme, nodeLevel, 'milestoneMajor');
   const nodeRef = { type: 'milestone', id: stage.id };
   const isConnectSource = connectFrom?.type === 'milestone' && connectFrom?.id === stage.id;
-  const isSelected = selectedNodeRef?.type === 'milestone' && selectedNodeRef?.id === stage.id;
+  const isSelected = useIsNodeSelected(nodeRef)
+    || (selectedNodeRef?.type === 'milestone' && selectedNodeRef?.id === stage.id);
   const posRef = useRef({ x: stage.posX, y: stage.posY });
   posRef.current = { x: stage.posX, y: stage.posY };
   const orderLabel = String(stage.order ?? 1).padStart(2, '0');

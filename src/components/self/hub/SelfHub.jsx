@@ -9,10 +9,10 @@ export function SelfHub({ floatingMetrics, capacity }) {
       <div className="self-body-cluster">
         <div className="self-hub__ambient" aria-hidden />
         <div className="self-hub__stage">
-          <SelfFloatingMetric metric={floatingMetrics.recovery} position="tl" variant="orb" orbKind="recovery" />
+          <SelfFloatingMetric metric={floatingMetrics.sleep} position="tl" variant="orb" />
           <SelfFloatingMetric metric={floatingMetrics.heartRate} position="tr" desktopDetailed="hr" />
-          <SelfFloatingMetric metric={floatingMetrics.stress} position="ml" />
-          <SelfFloatingMetric metric={floatingMetrics.focusWindow} position="mr" />
+          <SelfFloatingMetric metric={floatingMetrics.hrv} position="ml" />
+          <SelfFloatingMetric metric={floatingMetrics.stress} position="mr" />
           <SelfFloatingMetric metric={floatingMetrics.weight} position="bl" desktopDetailed="calories" />
           <SelfFloatingMetric metric={floatingMetrics.movement} position="br" variant="orb" orbKind="movement" />
 

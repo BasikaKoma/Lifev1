@@ -1,4 +1,5 @@
 import { addDays, parseDate, toDateString } from './lifeline';
+import { buildSleepClock } from '../brain/snapshot/sleepClock';
 import {
   collectCompletedItemsForDate,
   getDayEntry,
@@ -105,9 +106,43 @@ function metricFromList(metrics, id) {
   return NUMBER(found?.value);
 }
 
+function heartRateMetric(metrics) {
+  return [...(metrics?.leftMetrics || [])].find((item) => item?.id === 'heartRate') || null;
+}
+
 function restingHrFromMetrics(metrics) {
-  const hr = [...(metrics?.leftMetrics || [])].find((item) => item?.id === 'heartRate');
+  const hr = heartRateMetric(metrics);
   return NUMBER(hr?.resting) ?? NUMBER(hr?.value);
+}
+
+function avgHrFromMetrics(metrics) {
+  return NUMBER(heartRateMetric(metrics)?.avg);
+}
+
+function ouraPayload(row) {
+  if (!row?.payload) return {};
+  if (typeof row.payload === 'string') {
+    try {
+      return JSON.parse(row.payload);
+    } catch {
+      return {};
+    }
+  }
+  return row.payload;
+}
+
+function mainSleepSession(payload) {
+  const sessions = Array.isArray(payload?.sleep_sessions) ? payload.sleep_sessions : [];
+  const nights = sessions.filter((session) => {
+    const type = String(session?.type || '').toLowerCase();
+    return type !== 'rest' && !type.includes('nap');
+  });
+  const pool = nights.length ? nights : sessions;
+  return pool.reduce((best, session) => {
+    const duration = Number(session?.total_sleep_duration) || 0;
+    const bestDuration = Number(best?.total_sleep_duration) || 0;
+    return !best || duration > bestDuration ? session : best;
+  }, null);
 }
 
 function weightFromMetrics(metrics) {
@@ -137,19 +172,17 @@ function buildDayHealth(date, lifelineDays, selfHubDays, ouraByDay, weightByDay,
   const hub = getSelfHubDayEntry(selfHubDays, date);
   const metrics = hub.health || day.metrics;
   const oura = ouraByDay?.[date] || null;
+  const sleepSession = mainSleepSession(ouraPayload(oura));
   return {
     date,
     sleep: metricFromList(metrics, 'sleep') ?? NUMBER(oura?.sleep_score),
     readiness: metricFromList(metrics, 'readiness') ?? NUMBER(oura?.readiness_score),
     activity: metricFromList(metrics, 'activity') ?? NUMBER(oura?.activity_score),
-    restingHr: restingHrFromMetrics(metrics) ?? NUMBER(oura?.resting_heart_rate),
-    weight: weightFromMetrics(metrics) ?? NUMBER(weightByDay?.[date]),
+    restingHr: NUMBER(oura?.resting_heart_rate) ?? restingHrFromMetrics(metrics),
+    avgHr: NUMBER(oura?.avg_heart_rate) ?? NUMBER(sleepSession?.average_heart_rate) ?? avgHrFromMetrics(metrics),
+    hrv: NUMBER(sleepSession?.average_hrv) ?? metricFromList(metrics, 'hrv'),
+    weight: NUMBER(weightByDay?.[date]) ?? weightFromMetrics(metrics),
     waist: waistFromMetrics(metrics) ?? NUMBER(waistByDay?.[date]),
-    dayScore: NUMBER(metrics?.dayScore?.value),
-    capacityLabel:
-      hub.hub?.capacity?.label
-      || day.hubSnapshot?.capacity?.label
-      || null,
     notes: String(day.notes || hub.journal?.notes || '').trim(),
     todos: Array.isArray(hub.journal?.todos) && hub.journal.todos.length
       ? hub.journal.todos
@@ -226,46 +259,39 @@ function emptyCard(id, title, eyebrow) {
 }
 
 function summarizeBody(days, prevDays) {
-  const sleep = seriesStats(days, 'sleep');
   const readiness = seriesStats(days, 'readiness');
   const activity = seriesStats(days, 'activity');
   const hr = seriesStats(days, 'restingHr');
+  const avgHr = seriesStats(days, 'avgHr');
+  const hrv = seriesStats(days, 'hrv');
   const weight = seriesStats(days, 'weight');
   const waist = seriesStats(days, 'waist');
-  const prevSleep = seriesStats(prevDays, 'sleep');
   const prevReadiness = seriesStats(prevDays, 'readiness');
   const prevActivity = seriesStats(prevDays, 'activity');
   const prevHr = seriesStats(prevDays, 'restingHr');
+  const prevAvgHr = seriesStats(prevDays, 'avgHr');
+  const prevHrv = seriesStats(prevDays, 'hrv');
   const prevWeight = seriesStats(prevDays, 'weight');
   const prevWaist = seriesStats(prevDays, 'waist');
-  const hasData = [sleep.avg, readiness.avg, activity.avg, hr.avg, weight.first, weight.last, waist.first, waist.last].some((value) => value != null);
-  if (!hasData) return emptyCard('body', 'Σώμα', 'Ύπνος · readiness · activity');
+  const hasData = [readiness.avg, activity.avg, hr.avg, avgHr.avg, hrv.avg, weight.avg, waist.avg].some((value) => value != null);
+  if (!hasData) return emptyCard('body', 'Σώμα', 'Readiness · activity');
 
-  const weightDelta = weight.first != null && weight.last != null ? weight.last - weight.first : null;
-  const waistDelta = waist.first != null && waist.last != null ? waist.last - waist.first : null;
   return {
     id: 'body',
     title: 'Σώμα',
     eyebrow: 'Μέσος + Δ vs προηγούμενη',
     hasData: true,
-    primary: round(sleep.avg, 0),
-    primarySuffix: sleep.avg != null ? ' ύπνος' : '',
-    delta: formatDelta(deltaOf(round(sleep.avg, 0), round(prevSleep.avg, 0))),
+    primary: round(readiness.avg, 0),
+    primarySuffix: readiness.avg != null ? ' readiness' : '',
+    delta: formatDelta(deltaOf(round(readiness.avg, 0), round(prevReadiness.avg, 0))),
     rows: [
-      row('Ύπνος', sleep.avg, prevSleep.avg),
       row('Readiness', readiness.avg, prevReadiness.avg),
       row('Activity', activity.avg, prevActivity.avg),
       row('Resting HR', hr.avg, prevHr.avg, { invert: true }),
-      {
-        label: 'Βάρος',
-        value: weight.last != null ? `${round(weight.last, 1)} kg` : '—',
-        delta: formatDelta(weightDelta ?? deltaOf(weight.last, prevWeight.last), { digits: 1, suffix: ' kg', invert: true }),
-      },
-      {
-        label: 'Μέση',
-        value: waist.last != null ? `${round(waist.last, 1)} cm` : '—',
-        delta: formatDelta(waistDelta ?? deltaOf(waist.last, prevWaist.last), { digits: 1, suffix: ' cm', invert: true }),
-      },
+      row('Παλμοί', avgHr.avg, prevAvgHr.avg, { suffix: ' bpm', invert: true }),
+      row('HRV', hrv.avg, prevHrv.avg, { suffix: ' ms' }),
+      row('Βάρος', weight.avg, prevWeight.avg, { digits: 1, suffix: ' kg', invert: true }),
+      row('Μέση', waist.avg, prevWaist.avg, { digits: 1, suffix: ' cm', invert: true }),
     ],
     notes: [],
   };
@@ -288,27 +314,198 @@ function workoutStreak(blocks, dates) {
   return streak;
 }
 
-function summarizeWorkout(blocks, prevBlocks, dates) {
+function clockAxis(text, bedtime) {
+  const match = /^(\d{2}):(\d{2})$/.exec(String(text || ''));
+  if (!match) return null;
+  const minutes = Number(match[1]) * 60 + Number(match[2]);
+  if (bedtime && minutes < 12 * 60) return minutes + 1440;
+  return minutes;
+}
+
+function formatMinutes(minutes) {
+  if (minutes == null) return '—';
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (!hours) return `${mins}λ`;
+  if (!mins) return `${hours}ω`;
+  return `${hours}ω ${mins}λ`;
+}
+
+function driftLabel(minutes) {
+  return minutes == null ? '—' : `${minutes}λ`;
+}
+
+function workDates(days, projectActivity, dates) {
+  const set = new Set();
+  for (const day of days) {
+    const todosDone = (day.todos || []).some((todo) => todo.done === true);
+    if (todosDone || String(day.notes || '').trim()) set.add(day.date);
+  }
+  for (const date of dates) {
+    if (collectCompletedItemsForDate(projectActivity, date).length) set.add(date);
+  }
+  return set;
+}
+
+function clockDays(days, work) {
+  return days.map((day) => ({
+    date: day.date,
+    sleep: day.sleep,
+    hadWork: work.has(day.date),
+    sourceIds: [`lifeline-day:${day.date}`],
+  }));
+}
+
+function summarizeSleepClock(days, prevDays, ouraRows, projectActivity, dates, prevDates) {
+  const clock = buildSleepClock(clockDays(days, workDates(days, projectActivity, dates)), ouraRows);
+  const previous = buildSleepClock(clockDays(prevDays, workDates(prevDays, projectActivity, prevDates)), ouraRows);
+  const sleep = seriesStats(days, 'sleep');
+  const prevSleep = seriesStats(prevDays, 'sleep');
+  const score = round(sleep.avg, 0);
+  const prevScore = round(prevSleep.avg, 0);
+  if (!clock.count && score == null) return emptyCard('sleepClock', 'Ύπνος', 'Score · ώρα · ξύπνημα');
+
+  const wakeDelta = deltaOf(clockAxis(clock.wake?.typical, false), clockAxis(previous.wake?.typical, false));
+  const durationDelta = deltaOf(clock.duration?.typicalMinutes, previous.duration?.typicalMinutes);
+  const quiet = clock.entries.filter((night) => !night.wakeDayHadWork);
+  const previousBedtime = previous.bedtime?.typical
+    ? { text: `προηγ. ${previous.bedtime.typical}`, tone: 'neutral' }
+    : null;
+
+  return {
+    id: 'sleepClock',
+    title: 'Ύπνος',
+    eyebrow: 'Score · ώρα · ξύπνημα',
+    hasData: true,
+    primary: score != null ? score : (clock.bedtime?.typical || null),
+    primarySuffix: score != null ? '' : '',
+    delta: score != null
+      ? formatDelta(deltaOf(score, prevScore))
+      : previousBedtime,
+    rows: [
+      row('Score', sleep.avg, prevSleep.avg),
+      {
+        label: 'Ώρα',
+        value: clock.bedtime?.typical || '—',
+        delta: previousBedtime,
+      },
+      {
+        label: 'Ξύπνημα',
+        value: clock.wake?.typical || '—',
+        delta: wakeDelta == null ? null : {
+          text: `${wakeDelta > 0 ? '+' : ''}${wakeDelta}λ`,
+          tone: 'neutral',
+        },
+      },
+      {
+        label: 'Διάρκεια',
+        value: formatMinutes(clock.duration?.typicalMinutes),
+        delta: formatDelta(durationDelta, { suffix: 'λ' }),
+      },
+      { label: 'Απόκλιση ύπνου', value: driftLabel(clock.bedtime?.driftMinutes), delta: null },
+      { label: 'Απόκλιση ξυπνήματος', value: driftLabel(clock.wake?.driftMinutes), delta: null },
+      { label: 'Χωρίς δουλειά', value: `${quiet.length}/${clock.count}`, delta: null },
+    ],
+    nights: clock.entries.map((night) => {
+      const [, month, day] = night.date.split('-');
+      return {
+        date: `${Number(day)}/${Number(month)}`,
+        span: `${night.bedtime}–${night.wake}`,
+      };
+    }),
+    notes: [],
+  };
+}
+
+const WORKOUT_ACTIVITY_LABELS = {
+  walking: 'Περπάτημα',
+  running: 'Τρέξιμο',
+  cycling: 'Ποδήλατο',
+  swimming: 'Κολύμβηση',
+  strength: 'Δύναμη',
+  strengthtraining: 'Δύναμη',
+  yoga: 'Yoga',
+  hiking: 'Πεζοπορία',
+  yardwork: 'Αυλή',
+  workout: 'Προπόνηση',
+};
+
+function workoutActivityLabel(activity) {
+  const key = String(activity || '').toLowerCase().replace(/[_\s-]+/g, '');
+  if (WORKOUT_ACTIVITY_LABELS[key]) return WORKOUT_ACTIVITY_LABELS[key];
+  const words = String(activity || 'Προπόνηση').replace(/([a-z])([A-Z])/g, '$1 $2');
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+function localDayKey(date) {
+  const pad = (part) => String(part).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function ouraWorkoutMinutes(ouraRows, dates) {
+  const wanted = new Set(dates);
+  const totals = new Map();
+  for (const row of ouraRows || []) {
+    const payload = typeof row?.payload === 'string'
+      ? (() => { try { return JSON.parse(row.payload); } catch { return {}; } })()
+      : (row?.payload || {});
+    for (const workout of payload.workouts || []) {
+      const start = workout?.start_datetime ? new Date(workout.start_datetime) : null;
+      const end = workout?.end_datetime ? new Date(workout.end_datetime) : null;
+      const day = start && !Number.isNaN(start.getTime())
+        ? localDayKey(start)
+        : String(row?.day || '').slice(0, 10);
+      if (!wanted.has(day) || !start || !end || Number.isNaN(end.getTime())) continue;
+      const minutes = Math.round((end.getTime() - start.getTime()) / 60000);
+      if (minutes <= 0) continue;
+      const label = workoutActivityLabel(workout.activity || workout.label);
+      totals.set(label, (totals.get(label) || 0) + minutes);
+    }
+  }
+  return [...totals.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([label, minutes]) => ({ label, minutes }));
+}
+
+function summarizeWorkout(blocks, prevBlocks, dates, ouraRows, prevDates) {
   const workouts = (blocks || []).filter((block) => block.blockType === 'Workout');
   const prev = (prevBlocks || []).filter((block) => block.blockType === 'Workout');
-  if (!workouts.length && !prev.length) return emptyCard('workout', 'Προπόνηση', 'Path Workout');
+  const activities = ouraWorkoutMinutes(ouraRows, dates);
+  const prevActivities = ouraWorkoutMinutes(ouraRows, prevDates);
+  if (!workouts.length && !prev.length && !activities.length && !prevActivities.length) {
+    return emptyCard('workout', 'Προπόνηση', 'Oura · Path');
+  }
   const done = workouts.filter((block) => block.status === 'Done').length;
   const planned = workouts.length;
   const prevDone = prev.filter((block) => block.status === 'Done').length;
   const prevPlanned = prev.length;
   const rate = pct(done, planned);
-  const hours = durationHours(workouts.filter((block) => block.status === 'Done'));
+  const ouraMinutes = activities.reduce((sum, item) => sum + item.minutes, 0);
+  const prevOuraMinutes = prevActivities.reduce((sum, item) => sum + item.minutes, 0);
+  const pathHours = durationHours(workouts.filter((block) => block.status === 'Done'));
+  const prevPathHours = durationHours(prev.filter((block) => block.status === 'Done'));
+  const hoursLabel = ouraMinutes
+    ? formatMinutes(ouraMinutes)
+    : (formatHours(pathHours) || '—');
+  const hoursDelta = ouraMinutes || prevOuraMinutes
+    ? formatDelta(deltaOf(ouraMinutes / 60, prevOuraMinutes / 60), { digits: 1, suffix: 'ω' })
+    : formatDelta(deltaOf(pathHours, prevPathHours), { digits: 1, suffix: 'ω' });
   return {
     id: 'workout',
     title: 'Προπόνηση',
-    eyebrow: 'Workout blocks',
-    hasData: planned > 0,
+    eyebrow: 'Oura · Path',
+    hasData: planned > 0 || activities.length > 0,
     primary: rate,
     primarySuffix: rate != null ? '%' : '',
     delta: formatDelta(deltaOf(rate, pct(prevDone, prevPlanned)), { suffix: 'μ.μ.' }),
     rows: [
       { label: 'Done / Planned', value: planned ? `${done}/${planned}` : '—', delta: null },
-      { label: 'Ώρες', value: formatHours(hours) || '—', delta: formatDelta(deltaOf(hours, durationHours(prev.filter((block) => block.status === 'Done'))), { digits: 1, suffix: 'ω' }) },
+      { label: 'Ώρες', value: hoursLabel, delta: hoursDelta },
+      ...activities.map((item) => ({
+        label: item.label,
+        value: formatMinutes(item.minutes),
+        delta: null,
+      })),
       { label: 'Streak', value: `${workoutStreak(blocks, dates)} μ.`, delta: null },
     ],
     notes: [],
@@ -386,29 +583,6 @@ function summarizeRoutines(days, templates, periodDays) {
       value: `${stack.closed}/${stack.active || windowSize}`,
       delta: null,
     })),
-    notes: [],
-  };
-}
-
-function summarizeEnergy(days, prevDays) {
-  const score = seriesStats(days, 'dayScore');
-  const prev = seriesStats(prevDays, 'dayScore');
-  const recovery = days.filter((day) => day.capacityLabel === 'Recovery').length;
-  if (score.avg == null && !recovery) return emptyCard('energy', 'Ενέργεια', 'Day score · Recovery');
-  const display = score.avg != null ? round(score.avg / 10, 1) : null;
-  const prevDisplay = prev.avg != null ? round(prev.avg / 10, 1) : null;
-  return {
-    id: 'energy',
-    title: 'Ενέργεια',
-    eyebrow: 'Day score + Recovery',
-    hasData: true,
-    primary: display,
-    primarySuffix: display != null ? '/10' : '',
-    delta: formatDelta(deltaOf(display, prevDisplay), { digits: 1 }),
-    rows: [
-      row('Μέσος', display, prevDisplay, { digits: 1, suffix: '/10' }),
-      { label: 'Recovery μέρες', value: String(recovery), delta: formatDelta(deltaOf(recovery, prevDays.filter((day) => day.capacityLabel === 'Recovery').length)) },
-    ],
     notes: [],
   };
 }
@@ -534,13 +708,29 @@ function indexOura(rows = []) {
   return map;
 }
 
-function indexWeight(readings = []) {
-  const map = {};
+function indexWeight(readings = [], { average = false } = {}) {
+  const buckets = {};
   for (const reading of readings) {
     const day = toDateString(reading?.day);
-    const value = NUMBER(reading?.value);
-    if (!day || value == null) continue;
-    map[day] = value;
+    if (!day) continue;
+    const fromPayload = average && Array.isArray(reading?.payload?.readings)
+      ? reading.payload.readings
+          .map((row) => NUMBER(row?.value))
+          .filter((value) => value != null)
+      : [];
+    const values = fromPayload.length
+      ? fromPayload
+      : [NUMBER(reading?.value)].filter((value) => value != null);
+    if (!values.length) continue;
+    if (!buckets[day]) buckets[day] = [];
+    buckets[day].push(...values);
+  }
+
+  const map = {};
+  for (const [day, values] of Object.entries(buckets)) {
+    map[day] = average
+      ? values.reduce((sum, value) => sum + value, 0) / values.length
+      : values[values.length - 1];
   }
   return map;
 }
@@ -605,7 +795,7 @@ export function summarizePeriod({
   const dates = eachDateInclusive(range.startDate, range.endDate);
   const prevDates = eachDateInclusive(previous.startDate, previous.endDate);
   const ouraByDay = indexOura(ouraRows);
-  const weightByDay = indexWeight(weightReadings);
+  const weightByDay = indexWeight(weightReadings, { average: true });
   const waistByDay = indexWeight(waistReadings);
   const days = dates.map((date) => buildDayHealth(date, lifelineDays, selfHubDays, ouraByDay, weightByDay, waistByDay));
   const prevDays = prevDates.map((date) => buildDayHealth(date, lifelineDays, selfHubDays, ouraByDay, weightByDay, waistByDay));
@@ -620,10 +810,10 @@ export function summarizePeriod({
 
   const cards = [
     summarizeBody(days, prevDays),
-    summarizeWorkout(blocks, prevBlocks, dates),
+    summarizeSleepClock(days, prevDays, ouraRows, projectActivity, dates, prevDates),
+    summarizeWorkout(blocks, prevBlocks, dates, ouraRows, prevDates),
     summarizeExecution(days, prevDays, blocks, prevBlocks, completed, prevCompleted),
     summarizeRoutines(days, routineTemplates, dates.length),
-    summarizeEnergy(days, prevDays),
     summarizeFocus(days, prevDays, blocks, prevBlocks),
     summarizeOutward(brand, prevBrand, periodCalls, prevCalls),
     summarizeStuck(days, blocks, stages, obstacles),

@@ -10,6 +10,7 @@ import {
   shiftPeriod,
   summarizePeriod,
 } from '../utils/periodSummary';
+import { getDayEntry } from '../utils/lifelineDays';
 import './DayLab.css';
 import './PeriodLab.css';
 
@@ -22,10 +23,71 @@ function Delta({ delta }) {
   );
 }
 
+function SummaryRows({ rows, tight = false }) {
+  if (!rows?.length) return null;
+  return (
+    <ul className={`period-lab__rows${tight ? ' period-lab__rows--tight' : ''}`}>
+      {rows.map((row) => (
+        <li key={row.label}>
+          <span>{row.label}</span>
+          <strong>
+            {row.value}
+            <Delta delta={row.delta} />
+          </strong>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function WeekReview({ startDate, lifelineDays, onUpdateDay }) {
+  const daysRef = useRef(lifelineDays);
+  const onUpdateRef = useRef(onUpdateDay);
+  daysRef.current = lifelineDays;
+  onUpdateRef.current = onUpdateDay;
+  const [text, setText] = useState(() => getDayEntry(lifelineDays, startDate).weekReview || '');
+  const saved = useRef(text);
+  const textRef = useRef(text);
+  textRef.current = text;
+
+  useEffect(() => {
+    const next = getDayEntry(daysRef.current, startDate).weekReview || '';
+    setText(next);
+    saved.current = next;
+    textRef.current = next;
+    return () => {
+      const update = onUpdateRef.current;
+      if (!update || textRef.current === saved.current) return;
+      saved.current = textRef.current;
+      update(startDate, { weekReview: textRef.current });
+    };
+  }, [startDate]);
+
+  return (
+    <label className="period-lab__review">
+      <span className="period-lab__card-eyebrow">Αξιολόγηση</span>
+      <textarea
+        className="period-lab__review-input"
+        value={text}
+        rows={4}
+        placeholder="Πώς ήταν αυτή η εβδομάδα;"
+        onChange={(event) => setText(event.target.value)}
+        onBlur={() => {
+          if (!onUpdateDay || text === saved.current) return;
+          saved.current = text;
+          onUpdateDay(startDate, { weekReview: text });
+        }}
+      />
+    </label>
+  );
+}
+
 function SummaryCard({ card }) {
   if (!card) return null;
+  const nights = card.nights || [];
+  const split = nights.length > 0;
   return (
-    <article className={`period-lab__card${card.hasData ? '' : ' period-lab__card--empty'}`}>
+    <article className={`period-lab__card${card.hasData ? '' : ' period-lab__card--empty'}${split ? ' period-lab__card--split' : ''}`}>
       <p className="period-lab__card-eyebrow">{card.eyebrow}</p>
       <div className="period-lab__card-head">
         <h3 className="period-lab__card-title">{card.title}</h3>
@@ -39,20 +101,22 @@ function SummaryCard({ card }) {
           <p className="period-lab__card-empty">No data</p>
         )}
       </div>
-      {card.hasData && card.rows?.length ? (
-        <ul className="period-lab__rows">
-          {card.rows.map((row) => (
-            <li key={row.label}>
-              <span>{row.label}</span>
-              <strong>
-                {row.value}
-                <Delta delta={row.delta} />
-              </strong>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {card.notes?.length ? (
+      {split ? (
+        <div className="period-lab__split">
+          <SummaryRows rows={card.rows} tight />
+          <ul className="period-lab__wakes">
+            {nights.map((night) => (
+              <li key={`${night.date}-${night.span}`}>
+                <span>{night.date}</span>
+                <strong>{night.span}</strong>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <SummaryRows rows={card.hasData ? card.rows : []} />
+      )}
+      {!split && card.notes?.length ? (
         <ul className="period-lab__notes">
           {card.notes.map((note) => (
             <li key={note}>{note}</li>
@@ -72,6 +136,7 @@ export function LifelinePeriodModal({
   originRect = null,
   onClose,
   onNavigate,
+  onUpdateDay,
   backLabel = '← Lifeline',
   ...bodyProps
 }) {
@@ -111,6 +176,8 @@ export function LifelinePeriodModal({
     if (!visible) return undefined;
     const onKey = (e) => {
       if (e.key === 'Escape') onClose?.();
+      const tag = e.target?.tagName;
+      if (tag === 'TEXTAREA' || tag === 'INPUT') return;
       if (e.key === 'ArrowLeft') handleShift(-1);
       if (e.key === 'ArrowRight') handleShift(1);
     };
@@ -175,6 +242,7 @@ export function LifelinePeriodModal({
               date={date}
               kind={kind}
               range={range}
+              onUpdateDay={onUpdateDay}
               {...bodyProps}
             />
           </div>
@@ -196,6 +264,7 @@ function PeriodLabBody({
   stages = [],
   obstacles = [],
   pathBundle = null,
+  onUpdateDay,
 }) {
   const [ouraRows, setOuraRows] = useState([]);
   const [weightReadings, setWeightReadings] = useState([]);
@@ -271,6 +340,13 @@ function PeriodLabBody({
       {summary.cards.map((card) => (
         <SummaryCard key={card.id} card={card} />
       ))}
+      {kind === 'week' && range?.startDate ? (
+        <WeekReview
+          startDate={range.startDate}
+          lifelineDays={lifelineDays}
+          onUpdateDay={onUpdateDay}
+        />
+      ) : null}
     </div>
   );
 }

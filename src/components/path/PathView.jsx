@@ -8,6 +8,7 @@ import { pathTabFromPathname } from '../../utils/appNavigation';
 import { CallsView } from '../CallsView';
 import { PathThoughtsReview } from './PathThoughtsReview';
 import { PathGoals } from './PathGoals';
+import { PathWheel } from './PathWheel';
 import { PathWeek } from './PathWeek';
 import { PathMetrics } from './PathMetrics';
 import { PathRoutines } from './PathRoutines';
@@ -18,7 +19,7 @@ import './path.css';
 function initialPathTab(requested) {
   if (PATH_TABS.some((item) => item.id === requested)) return requested;
   const fromUrl = typeof window !== 'undefined' ? pathTabFromPathname(window.location.pathname) : null;
-  return fromUrl || 'goals';
+  return fromUrl || 'wheel';
 }
 
 export function PathView({
@@ -94,6 +95,8 @@ export function PathView({
       </nav>
 
       {path.error ? <p className="path-error">{path.error}</p> : null}
+
+      {tab === 'wheel' ? <PathWheel path={path} /> : null}
 
       {tab === 'goals' && importing ? (
         <PathImportPlan

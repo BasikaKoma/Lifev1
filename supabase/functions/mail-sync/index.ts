@@ -10,8 +10,8 @@ Deno.serve(async (req) => {
   try {
     const user = await getUserFromRequest(req);
     const admin = getServiceClient();
-    const token = await accessTokenForUser(admin, user.id);
-    const result = await syncMailbox(admin, user.id, token);
+    const session = await accessTokenForUser(admin, user.id);
+    const result = await syncMailbox(admin, user.id, session);
     return jsonResponse({ ok: true, ...result });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Mail sync failed';

@@ -1,5 +1,6 @@
 import { getSupabaseClient, isSupabaseConfigured } from '../supabase';
 import {
+  averageReadingValue,
   normalizeWeightReadings,
   shouldAppendWeightReading,
 } from './weightReadings';
@@ -290,7 +291,7 @@ export async function appendWeightReading({
   const metric = {
     day,
     metricType: 'weight',
-    value: weightKg,
+    value: averageReadingValue(readings),
     unit: 'kg',
     source: 'qn_scale',
     recordedAt,

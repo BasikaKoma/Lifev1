@@ -103,8 +103,8 @@ export async function pullAssistantForUser(userId: string) {
   if (mailConn) {
     mailConnected = true;
     try {
-      const token = await accessTokenForUser(admin, userId);
-      const synced = await syncMailbox(admin, userId, token);
+      const session = await accessTokenForUser(admin, userId);
+      const synced = await syncMailbox(admin, userId, session);
       mailCount = synced.count || 0;
     } catch (err) {
       console.error('mail pull failed', err instanceof Error ? err.message : '');
@@ -186,48 +186,21 @@ export async function pullAssistantForUser(userId: string) {
     if (created) itemCount += 1;
   }
 
-  const { data: lifeline } = await admin.from('lifelines').select('lifeline_days').eq('user_id', userId).maybeSingle();
-  const day = lifeline?.lifeline_days?.[today];
-  const todos = Array.isArray(day?.todos) ? day.todos : [];
-  const openTodoIds = new Set<string>();
-  for (const todo of todos) {
-    const id = String(todo?.id || '');
-    const text = String(todo?.text || '').trim();
-    if (!id || !text) continue;
-    const sourceRef = `${today}:${id}`;
-    if (todo.done === true) continue;
-    openTodoIds.add(sourceRef);
-    const created = await ensureItem(admin, userId, existing, {
-      title: text,
-      dueOn: today,
-      source: 'day',
-      sourceRef,
-    });
-    if (created) itemCount += 1;
-  }
-  for (const row of existing.values()) {
-    if (row.source !== 'day' || row.status !== 'open' || !String(row.source_ref).startsWith(`${today}:`)) continue;
-    if (!openTodoIds.has(row.source_ref) && !String(row.source_ref).startsWith(`${today}:path:`)) {
-      const todoId = String(row.source_ref).slice(today.length + 1);
-      const todo = todos.find((item: { id?: string }) => String(item?.id || '') === todoId);
-      if (todo?.done === true) await markDone(admin, row);
-    }
-  }
-
   const { data: path } = await admin.from('path_state').select('blocks').eq('user_id', userId).maybeSingle();
   const blocks = Array.isArray(path?.blocks) ? path.blocks : [];
-  const openBlockRefs = new Set<string>();
+  const blockStatus = new Map<string, string>();
   for (const block of blocks) {
-    if (block?.date !== today) continue;
-    if (block.status === 'Done' || block.status === 'Skipped') continue;
-    const id = String(block.id || '');
-    const title = String(block.title || '').trim();
-    if (!id || !title) continue;
-    const sourceRef = `${today}:path:${id}`;
-    openBlockRefs.add(sourceRef);
+    const date = String(block?.date || '');
+    const id = String(block?.id || '');
+    const title = String(block?.title || '').trim();
+    if (!date || !id || !title) continue;
+    const sourceRef = `${date}:path:${id}`;
+    const status = String(block.status || 'Planned');
+    blockStatus.set(sourceRef, status);
+    if (date !== today || status === 'Done' || status === 'Skipped') continue;
     const created = await ensureItem(admin, userId, existing, {
       title,
-      dueOn: today,
+      dueOn: date,
       source: 'day',
       sourceRef,
     });
@@ -235,8 +208,9 @@ export async function pullAssistantForUser(userId: string) {
   }
   for (const row of existing.values()) {
     if (row.source !== 'day' || row.status !== 'open') continue;
-    if (!String(row.source_ref).startsWith(`${today}:path:`)) continue;
-    if (!openBlockRefs.has(row.source_ref)) await markDone(admin, row);
+    const status = blockStatus.get(String(row.source_ref || ''));
+    const stillOpen = status && status !== 'Done' && status !== 'Skipped';
+    if (!stillOpen) await markDone(admin, row);
   }
 
   await writeOpenRecords(admin, userId);

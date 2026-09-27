@@ -2,6 +2,7 @@ import { selfDataToDayLabMetrics, ouraRowToLifelineMetrics } from '../../utils/l
 import { healthMetricsToSelfData } from './healthToSelf';
 import { mapOuraRowToSelfData } from '../../utils/ouraMetrics';
 import {
+  averageReadingValue,
   buildWeightCardFromReadings,
   getWeightReadingsForDay,
 } from './weightReadings';
@@ -29,16 +30,16 @@ function buildWeightCard(kg, delta = null, readings = []) {
   };
 }
 
-function latestWeightValue(dayMetrics, day) {
+function dayWeightValue(dayMetrics, day) {
   const readings = getWeightReadingsForDay(dayMetrics, day);
-  if (readings.length) return readings[readings.length - 1].value;
+  if (readings.length) return averageReadingValue(readings);
   return dayMetrics.find((metric) => metric.metricType === 'weight')?.value ?? null;
 }
 
 function weightDeltaForDay(dayMetrics, previousDayMetrics, day) {
-  const weight = latestWeightValue(dayMetrics, day);
+  const weight = dayWeightValue(dayMetrics, day);
   const prevDay = previousDayMetrics?.[0]?.day;
-  const prevWeight = latestWeightValue(previousDayMetrics ?? [], prevDay);
+  const prevWeight = dayWeightValue(previousDayMetrics ?? [], prevDay);
   if (weight == null || prevWeight == null) return null;
   return Math.round((weight - prevWeight) * 10) / 10;
 }

@@ -3,7 +3,7 @@ export const APP_MODEL = {
   layers: {
     self: 'Body, energy, sleep, readiness, capacity, focus window. Not a project.',
     lifeline: 'One special timeline of the person\'s life (days, routines, how each day went). Unique. Never duplicate it as a normal project.',
-    path: 'Path is the 90-day commitment layer: goals → weekly plan → time blocks → execution → measurements. Not a task manager. Goals are decided when the user is clear, then followed without daily re-evaluation.',
+    path: 'Path starts with a life wheel: satisfaction 1–10 on eight life areas, plus a separate work wheel for Symphon, Market Portal, and Nobelle. Then the 90-day commitment layer: goals → weekly plan → time blocks → execution → measurements. Not a task manager. Goals are decided when the user is clear, then followed without daily re-evaluation.',
     brand: 'Personal Brand turns lived events into content: signal → idea → draft → platform variation → approval → publish. Fresh signals look back 7 days. Narrative threads are long-term stories (Symphon, first customers, vibecoding doubt, Market Portal → systems, exposure/first video, entrepreneurship and life). Brand DNA and threads live in the app, not in the model.',
     nutrition: 'Nutrition turns the user\'s own dietary instructions into a 7/14-day meal plan and supermarket list. Calorie and protein numbers are user targets or editable suggestions, never medical advice. Not a project.',
     projects: 'Separate workstreams with their own canvas. Each project has stages, checkpoints, goals, notes, ideas, obstacles, canvas tasks, and a brief.',
@@ -25,7 +25,7 @@ export const APP_MODEL = {
 
 export function appModelText() {
   return `APP MODEL (how lifev1 is built — use this when advising structure, not only data)
-- Self = body/energy/day. Path = 90-day goals, weekly blocks, and measurements (not a task list). Lifeline = the one life timeline. Personal Brand = lived events → content (DNA + pipeline). Nutrition = dietary profile → meal plan → groceries (not medical advice). Projects = workstreams with a canvas. Brain profile = voice, not a canvas.
+- Self = body/energy/day. Path starts with the life wheel (satisfaction, not outside success), then 90-day goals, weekly blocks, and measurements (not a task list). Lifeline = the one life timeline. Personal Brand = lived events → content (DNA + pipeline). Nutrition = dietary profile → meal plan → groceries (not medical advice). Projects = workstreams with a canvas. Brain profile = voice, not a canvas.
 - Make a PROJECT only when something needs its own milestones and execution. Do not turn identity, a habit, a meal plan, or a single idea into a project.
 - Personal Brand is already an app screen. Do not create a Personal Brand project. Drafts must start from real experience in SNAPSHOT.brand or Lifeline/projects. No generic "5 things I learned" posts. Nobelle stays out. Market Portal only as a lesson.
 - Nutrition is already an app screen. Do not create a Nutrition project. Calories/macros come from the user or from editable suggestions.

@@ -2504,6 +2504,95 @@ export function useAppState(userId) {
     );
   }, [patchState]);
 
+  const moveCanvasNodes = useCallback((moves, { commitPlanDates = false } = {}) => {
+    if (!moves?.length) return;
+    patchState((prev) => {
+      const layout = getRoadmapLayout(prev.mapTheme);
+      const lifelineCtx = prev.isLifeline
+        ? buildLifelinePlanContext(
+            getLifelineConfig(prev.mapTheme, lifelineBoundDatesFromState(prev, lifelineAnchors)),
+            layout
+          )
+        : null;
+
+      let stages = prev.stages;
+      let backlog = prev.backlog || [];
+      let canvasStickies = prev.canvasStickies || [];
+      let canvasObstacles = prev.canvasObstacles || [];
+      let canvasResources = prev.canvasResources || [];
+      let canvasTasks = prev.canvasTasks || [];
+
+      const placeFree = (item, x, y, size) => {
+        const next = resolveCanvasItemDrag(item, x, y, layout, size);
+        return {
+          ...item,
+          canvasX: next.x,
+          canvasY: next.y,
+          onRoadmap: next.onRoadmap,
+          timelineY: next.timelineY,
+          roadmapSide: next.roadmapSide,
+        };
+      };
+
+      for (const move of moves) {
+        const ref = move?.ref;
+        const x = move?.x;
+        const y = move?.y;
+        if (!ref || typeof x !== 'number' || typeof y !== 'number') continue;
+
+        if (ref.type === 'milestone') {
+          stages = stages.map((stage) => (
+            stage.id === ref.id
+              ? resolveMilestoneDrag(stage, x, y, layout, lifelineCtx, { commitPlanDates })
+              : stage
+          ));
+        } else if (ref.type === 'sticky') {
+          canvasStickies = canvasStickies.map((item) => (
+            item.id === ref.id
+              ? placeFree(item, x, y, { w: item.width || 200, h: item.height || 140 })
+              : item
+          ));
+        } else if (ref.type === 'obstacle') {
+          canvasObstacles = canvasObstacles.map((item) => (
+            item.id === ref.id ? placeFree(item, x, y, { w: 240, h: 120 }) : item
+          ));
+        } else if (ref.type === 'resource') {
+          canvasResources = canvasResources.map((item) => (
+            item.id === ref.id ? placeFree(item, x, y, { w: 240, h: 120 }) : item
+          ));
+        } else if (ref.type === 'task') {
+          canvasTasks = canvasTasks.map((item) => (
+            item.id === ref.id ? placeFree(item, x, y, { w: 240, h: 120 }) : item
+          ));
+        } else if (ref.type === 'idea' && ref.source === 'backlog') {
+          backlog = backlog.map((item) => (
+            item.id === ref.id ? placeFree(item, x, y, { w: 240, h: 120 }) : item
+          ));
+        } else if (ref.type === 'idea') {
+          stages = stages.map((stage) => {
+            if (stage.id !== ref.stageId) return stage;
+            return {
+              ...stage,
+              ideas: (stage.ideas || []).map((idea) => (
+                idea.id === ref.id ? placeFree(idea, x, y, { w: 240, h: 120 }) : idea
+              )),
+            };
+          });
+        }
+      }
+
+      return {
+        ...prev,
+        stages,
+        backlog,
+        canvasStickies,
+        canvasObstacles,
+        canvasResources,
+        canvasTasks,
+      };
+    }, { debounce: true, canvasHeadroom: true });
+  }, [patchState, lifelineAnchors]);
+
   const moveCanvasTask = useCallback((taskId, canvasX, canvasY) => {
     patchState((prev) => {
       const layout = getRoadmapLayout(prev.mapTheme);
@@ -3566,6 +3655,7 @@ export function useAppState(userId) {
     addCanvasTask,
     updateCanvasTask,
     moveCanvasTask,
+    moveCanvasNodes,
     removeCanvasTask,
     clearCanvasTaskFromCanvas,
     addDecision,

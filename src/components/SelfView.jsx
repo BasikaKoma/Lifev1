@@ -191,6 +191,23 @@ export function SelfView({
     [hubView.dayProgress, timeline.segments],
   );
 
+  const todayEventNotes = getDayEntry(lifelineDays, today).eventNotes || {};
+  const handleSaveTimelineEvent = useCallback(
+    (eventId, fields) => {
+      const current = getDayEntry(lifelineDays, today).eventNotes || {};
+      onUpdateLifelineDay?.(today, {
+        eventNotes: {
+          ...current,
+          [eventId]: {
+            note: fields.note,
+            detail: fields.detail,
+          },
+        },
+      });
+    },
+    [lifelineDays, onUpdateLifelineDay, today],
+  );
+
   const handleToggleTodayRoutine = useCallback(
     (routine) => {
       onUpdateLifelineDay?.(today, {
@@ -253,6 +270,8 @@ export function SelfView({
           <SelfDayProgress
             dayProgress={dayProgress}
             events={timeline.events}
+            eventNotes={todayEventNotes}
+            onSaveEvent={onUpdateLifelineDay ? handleSaveTimelineEvent : undefined}
             onOpenDayDetails={handleOpenDayDetails}
           />
 

@@ -129,7 +129,9 @@ export async function signUp(email, password) {
     email: email.trim(),
     password,
     options: {
-      emailRedirectTo: `${window.location.origin}/account`,
+      emailRedirectTo: /localhost|127\.0\.0\.1/i.test(window.location.origin)
+        ? 'https://lifev1-app.pages.dev'
+        : `${window.location.origin}/account`,
     },
   });
   if (error) throw error;

@@ -29,23 +29,33 @@
 .period-lab__grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: max-content;
+  align-items: start;
+  align-content: start;
   gap: 0.85rem;
   padding: 0.75rem 1.25rem 1.4rem;
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .period-lab__card {
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   gap: 0.55rem;
-  min-height: 11.5rem;
+  width: 100%;
+  min-width: 0;
+  height: max-content;
+  min-height: max-content;
   padding: 0.9rem 1rem;
   border: 1px solid var(--self-glass-border);
   border-radius: 18px;
   background: var(--self-glass);
   backdrop-filter: blur(16px);
+  overflow: visible;
 }
 
 .period-lab__card--empty {
@@ -112,6 +122,12 @@
   color: rgba(255, 255, 255, 0.45);
 }
 
+.period-lab__card-head,
+.period-lab__rows,
+.period-lab__notes {
+  flex: 0 0 auto;
+}
+
 .period-lab__rows {
   margin: 0;
   padding: 0;
@@ -119,20 +135,103 @@
   display: flex;
   flex-direction: column;
   gap: 0.28rem;
+  width: 100%;
+  min-width: 0;
 }
 
 .period-lab__rows li {
   display: flex;
   justify-content: space-between;
+  align-items: baseline;
   gap: 0.75rem;
+  min-width: 0;
   font-size: 0.75rem;
   color: rgba(255, 255, 255, 0.55);
 }
 
+.period-lab__rows li > span {
+  min-width: 0;
+}
+
 .period-lab__rows strong {
+  flex: 0 0 auto;
   color: #e5e5e5;
   font-weight: 650;
   text-align: right;
+  white-space: nowrap;
+}
+
+.period-lab__split {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  justify-content: start;
+  align-items: start;
+  column-gap: 0.7rem;
+}
+
+.period-lab__rows--tight {
+  width: auto;
+}
+
+.period-lab__rows--tight li {
+  justify-content: flex-start;
+  gap: 0.55rem;
+}
+
+.period-lab__wakes {
+  margin: 0;
+  padding: 0 0 0 0.7rem;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.period-lab__wakes li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.period-lab__wakes strong {
+  color: #e5e5e5;
+  font-weight: 650;
+}
+
+.period-lab__review {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--self-glass-border);
+  border-radius: 18px;
+  background: var(--self-glass);
+}
+
+.period-lab__review-input {
+  width: 100%;
+  min-height: 6.5rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  resize: vertical;
+  background: transparent;
+  color: #f5f5f5;
+  font: inherit;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.period-lab__review-input::placeholder {
+  color: rgba(255, 255, 255, 0.32);
+}
+
+.period-lab__review-input:focus {
+  outline: none;
 }
 
 .period-lab__notes {
@@ -149,8 +248,21 @@
 }
 
 @media (max-width: 720px) {
-  .period-lab__grid {
+  .period-lab__split {
     grid-template-columns: 1fr;
-    padding: 0.6rem 0.85rem 1.1rem;
+    row-gap: 0.7rem;
+  }
+
+  .period-lab__grid {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    grid-template-columns: 1fr;
+    padding: 0.6rem 0.85rem calc(5.25rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .period-lab__card {
+    flex: 0 0 auto;
+    height: auto;
   }
 }

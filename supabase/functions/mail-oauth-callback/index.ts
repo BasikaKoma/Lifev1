@@ -6,6 +6,7 @@ import {
   syncMailbox,
   tokenExpiresAt,
 } from '../_shared/mail.ts';
+import { exchangeZohoCode, fetchZohoAccount, ZOHO_SCOPES } from '../_shared/zohoMail.ts';
 
 Deno.serve(async (req) => {
   if (req.method !== 'GET') return new Response('Method not allowed', { status: 405 });
@@ -22,7 +23,7 @@ Deno.serve(async (req) => {
     const admin = getServiceClient();
     const { data: pending, error: stateError } = await admin
       .from('mail_oauth_states')
-      .select('user_id, return_to, expires_at')
+      .select('user_id, return_to, expires_at, provider, region')
       .eq('state', state)
       .maybeSingle();
     if (stateError) throw stateError;
@@ -30,24 +31,68 @@ Deno.serve(async (req) => {
       throw new Error('Invalid or expired OAuth state');
     }
 
-    const tokens = await exchangeMailCode(code);
-    if (!tokens.refresh_token) throw new Error('Gmail did not return a refresh token');
-    const email = await fetchMailboxEmail(tokens.access_token);
-    const { error: upsertError } = await admin.from('mail_connections').upsert({
-      user_id: pending.user_id,
-      email,
-      access_token: tokens.access_token,
-      refresh_token: tokens.refresh_token,
-      expires_at: tokenExpiresAt(tokens.expires_in),
-      scopes: MAIL_SCOPES,
-      connected_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    });
-    if (upsertError) throw upsertError;
+    const provider = pending.provider === 'zoho' ? 'zoho' : 'gmail';
+    let email: string | null = null;
+    let accessToken = '';
+    let accountId: string | null = null;
+    let apiBase: string | null = null;
+    let accountsHost: string | null = null;
+    if (provider === 'zoho') {
+      const connected = await exchangeZohoCode(code, pending.region || 'eu');
+      if (!connected.tokens.refresh_token) throw new Error('Zoho did not return a refresh token');
+      const account = await fetchZohoAccount(connected.region.apiBase, connected.tokens.access_token);
+      email = account.email;
+      accessToken = connected.tokens.access_token;
+      accountId = account.accountId;
+      apiBase = connected.region.apiBase;
+      accountsHost = connected.region.accountsHost;
+      const { error: upsertError } = await admin.from('mail_connections').upsert({
+        user_id: pending.user_id,
+        provider: 'zoho',
+        email,
+        account_id: accountId,
+        api_base: apiBase,
+        accounts_host: accountsHost,
+        access_token: accessToken,
+        refresh_token: connected.tokens.refresh_token,
+        expires_at: tokenExpiresAt(connected.tokens.expires_in),
+        scopes: ZOHO_SCOPES,
+        connected_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+      if (upsertError) throw upsertError;
+    } else {
+      const tokens = await exchangeMailCode(code);
+      if (!tokens.refresh_token) throw new Error('Gmail did not return a refresh token');
+      email = await fetchMailboxEmail(tokens.access_token);
+      accessToken = tokens.access_token;
+      const { error: upsertError } = await admin.from('mail_connections').upsert({
+        user_id: pending.user_id,
+        provider: 'gmail',
+        email,
+        account_id: null,
+        api_base: null,
+        accounts_host: null,
+        access_token: accessToken,
+        refresh_token: tokens.refresh_token,
+        expires_at: tokenExpiresAt(tokens.expires_in),
+        scopes: MAIL_SCOPES,
+        connected_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+      if (upsertError) throw upsertError;
+    }
     await admin.from('mail_oauth_states').delete().eq('state', state);
 
     try {
-      await syncMailbox(admin, pending.user_id, tokens.access_token);
+      await syncMailbox(admin, pending.user_id, {
+        provider,
+        token: accessToken,
+        accountId,
+        apiBase,
+        accountsHost,
+        email,
+      });
     } catch (syncErr) {
       console.error('Initial mail sync failed', syncErr instanceof Error ? syncErr.message : '');
     }

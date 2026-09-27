@@ -10,6 +10,7 @@ import { readBrandBundleLocal } from '../../lib/brand/store';
 import { itemsByStage } from '../../lib/brand/schema';
 import { readNutritionBundleLocal } from '../../lib/nutrition/store';
 import { activePlan, profileTargets } from '../../lib/nutrition/schema';
+import { buildSleepClock } from './sleepClock';
 
 function compactText(value, max = 280) {
   const text = String(value || '').replace(/\s+/g, ' ').trim();
@@ -68,7 +69,7 @@ function summarizeDay(date, lifelineDays, selfHubDays, projectActivity = []) {
   };
 }
 
-function buildPatterns(recentDays, projects) {
+function buildPatterns(recentDays, projects, ouraRows) {
   const scored = recentDays.filter((day) => day.sleep != null || day.readiness != null || day.dayScore != null);
   const avg = (key) => {
     const values = scored.map((day) => day[key]).filter((value) => typeof value === 'number');
@@ -91,7 +92,7 @@ function buildPatterns(recentDays, projects) {
     };
   }
 
-  return {
+  const patterns = {
     windowDays: recentDays.length,
     daysWithWork,
     emptyDays,
@@ -103,6 +104,10 @@ function buildPatterns(recentDays, projects) {
       .filter((item) => item.blocker || (item.open > 0 && item.progress < 20))
       .slice(0, 8),
   };
+  if (Array.isArray(ouraRows)) {
+    patterns.sleepClock = buildSleepClock(recentDays, ouraRows);
+  }
+  return patterns;
 }
 
 function summarizeProject(project, extras = {}) {
@@ -135,6 +140,7 @@ export function buildSnapshot({
   notes = [],
   northStars = [],
   assistantPack = null,
+  ouraRows = null,
 } = {}) {
   const scopes = policy?.appScopes || {};
   const includeSelf = scopes.self !== false;
@@ -348,7 +354,11 @@ export function buildSnapshot({
 
   if (assistantPack) snapshot.assistant = assistantPack;
 
-  snapshot.patterns = buildPatterns(snapshot.lifeline?.recentDays || [], snapshot.projects || []);
+  snapshot.patterns = buildPatterns(
+    snapshot.lifeline?.recentDays || [],
+    snapshot.projects || [],
+    ouraRows,
+  );
   const coverage = {
     loaded: true,
     self: Boolean(snapshot.self?.sourceId),

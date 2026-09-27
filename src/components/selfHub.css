@@ -436,6 +436,32 @@
   filter: drop-shadow(0 0 6px var(--hub-accent-glow));
 }
 
+.self-float-metric--sleep .self-float-metric__orb {
+  border-color: rgba(56, 189, 248, 0.34);
+  box-shadow:
+    0 6px 28px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+    0 0 24px rgba(56, 189, 248, 0.22);
+}
+
+.self-float-metric--sleep .self-float-metric__orb-ring-bg {
+  stroke: rgba(56, 189, 248, 0.16);
+}
+
+.self-float-metric--sleep .self-float-metric__orb-ring-fill {
+  stroke: #38bdf8;
+  filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.65));
+}
+
+.self-float-metric--sleep .self-float-metric__orb-icon,
+.self-float-metric--sleep .self-float-metric__orb-empty {
+  color: #7dd3fc;
+}
+
+.self-float-metric--sleep .self-float-metric__orb-value {
+  text-shadow: 0 0 20px rgba(56, 189, 248, 0.35);
+}
+
 .self-float-metric__orb-body {
   position: absolute;
   inset: 14%;
@@ -564,6 +590,35 @@
   font-weight: 500;
   margin-left: 0.08em;
   color: rgba(248, 250, 252, 0.6);
+}
+
+.self-float-metric__pairs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.08rem;
+}
+
+.self-float-metric--mr .self-float-metric__pairs,
+.self-float-metric--tr .self-float-metric__pairs,
+.self-float-metric--br .self-float-metric__pairs {
+  align-items: flex-end;
+}
+
+.self-float-metric__pair {
+  display: flex;
+  align-items: baseline;
+  gap: 0.28rem;
+}
+
+.self-float-metric__pair .self-float-metric__value {
+  font-size: clamp(0.75rem, 2.2vw, 0.875rem);
+}
+
+.self-float-metric__pair-tag {
+  font-size: clamp(0.45rem, 1.4vw, 0.5rem);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(248, 250, 252, 0.42);
 }
 
 .self-float-metric__secondary,
@@ -826,7 +881,8 @@
 }
 
 .self-day-progress__track-btn {
-  flex: 1;
+  display: block;
+  width: 100%;
   min-width: 0;
   padding: 0;
   border: none;
@@ -863,6 +919,21 @@
   pointer-events: none;
 }
 
+button.self-day-progress__event,
+button.self-day-progress__cluster-chip {
+  margin: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+button.self-day-progress__event {
+  padding: 0;
+}
+
 .self-day-progress__event {
   position: absolute;
   top: 0;
@@ -875,16 +946,83 @@
   z-index: 1;
 }
 
-.self-day-progress__event--lane0 {
+.self-day-progress__event--noted .self-day-progress__event-chip,
+.self-day-progress__cluster-chip--noted {
+  box-shadow: inset 0 -1px 0 rgba(56, 189, 248, 0.85);
+}
+
+.self-day-progress__event--lane0,
+button.self-day-progress__event.self-day-progress__event--lane0 {
+  z-index: 1;
   padding-top: 3.45rem;
 }
 
-.self-day-progress__event--lane1 {
+.self-day-progress__event--lane1,
+button.self-day-progress__event.self-day-progress__event--lane1 {
+  z-index: 2;
   padding-top: 1.72rem;
 }
 
-.self-day-progress__event--lane2 {
+.self-day-progress__event--lane2,
+button.self-day-progress__event.self-day-progress__event--lane2 {
+  z-index: 3;
   padding-top: 0.05rem;
+}
+
+.self-day-progress__event--cluster {
+  z-index: 2;
+  top: auto;
+  height: auto;
+  padding-top: 0;
+  justify-content: flex-end;
+  color: rgba(248, 250, 252, 0.42);
+}
+
+.self-day-progress__event--cluster .self-day-progress__event-stem {
+  flex: none;
+  height: 0.55rem;
+  min-height: 0;
+}
+
+.self-day-progress__cluster-shift {
+  display: flex;
+  justify-content: center;
+  transform: translateX(var(--chip-nudge, 0px));
+}
+
+.self-day-progress__cluster {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.14rem;
+  width: max-content;
+}
+
+.self-day-progress__cluster-chip.self-day-progress__event-chip {
+  max-width: none;
+  gap: 0.18rem;
+  padding: 0.08rem 0.32rem;
+  font-size: 0.5rem;
+}
+
+.self-day-progress__cluster .self-day-progress__event-icon svg {
+  width: 0.56rem;
+  height: 0.56rem;
+}
+
+.self-day-progress__cluster .self-day-progress__event-label {
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.self-day-progress__event--cluster:hover,
+.self-day-progress__cluster-chip:hover {
+  z-index: 6;
+}
+
+.self-day-progress__event:not(.self-day-progress__event--cluster) > .self-day-progress__event-chip {
+  transform: translateX(var(--chip-nudge, 0px));
 }
 
 .self-day-progress__event-chip {
@@ -914,7 +1052,12 @@
   z-index: 6;
 }
 
-.self-day-progress__event:hover .self-day-progress__event-chip {
+.self-day-progress__event:not(.self-day-progress__event--cluster):hover > .self-day-progress__event-chip {
+  transform: translateX(var(--chip-nudge, 0px)) translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.self-day-progress__event--cluster:hover .self-day-progress__event-chip {
   transform: translateY(-1px);
   border-color: rgba(255, 255, 255, 0.22);
 }
@@ -960,7 +1103,7 @@
   border-radius: 50%;
   background: currentColor;
   box-shadow: 0 0 8px currentColor;
-  z-index: 1;
+  z-index: 3;
   pointer-events: none;
 }
 
@@ -1045,7 +1188,7 @@
   border-radius: 999px;
   opacity: 0.4;
   pointer-events: none;
-  z-index: 0;
+  z-index: 2;
 }
 
 .self-day-progress__segment--sleep {
@@ -1082,7 +1225,7 @@
     0 0 0 3px rgba(52, 211, 153, 0.35),
     0 0 16px var(--hub-accent-glow);
   pointer-events: none;
-  z-index: 2;
+  z-index: 4;
   transition: left 0.85s linear;
 }
 
@@ -1118,6 +1261,126 @@
   font-size: clamp(0.5625rem, 1.6vw, 0.625rem);
   letter-spacing: 0.2em;
   color: rgba(248, 250, 252, 0.32);
+}
+
+.self-event-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 1400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+}
+
+.self-event-dialog__backdrop {
+  position: absolute;
+  inset: 0;
+  border: none;
+  background: rgba(0, 0, 0, 0.55);
+  cursor: pointer;
+}
+
+.self-event-dialog__panel {
+  position: relative;
+  width: min(420px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 1rem 1rem 0.9rem;
+  border-radius: 16px;
+  background: rgba(10, 14, 12, 0.96);
+  border: 1px solid rgba(52, 211, 153, 0.18);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+}
+
+.self-event-dialog__header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+}
+
+.self-event-dialog__icon {
+  display: flex;
+  margin-top: 0.15rem;
+}
+
+.self-event-dialog__icon svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.self-event-dialog__heading {
+  min-width: 0;
+  flex: 1;
+}
+
+.self-event-dialog__type {
+  margin: 0;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  color: rgba(248, 250, 252, 0.48);
+}
+
+.self-event-dialog__title {
+  margin: 0.15rem 0 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.self-event-dialog__close,
+.self-event-dialog__save {
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.self-event-dialog__close {
+  padding: 0.35rem 0.7rem;
+  background: transparent;
+  color: rgba(248, 250, 252, 0.62);
+}
+
+.self-event-dialog__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(248, 250, 252, 0.48);
+}
+
+.self-event-dialog__field textarea {
+  resize: vertical;
+  min-height: 4.5rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  color: #fff;
+  font: inherit;
+  font-size: 0.9rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.self-event-dialog__field textarea:focus {
+  outline: 2px solid rgba(52, 211, 153, 0.45);
+  outline-offset: 1px;
+}
+
+.self-event-dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.self-event-dialog__save {
+  padding: 0.5rem 0.95rem;
+  background: rgba(52, 211, 153, 0.16);
+  color: #6ee7b7;
 }
 
 /* Cards — glass panels */
@@ -1957,7 +2220,7 @@
 /* Summary strip — mini tiles */
 .self-summary-strip {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 0.45rem;
   padding: 0.25rem 0 0.5rem;
 }
@@ -2009,6 +2272,33 @@
 .self-summary-strip__status {
   font-size: clamp(0.5rem, 1.5vw, 0.5625rem);
   color: var(--hub-accent-bright);
+}
+
+.self-summary-strip__pairs {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.12rem;
+  width: 100%;
+}
+
+.self-summary-strip__pair {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.28rem;
+  min-width: 0;
+}
+
+.self-summary-strip__pair .self-summary-strip__value {
+  font-size: clamp(0.75rem, 2.1vw, 0.875rem);
+}
+
+.self-summary-strip__pair-tag {
+  font-size: clamp(0.45rem, 1.3vw, 0.5rem);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(248, 250, 252, 0.42);
 }
 
 /* ── Desktop architecture (mobile <768px unchanged) ──

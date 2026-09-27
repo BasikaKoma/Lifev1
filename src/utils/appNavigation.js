@@ -15,7 +15,7 @@ const VIEW_ALIASES = {
   roadmap: 'projects',
 };
 
-const PATH_TABS = ['goals', 'week', 'metrics', 'routines', 'review'];
+const PATH_TABS = ['wheel', 'goals', 'week', 'metrics', 'routines', 'review'];
 
 export function pathTabFromPathname(pathname) {
   const path = (pathname || '/').replace(/\/+$/, '') || '/';

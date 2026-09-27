@@ -66,6 +66,15 @@ export function shouldAppendWeightReading(readings, weightKg, recordedAt, minGap
   return gap >= minGapMs;
 }
 
+export function averageReadingValue(readings = []) {
+  const values = readings
+    .map((reading) => Number(reading?.value))
+    .filter((value) => Number.isFinite(value));
+  if (!values.length) return null;
+  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+  return Math.round(mean * 100) / 100;
+}
+
 export function buildWeightLineChart(readings = []) {
   if (readings.length < 2) return null;
   return {
@@ -79,8 +88,8 @@ export function buildWeightLineChart(readings = []) {
 
 export function buildWeightCardFromReadings(readings = [], { delta = null } = {}) {
   if (!readings.length) return null;
-  const latest = readings[readings.length - 1];
-  const kg = Math.round(latest.value * 100) / 100;
+  const kg = averageReadingValue(readings);
+  if (kg == null) return null;
 
   return {
     id: 'weight',

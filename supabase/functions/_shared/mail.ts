@@ -1,3 +1,9 @@
+import {
+  refreshZohoToken,
+  sendZohoMessage,
+  syncZohoMailbox,
+} from './zohoMail.ts';
+
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GMAIL_API = 'https://gmail.googleapis.com/gmail/v1/users/me';
@@ -21,6 +27,15 @@ export type MailConnection = {
   access_token: string;
   refresh_token: string;
   expires_at: string;
+};
+
+export type MailSession = {
+  provider: 'gmail' | 'zoho';
+  token: string;
+  accountId: string | null;
+  apiBase: string | null;
+  accountsHost: string | null;
+  email: string | null;
 };
 
 export function getMailConfig() {
@@ -114,7 +129,7 @@ function headerValue(headers: Array<{ name?: string; value?: string }>, name: st
   return found?.value || '';
 }
 
-export async function syncMailbox(admin: { from: (table: string) => any }, userId: string, token: string) {
+async function syncGmailMailbox(admin: { from: (table: string) => any }, userId: string, token: string) {
   const list = await gmailFetch(token, `messages?maxResults=20&q=${encodeURIComponent('newer_than:21d')}`);
   const ids: string[] = (list.messages || []).map((item: { id?: string }) => item.id).filter(Boolean);
   const rows = [];
@@ -155,25 +170,44 @@ export async function syncMailbox(admin: { from: (table: string) => any }, userI
   return { count: rows.length };
 }
 
-export async function accessTokenForUser(admin: { from: (table: string) => any }, userId: string): Promise<string> {
+export async function syncMailbox(admin: { from: (table: string) => any }, userId: string, session: MailSession) {
+  if (session.provider === 'zoho') return syncZohoMailbox(admin, userId, session);
+  return syncGmailMailbox(admin, userId, session.token);
+}
+
+export async function accessTokenForUser(admin: { from: (table: string) => any }, userId: string): Promise<MailSession> {
   const { data, error } = await admin
     .from('mail_connections')
-    .select('access_token, refresh_token, expires_at')
+    .select('provider, email, access_token, refresh_token, expires_at, account_id, api_base, accounts_host')
     .eq('user_id', userId)
     .maybeSingle();
   if (error) throw error;
   if (!data?.access_token || !data.refresh_token) throw new Error('Mail is not connected');
+  const provider = data.provider === 'zoho' ? 'zoho' : 'gmail';
+  let token = data.access_token;
+  let refreshToken = data.refresh_token;
   const expires = new Date(data.expires_at).getTime();
-  if (expires > Date.now() + 60_000) return data.access_token;
-  const refreshed = await refreshMailToken(data.refresh_token);
-  const nextToken = refreshed.access_token;
-  await admin.from('mail_connections').update({
-    access_token: nextToken,
-    refresh_token: refreshed.refresh_token || data.refresh_token,
-    expires_at: tokenExpiresAt(refreshed.expires_in),
-    updated_at: new Date().toISOString(),
-  }).eq('user_id', userId);
-  return nextToken;
+  if (!(expires > Date.now() + 60_000)) {
+    const refreshed = provider === 'zoho'
+      ? await refreshZohoToken(data.accounts_host, refreshToken)
+      : await refreshMailToken(refreshToken);
+    token = refreshed.access_token;
+    refreshToken = refreshed.refresh_token || refreshToken;
+    await admin.from('mail_connections').update({
+      access_token: token,
+      refresh_token: refreshToken,
+      expires_at: tokenExpiresAt(refreshed.expires_in),
+      updated_at: new Date().toISOString(),
+    }).eq('user_id', userId);
+  }
+  return {
+    provider,
+    token,
+    accountId: data.account_id || null,
+    apiBase: data.api_base || null,
+    accountsHost: data.accounts_host || null,
+    email: data.email || null,
+  };
 }
 
 function encodeHeader(value: string): string {
@@ -199,15 +233,20 @@ export function parseEmailAddress(value: string): string {
 }
 
 export async function sendMailMessage(
-  token: string,
-  { to, subject, body, threadId, inReplyTo }: {
+  session: MailSession,
+  { to, subject, body, threadId, inReplyTo, messageId }: {
     to: string;
     subject: string;
     body: string;
     threadId?: string | null;
     inReplyTo?: string | null;
+    messageId?: string | null;
   },
 ) {
+  if (session.provider === 'zoho') {
+    return sendZohoMessage(session, { to, subject, body, messageId });
+  }
+  const token = session.token;
   const headers = [
     `To: ${to}`,
     `Subject: ${encodeHeader(subject)}`,

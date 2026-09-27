@@ -98,7 +98,7 @@ function hmFromHour(hour) {
   return `${pad2(h)}:${pad2(m)}`;
 }
 
-function truncate(text, max = 22) {
+function truncate(text, max = 48) {
   const clean = String(text || '').trim();
   if (clean.length <= max) return clean;
   return `${clean.slice(0, max - 1).trimEnd()}…`;

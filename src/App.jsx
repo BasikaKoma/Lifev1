@@ -74,7 +74,7 @@ export default function App() {
 function MainApp({ user, onSignOut }) {
   const [brainMode, setBrainMode] = useState('closed');
   const [pathBundle, setPathBundle] = useState(() => readPathBundleLocal());
-  const [pathTab, setPathTab] = useState(() => pathTabFromPathname(window.location.pathname) || 'goals');
+  const [pathTab, setPathTab] = useState(() => pathTabFromPathname(window.location.pathname) || 'wheel');
 
   const {
     loading,
@@ -191,6 +191,7 @@ function MainApp({ user, onSignOut }) {
     addCanvasTask,
     updateCanvasTask,
     moveCanvasTask,
+    moveCanvasNodes,
     removeCanvasTask,
     clearCanvasTaskFromCanvas,
     addDecision,
@@ -422,7 +423,7 @@ function MainApp({ user, onSignOut }) {
     setActiveView(view);
   };
 
-  const openPath = (tab = 'goals') => {
+  const openPath = (tab = 'wheel') => {
     setPathTab(tab);
     handleNavigate('path');
   };
@@ -696,6 +697,7 @@ function MainApp({ user, onSignOut }) {
             onAddCanvasTask={addCanvasTask}
             onUpdateCanvasTask={updateCanvasTask}
             onMoveCanvasTask={moveCanvasTask}
+            onMoveCanvasNodes={moveCanvasNodes}
             onRemoveCanvasTask={removeCanvasTask}
             onAddCanvasInkStroke={addCanvasInkStroke}
             onRemoveCanvasInkStrokes={removeCanvasInkStrokes}

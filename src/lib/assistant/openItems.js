@@ -20,7 +20,7 @@ const SOURCE_LABELS = {
   manual: 'Χέρι',
   mail: 'Mail',
   call: 'Κλήση',
-  day: 'Μέρα',
+  day: 'Weekly plan',
   commitment: 'Δέσμευση',
 };
 

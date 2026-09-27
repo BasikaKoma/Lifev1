@@ -34,8 +34,8 @@ Deno.serve(async (req) => {
     }
     if (!to) return errorResponse('Recipient is required');
 
-    const token = await accessTokenForUser(admin, user.id);
-    await sendMailMessage(token, { to, subject, body: text, threadId, inReplyTo });
+    const session = await accessTokenForUser(admin, user.id);
+    await sendMailMessage(session, { to, subject, body: text, threadId, inReplyTo, messageId: gmailId || null });
     return jsonResponse({ ok: true, to, subject });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Mail send failed';

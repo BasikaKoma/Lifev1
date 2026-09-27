@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import { canvasStyleClasses } from '../utils/canvasNodes';
 import { resolveNodeThemeStyle } from '../utils/mapTheme';
 import { useCanvasNodeCard } from '../hooks/useCanvasNodeCard';
+import { useIsNodeSelected } from '../hooks/useCanvasMultiSelect';
 import { CategoryBadge } from './CategorySelect';
 import { PriorityBadge, PrioritySelect } from './PrioritySelect';
 
@@ -38,11 +39,12 @@ export function IdeaCanvasCard({
     connectFrom?.id === idea.id &&
     (connectFrom?.source || 'backlog') === (source || 'backlog') &&
     (connectFrom?.stageId || '') === (stageId || '');
-  const isSelected =
+  const isSelected = useIsNodeSelected(nodeRef) || (
     selectedNodeRef?.type === 'idea' &&
     selectedNodeRef?.id === idea.id &&
     (selectedNodeRef?.source || 'backlog') === (source || 'backlog') &&
-    (selectedNodeRef?.stageId || '') === (stageId || '');
+    (selectedNodeRef?.stageId || '') === (stageId || '')
+  );
   const posRef = useRef({ x: idea.canvasX, y: idea.canvasY });
   posRef.current = { x: idea.canvasX, y: idea.canvasY };
 

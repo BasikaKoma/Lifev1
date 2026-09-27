@@ -79,13 +79,12 @@ export function useAuth() {
   }, []);
 
   const signUp = useCallback(async (email, password, displayName) => {
-    const { user: created, session } = await signUpWithEmail(email, password, displayName);
+    const { session } = await signUpWithEmail(email, password, displayName);
     if (session?.user) {
       setUser(session.user);
       return session.user;
     }
-    setUser(created ?? null);
-    return created;
+    return null;
   }, []);
 
   const signOut = useCallback(async () => {

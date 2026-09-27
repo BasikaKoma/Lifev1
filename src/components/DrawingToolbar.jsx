@@ -59,7 +59,7 @@ export function DrawingToolbar({
           type="button"
           className={`drawing-toolbar__btn${tool === 'select' ? ' drawing-toolbar__btn--active' : ''}`}
           onClick={() => onToolChange?.('select')}
-          title="Select handwriting (drag rectangle)"
+          title="Select windows or handwriting. Drag a rectangle, then drag one window to move the group. Shift+click adds to the selection."
           aria-pressed={tool === 'select'}
         >
           Select

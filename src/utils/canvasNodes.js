@@ -69,6 +69,29 @@ export function sameNodeRef(a, b) {
   return nodeRefKey(a) === nodeRefKey(b);
 }
 
+const MOVABLE_NODE_TYPES = new Set(['milestone', 'idea', 'sticky', 'obstacle', 'resource', 'task']);
+
+/** Canvas cards whose bounds overlap a marquee. Checkpoints and the origin stay out. */
+export function findNodesInRect(registry, x1, y1, x2, y2) {
+  if (!registry) return [];
+  const left = Math.min(x1, x2);
+  const right = Math.max(x1, x2);
+  const top = Math.min(y1, y2);
+  const bottom = Math.max(y1, y2);
+  const hits = [];
+  for (const entry of registry.values()) {
+    const { ref, bounds } = entry || {};
+    if (!ref || !bounds || !MOVABLE_NODE_TYPES.has(ref.type)) continue;
+    if (typeof bounds.x !== 'number' || typeof bounds.y !== 'number') continue;
+    const nodeRight = bounds.x + bounds.w;
+    const nodeBottom = bounds.y + bounds.h;
+    if (bounds.x <= right && nodeRight >= left && bounds.y <= bottom && nodeBottom >= top) {
+      hits.push(ref);
+    }
+  }
+  return hits;
+}
+
 export function isStickyOnCanvas(sticky) {
   return typeof sticky?.canvasX === 'number' && typeof sticky?.canvasY === 'number';
 }

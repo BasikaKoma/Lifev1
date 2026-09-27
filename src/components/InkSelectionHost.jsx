@@ -7,7 +7,7 @@ import { expandSelectionToChunks } from '../utils/inkGroups';
 /**
  * Rectangle selection for ink strokes on the zoom viewport.
  */
-export function useInkSelection({ strokes, onSelectionChange }) {
+export function useInkSelection({ strokes, onSelectionChange, onRectCommit }) {
   const { scale, pan, viewportRef } = useZoomTransform();
   const [selectionRect, setSelectionRect] = useState(null);
   const dragRef = useRef(null);
@@ -47,7 +47,7 @@ export function useInkSelection({ strokes, onSelectionChange }) {
         setSelectionRect({ ...dragRef.current });
       };
 
-      const onWinUp = () => {
+      const onWinUp = (ev) => {
         const d = dragRef.current;
         dragRef.current = null;
         window.removeEventListener('pointermove', onWinMove);
@@ -55,15 +55,18 @@ export function useInkSelection({ strokes, onSelectionChange }) {
         window.removeEventListener('pointercancel', onWinUp);
         if (d) {
           commitSelection(d.x1, d.y1, d.x2, d.y2);
-          setSelectionRect({ ...d });
+          onRectCommit?.(d, {
+            additive: Boolean(ev?.shiftKey || ev?.metaKey || ev?.ctrlKey),
+          });
         }
+        setSelectionRect(null);
       };
 
       window.addEventListener('pointermove', onWinMove, { passive: false });
       window.addEventListener('pointerup', onWinUp);
       window.addEventListener('pointercancel', onWinUp);
     },
-    [toBoard, commitSelection]
+    [toBoard, commitSelection, onRectCommit]
   );
 
   const clearSelection = useCallback(() => {
@@ -75,10 +78,11 @@ export function useInkSelection({ strokes, onSelectionChange }) {
   return { selectionRect, onPointerDown, clearSelection };
 }
 
-export function InkSelectionHost({ strokes, onSelectionChange, bindDownRef }) {
+export function InkSelectionHost({ strokes, onSelectionChange, onRectCommit, bindDownRef }) {
   const { selectionRect, onPointerDown, clearSelection } = useInkSelection({
     strokes,
     onSelectionChange,
+    onRectCommit,
   });
 
   useEffect(() => {

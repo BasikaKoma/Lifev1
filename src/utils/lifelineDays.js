@@ -92,12 +92,27 @@ function normalizeHubSnapshotArchive(raw) {
   };
 }
 
+function normalizeEventNotes(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out = {};
+  for (const [id, value] of Object.entries(raw)) {
+    if (!id || !value || typeof value !== 'object') continue;
+    out[id] = {
+      note: typeof value.note === 'string' ? value.note : '',
+      detail: typeof value.detail === 'string' ? value.detail : '',
+    };
+  }
+  return out;
+}
+
 export function createEmptyDayEntry() {
   return {
     notes: '',
+    weekReview: '',
     thoughts: [],
     todos: [],
     routines: {},
+    eventNotes: {},
     metrics: null,
     projectSnapshot: null,
     hubSnapshot: null,
@@ -123,9 +138,11 @@ export function getDayEntry(lifelineDays, dateStr) {
   if (!entry || typeof entry !== 'object') return createEmptyDayEntry();
   return {
     notes: typeof entry.notes === 'string' ? entry.notes : '',
+    weekReview: typeof entry.weekReview === 'string' ? entry.weekReview : '',
     thoughts: normalizeDayThoughts(entry.thoughts),
     todos: Array.isArray(entry.todos) ? entry.todos : [],
     routines: normalizeRoutineLog(entry.routines),
+    eventNotes: normalizeEventNotes(entry.eventNotes),
     metrics: normalizeDayMetrics(entry.metrics),
     projectSnapshot: normalizeProjectSnapshotArchive(entry.projectSnapshot),
     hubSnapshot: normalizeHubSnapshotArchive(entry.hubSnapshot),
@@ -144,6 +161,7 @@ export function normalizeLifelineDays(raw) {
     if (!key) continue;
     out[key] = {
       notes: typeof entry?.notes === 'string' ? entry.notes : '',
+      weekReview: typeof entry?.weekReview === 'string' ? entry.weekReview : '',
       thoughts: normalizeDayThoughts(entry?.thoughts),
       todos: Array.isArray(entry?.todos)
         ? entry.todos.map((todo) => ({
@@ -153,6 +171,7 @@ export function normalizeLifelineDays(raw) {
           }))
         : [],
       routines: normalizeRoutineLog(entry?.routines),
+      eventNotes: normalizeEventNotes(entry?.eventNotes),
       metrics: normalizeDayMetrics(entry?.metrics),
       projectSnapshot: normalizeProjectSnapshotArchive(entry?.projectSnapshot),
       hubSnapshot: normalizeHubSnapshotArchive(entry?.hubSnapshot),
@@ -191,9 +210,11 @@ export function mergeLifelineDayEntry(cloud, local) {
     ...cloud,
     ...local,
     notes: pickRicherText(local.notes, cloud.notes),
+    weekReview: pickRicherText(local.weekReview, cloud.weekReview),
     thoughts: pickRicherList(local.thoughts, cloud.thoughts),
     todos: pickRicherList(local.todos, cloud.todos),
     routines: pickRicherObject(local.routines, cloud.routines) || {},
+    eventNotes: pickRicherObject(local.eventNotes, cloud.eventNotes) || {},
     metrics: local.metrics || cloud.metrics || null,
     projectSnapshot: local.projectSnapshot || cloud.projectSnapshot || null,
     hubSnapshot: local.hubSnapshot || cloud.hubSnapshot || null,
