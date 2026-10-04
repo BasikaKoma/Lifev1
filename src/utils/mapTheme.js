@@ -5,6 +5,7 @@ import {
   resolveEffectiveShapeMode,
 } from './canvasNodes';
 import { collectCanvasStages } from './stageLayout';
+import { frontsForLayout } from './projectFronts';
 
 export const DEFAULT_MAP_THEME = {
   panelTab: 'layout',
@@ -319,7 +320,7 @@ export function getRoadmapLayout(mapTheme) {
   const baseY = theme.roadmap?.baseY ?? 880;
   const top = theme.roadmap?.top ?? 80;
   const height = Math.max(240, Number(theme.roadmap?.height) || 1000);
-  return {
+  const layout = {
     direction: theme.direction === 'horizontal' ? 'horizontal' : 'vertical',
     spacing,
     centerX: theme.roadmap?.centerX ?? 480,
@@ -327,6 +328,9 @@ export function getRoadmapLayout(mapTheme) {
     top,
     height,
   };
+  const fronts = frontsForLayout(theme.fronts, layout);
+  if (fronts.length) layout.fronts = fronts;
+  return layout;
 }
 
 export function getRoadmapOrigin(mapTheme) {

@@ -90,6 +90,8 @@ function MainApp({ user, onSignOut }) {
     projectList,
     projectTitle,
     projectBrief,
+    projectRhythm,
+    setProjectRhythm,
     stages,
     goals,
     notes,
@@ -738,6 +740,8 @@ function MainApp({ user, onSignOut }) {
             onKeepThought={handleKeepThought}
             onDismissThought={handleDismissThought}
             onAddThought={handleAddThought}
+            projectRhythm={projectRhythm}
+            onUpdateProjectRhythm={setProjectRhythm}
           />
         );
         return (

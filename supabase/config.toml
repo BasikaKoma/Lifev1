@@ -4,6 +4,9 @@ verify_jwt = false
 [functions.mail-oauth-callback]
 verify_jwt = false
 
+[functions.erp-oauth-callback]
+verify_jwt = false
+
 [functions.meta-oauth-callback]
 verify_jwt = false
 

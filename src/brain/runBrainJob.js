@@ -147,7 +147,12 @@ async function executeTool(name, args, { policy, destination, catalog, conversat
   }
   if (name === 'list_mail') {
     try {
-      const messages = await listMailMessages({ urgentOnly: args.urgentOnly === true, limit: 20 });
+      const projectId = typeof args.projectId === 'string' ? args.projectId.trim() : '';
+      const messages = await listMailMessages({
+        urgentOnly: args.urgentOnly === true,
+        limit: 20,
+        projectId,
+      });
       return { connected: true, messages };
     } catch (err) {
       return { connected: false, messages: [], error: err.message };

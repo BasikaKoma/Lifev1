@@ -27,6 +27,7 @@ import {
 import { mergeLifelineDaysMaps, normalizeLifelineDays } from './lifelineDays';
 import { normalizeSelfHubDays } from './selfHubDays';
 import { normalizeProjectBrief } from './projectBrief';
+import { normalizeProjectRhythm } from './projectRhythm';
 import { normalizeActiveView } from './appNavigation';
 import {
   mergeLifelineReconcile,
@@ -57,6 +58,7 @@ const EXTENDED_PROJECT_COLUMNS = new Set([
   'whiteboard_strokes',
   'map_theme',
   'brief',
+  'recurring',
   'lifeline_days',
 ]);
 
@@ -158,6 +160,7 @@ function buildExtendedRow(state) {
     whiteboard_strokes: state.whiteboardStrokes || [],
     map_theme: state.mapTheme || {},
     brief: normalizeProjectBrief(state.projectBrief),
+    recurring: normalizeProjectRhythm(state.projectRhythm),
     lifeline_days: normalizeLifelineDays(state.lifelineDays),
   });
 }
@@ -220,6 +223,7 @@ function normalizeRow(row, { isLifeline = false, userId = null } = {}) {
     whiteboardStrokes: jsonbField(row, 'whiteboard_strokes', 'whiteboardStrokes'),
     mapTheme,
     projectBrief: jsonbField(row, 'brief', 'projectBrief'),
+    projectRhythm: jsonbField(row, 'recurring', 'projectRhythm'),
     lifelineDays: jsonbField(row, 'lifeline_days', 'lifelineDays'),
     selectedStageId: row.selected_stage_id || null,
     focusMode: row.focus_mode === true,
@@ -1278,6 +1282,7 @@ export async function resetSupabaseProject(state) {
     whiteboardStrokes: [],
     mapTheme: state.mapTheme,
     projectBrief: normalizeProjectBrief(),
+    projectRhythm: normalizeProjectRhythm(),
     selectedStageId: null,
     focusMode: false,
     activeView: 'projects',

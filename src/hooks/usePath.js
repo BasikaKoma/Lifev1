@@ -7,6 +7,7 @@ import {
   createEmptyMetricEntry,
   createEmptyTemplate,
   applyBlockStatus,
+  applyBlockStatusMoment,
   nowIso,
   startOfWeekMonday,
 } from '../lib/path/schema';
@@ -184,7 +185,7 @@ export function usePath() {
     });
   }, [updateBundle]);
 
-  const setBlockStatus = useCallback((blockId, status, { completeLinkedTask = false } = {}) => {
+  const setBlockStatus = useCallback((blockId, status, { completeLinkedTask = false, at } = {}) => {
     let linked = null;
     updateBundle((prev) => ({
       blocks: prev.blocks.map((block) => {
@@ -197,12 +198,21 @@ export function usePath() {
           };
         }
         return createEmptyBlock({
-          ...applyBlockStatus(block, status),
+          ...applyBlockStatus(block, status, at),
           completeLinkedTask: Boolean(completeLinkedTask),
         });
       }),
     }));
     return linked;
+  }, [updateBundle]);
+
+  const setBlockDoneAt = useCallback((blockId, at) => {
+    if (!at) return;
+    updateBundle((prev) => ({
+      blocks: prev.blocks.map((block) => (
+        block.id === blockId ? applyBlockStatusMoment(block, at) : block
+      )),
+    }));
   }, [updateBundle]);
 
   const upsertTemplate = useCallback((template) => {
@@ -376,6 +386,7 @@ export function usePath() {
     moveBlock,
     nudgeBlock,
     setBlockStatus,
+    setBlockDoneAt,
     upsertTemplate,
     removeTemplate,
     upsertMetric,

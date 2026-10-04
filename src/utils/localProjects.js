@@ -4,6 +4,7 @@ import { DEFAULT_MAP_THEME } from './mapTheme';
 import { createLifelineProject, findLifelineProject, isLifelineProject } from './lifeline';
 import { normalizeLifelineDays } from './lifelineDays';
 import { normalizeProjectBrief } from './projectBrief';
+import { normalizeProjectRhythm } from './projectRhythm';
 import { normalizeActiveView } from './appNavigation';
 
 const STORAGE_KEY = 'business-evolution-map';
@@ -30,6 +31,7 @@ export function createEmptyProject(title = 'My Business', { isLifeline = false }
     whiteboardStrokes: [],
     mapTheme: { ...DEFAULT_MAP_THEME },
     projectBrief: normalizeProjectBrief(),
+    projectRhythm: normalizeProjectRhythm(),
     selectedStageId: null,
     focusMode: false,
     activeView: 'projects',
@@ -107,6 +109,7 @@ function normalizeLocalProject(p) {
     whiteboardStrokes: p.whiteboardStrokes || [],
     mapTheme: p.mapTheme || { ...DEFAULT_MAP_THEME },
     projectBrief: normalizeProjectBrief(p.projectBrief || p.brief),
+    projectRhythm: normalizeProjectRhythm(p.projectRhythm || p.recurring),
     activeView: normalizeActiveView(p.activeView || 'projects'),
     isLifeline: isLifelineProject(p),
     lifelineAnchorDate: p.lifelineAnchorDate || p.lifeline_anchor_date || null,
@@ -148,6 +151,7 @@ export function saveLocalProject(state) {
     whiteboardStrokes: state.whiteboardStrokes || [],
     mapTheme: state.mapTheme || { ...DEFAULT_MAP_THEME },
     projectBrief: normalizeProjectBrief(state.projectBrief),
+    projectRhythm: normalizeProjectRhythm(state.projectRhythm),
     selectedStageId: state.selectedStageId,
     focusMode: state.focusMode,
     activeView: state.activeView,
@@ -188,6 +192,7 @@ export function projectStateFromLocal(project) {
     whiteboardStrokes: normalized.whiteboardStrokes || [],
     mapTheme: normalized.mapTheme || { ...DEFAULT_MAP_THEME },
     projectBrief: normalizeProjectBrief(normalized.projectBrief),
+    projectRhythm: normalizeProjectRhythm(normalized.projectRhythm),
     selectedStageId: normalized.selectedStageId || null,
     focusMode: normalized.focusMode || false,
     activeView: normalized.activeView,

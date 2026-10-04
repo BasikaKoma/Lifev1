@@ -32,6 +32,9 @@ export type ZohoSession = {
   accountId: string | null;
   apiBase: string | null;
   email: string | null;
+  projectId?: string | null;
+  connectionKey?: string;
+  connectionId?: string | null;
 };
 
 export function zohoRegion(value: unknown): ZohoRegion {
@@ -262,8 +265,11 @@ export async function syncZohoMailbox(
       const snippet = cleanSnippet(message.summary);
       const unread = isUnread(message.status);
       const urgent = unread && (isImportant(message) || URGENT_RE.test(`${subject} ${snippet}`));
+      const connectionKey = session.connectionKey || (session.projectId ? session.projectId : 'account');
       return {
         user_id: userId,
+        project_id: session.projectId || null,
+        connection_key: connectionKey,
         gmail_id: String(message.messageId),
         thread_id: message.threadId != null ? String(message.threadId) : null,
         message_id_header: null,
@@ -277,13 +283,17 @@ export async function syncZohoMailbox(
       };
     });
   if (rows.length) {
-    const { error } = await admin.from('mail_messages').upsert(rows, { onConflict: 'user_id,gmail_id' });
+    const { error } = await admin.from('mail_messages').upsert(rows, { onConflict: 'user_id,connection_key,gmail_id' });
     if (error) throw error;
   }
-  await admin.from('mail_connections').update({
+  const connectionKey = session.connectionKey || (session.projectId ? session.projectId : 'account');
+  let touch = admin.from('mail_connections').update({
     last_synced_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   }).eq('user_id', userId);
+  touch = session.connectionId ? touch.eq('id', session.connectionId) : touch.eq('connection_key', connectionKey);
+  const { error: touchError } = await touch;
+  if (touchError) throw touchError;
   return { count: rows.length };
 }
 

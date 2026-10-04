@@ -1,6 +1,14 @@
 import { handleCors, jsonResponse, errorResponse } from '../_shared/cors.ts';
 import { getServiceClient, getUserFromRequest } from '../_shared/supabase.ts';
 import { fetchErpDomain, isErpDomain } from '../_shared/erp.ts';
+import {
+  isSymphonConnection,
+  SYMPHON_CONNECTION_COLUMNS,
+  syncSymphonSales,
+  type SymphonConnection,
+} from '../_shared/symphon.ts';
+
+const SYMPHON_ONLY_SALES = 'Το Symphon δίνει ημερήσια παραγγελία μόνο στον τομέα πωλήσεων.';
 
 Deno.serve(async (req) => {
   const cors = handleCors(req);
@@ -16,15 +24,36 @@ Deno.serve(async (req) => {
     const admin = getServiceClient();
     const { data: connection, error } = await admin
       .from('erp_connections')
-      .select('base_url, api_key')
+      .select(SYMPHON_CONNECTION_COLUMNS)
       .eq('user_id', user.id)
       .maybeSingle();
     if (error) throw error;
-    if (!connection?.base_url || !connection?.api_key) {
+    const row = connection as SymphonConnection | null;
+    if (!row) return jsonResponse({ connected: false, domain, data: null });
+
+    if (isSymphonConnection(row)) {
+      if (!row.org_id) {
+        return jsonResponse({ connected: true, needsOrg: true, domain, data: null });
+      }
+      if (domain !== 'sales') {
+        return jsonResponse({
+          connected: true,
+          domain,
+          data: { available: false, source: 'symphon', note: SYMPHON_ONLY_SALES },
+        });
+      }
+      const reportDate = typeof body?.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.date)
+        ? body.date
+        : undefined;
+      const synced = await syncSymphonSales(admin, row, reportDate);
+      return jsonResponse({ connected: true, domain, fetchedAt: synced.fetchedAt, data: synced.data });
+    }
+
+    if (!row.base_url || !row.api_key) {
       return jsonResponse({ connected: false, domain, data: null });
     }
 
-    const data = await fetchErpDomain(connection.base_url, connection.api_key, domain);
+    const data = await fetchErpDomain(row.base_url, row.api_key, domain);
     const fetchedAt = new Date().toISOString();
     await admin.from('erp_snapshots').upsert({
       user_id: user.id,

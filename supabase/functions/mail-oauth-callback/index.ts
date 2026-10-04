@@ -23,7 +23,7 @@ Deno.serve(async (req) => {
     const admin = getServiceClient();
     const { data: pending, error: stateError } = await admin
       .from('mail_oauth_states')
-      .select('user_id, return_to, expires_at, provider, region')
+      .select('user_id, return_to, expires_at, provider, region, project_id')
       .eq('state', state)
       .maybeSingle();
     if (stateError) throw stateError;
@@ -32,11 +32,14 @@ Deno.serve(async (req) => {
     }
 
     const provider = pending.provider === 'zoho' ? 'zoho' : 'gmail';
+    const projectId = pending.project_id || null;
+    const connectionKey = projectId || 'account';
     let email: string | null = null;
     let accessToken = '';
     let accountId: string | null = null;
     let apiBase: string | null = null;
     let accountsHost: string | null = null;
+    let connectionId: string | null = null;
     if (provider === 'zoho') {
       const connected = await exchangeZohoCode(code, pending.region || 'eu');
       if (!connected.tokens.refresh_token) throw new Error('Zoho did not return a refresh token');
@@ -46,8 +49,10 @@ Deno.serve(async (req) => {
       accountId = account.accountId;
       apiBase = connected.region.apiBase;
       accountsHost = connected.region.accountsHost;
-      const { error: upsertError } = await admin.from('mail_connections').upsert({
+      const { data: saved, error: upsertError } = await admin.from('mail_connections').upsert({
         user_id: pending.user_id,
+        project_id: projectId,
+        connection_key: connectionKey,
         provider: 'zoho',
         email,
         account_id: accountId,
@@ -59,15 +64,18 @@ Deno.serve(async (req) => {
         scopes: ZOHO_SCOPES,
         connected_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-      });
+      }, { onConflict: 'user_id,connection_key' }).select('id').single();
       if (upsertError) throw upsertError;
+      connectionId = saved?.id || null;
     } else {
       const tokens = await exchangeMailCode(code);
       if (!tokens.refresh_token) throw new Error('Gmail did not return a refresh token');
       email = await fetchMailboxEmail(tokens.access_token);
       accessToken = tokens.access_token;
-      const { error: upsertError } = await admin.from('mail_connections').upsert({
+      const { data: saved, error: upsertError } = await admin.from('mail_connections').upsert({
         user_id: pending.user_id,
+        project_id: projectId,
+        connection_key: connectionKey,
         provider: 'gmail',
         email,
         account_id: null,
@@ -79,8 +87,9 @@ Deno.serve(async (req) => {
         scopes: MAIL_SCOPES,
         connected_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-      });
+      }, { onConflict: 'user_id,connection_key' }).select('id').single();
       if (upsertError) throw upsertError;
+      connectionId = saved?.id || null;
     }
     await admin.from('mail_oauth_states').delete().eq('state', state);
 
@@ -92,6 +101,9 @@ Deno.serve(async (req) => {
         apiBase,
         accountsHost,
         email,
+        projectId,
+        connectionKey,
+        connectionId,
       });
     } catch (syncErr) {
       console.error('Initial mail sync failed', syncErr instanceof Error ? syncErr.message : '');

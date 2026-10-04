@@ -7,7 +7,7 @@ import { TaskCanvasCard } from './TaskCanvasCard';
 import { CheckpointProjectsItem } from './CheckpointProjectsItem';
 import { IdeaCanvasCard } from './IdeaCanvasCard';
 import { StickyNoteCard } from './StickyNoteCard';
-import { CanvasConnections } from './CanvasConnections';
+import { CanvasConnections, frontConnectionColor } from './CanvasConnections';
 import { CanvasFloatingToolbar } from './CanvasFloatingToolbar';
 import { CanvasTopBar } from './CanvasTopBar';
 import { CanvasInkSurface } from './CanvasInkSurface';
@@ -17,6 +17,10 @@ import { InkConvertModal } from './InkConvertModal';
 import { AddCheckpointModal, EditCheckpointModal } from './AddCheckpointModal';
 import { CheckpointNotesModal } from './CheckpointNotesModal';
 import { ArchiveCelebration } from './ArchiveCelebration';
+import { ProjectRhythmButton, ProjectRhythmPanel } from './ProjectRhythmPanel';
+import { ProjectFrontLines } from './ProjectFrontLines';
+import { rhythmDayScore, rhythmToday } from '../utils/projectRhythm';
+import { addFront, normalizeFronts, recolorFront, removeFront, renameFront, setFrontOffset } from '../utils/projectFronts';
 import { buildToggleCompletePatch } from '../utils/archive';
 import {
   DEFAULT_INK_SIZE,
@@ -65,6 +69,7 @@ import {
   getNodeToolbarPosition,
   sameNodeRef,
   nodeRefKey,
+  connectionAnchor,
 } from '../utils/canvasNodes';
 import { CanvasGroupDragContext, CanvasMultiSelectContext } from '../hooks/useCanvasMultiSelect';
 import {
@@ -161,7 +166,9 @@ function ConnectPreviewLine({
   if (!node?.bounds) return null;
 
   const lineTheme = connectionLineStyle(mapTheme);
-  const d = getThemedConnectionPath(node.bounds, {
+  const frontColor = frontConnectionColor([node], stages, normalizeFronts(mapTheme?.fronts));
+  const anchor = connectionAnchor(node, stages, layout) || node.bounds;
+  const d = getThemedConnectionPath(anchor, {
     cx: mousePos.x,
     cy: mousePos.y,
     x: mousePos.x,
@@ -175,7 +182,7 @@ function ConnectPreviewLine({
       <path
         d={d}
         className="canvas-connect-preview__line"
-        stroke={lineTheme.color || '#888888'}
+        stroke={frontColor || lineTheme.color || '#888888'}
         strokeWidth={lineTheme.strokeWidth}
         strokeDasharray="6 4"
       />
@@ -308,6 +315,7 @@ function ProjectsCenterLine({
   onSelectNode,
   onApplySpineMove,
   onResizeSpine,
+  onOpenFront,
   lifelineDayTicks = null,
   planWindows = [],
   planDayTicks = null,
@@ -318,6 +326,10 @@ function ProjectsCenterLine({
 }) {
   const { scale } = useZoomTransform();
   const drag = useRef(null);
+  const [armY, setArmY] = useState(null);
+  const [draftLabel, setDraftLabel] = useState(null);
+  const draftAtY = useRef(null);
+  const cancelDraft = useRef(false);
 
   useEffect(
     () =>
@@ -327,6 +339,19 @@ function ProjectsCenterLine({
     []
   );
 
+  useEffect(() => {
+    if (draftLabel == null) return undefined;
+    const onKey = (event) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      cancelDraft.current = true;
+      setDraftLabel(null);
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [draftLabel]);
+
   if (!lineMetrics) return null;
 
   const locked = Boolean(lifelineConfig);
@@ -334,7 +359,7 @@ function ProjectsCenterLine({
   const startMove = (e) => {
     if (locked) return;
     if (e.button !== 0) return;
-    if (e.target.closest('.projects-center-line__handle, .projects-center-line__dot, .lifeline-day-tick')) return;
+    if (e.target.closest('.projects-center-line__handle, .projects-center-line__dot, .lifeline-day-tick, .projects-center-line__arm, .projects-center-line__arm-bridge, .projects-center-line__arm-name')) return;
     e.stopPropagation();
     e.preventDefault();
     onSelect?.();
@@ -372,6 +397,11 @@ function ProjectsCenterLine({
   };
 
   const onPointerMove = (e) => {
+    if (!locked && !drag.current && onOpenFront && !e.target.closest('.projects-center-line__arm-bridge')) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const local = (e.clientY - rect.top) / (scale || 1);
+      setArmY(Math.min(lineMetrics.height - 32, Math.max(32, local)));
+    }
     if (!drag.current) return;
     const d = drag.current;
     if (d.mode === 'move') {
@@ -424,6 +454,11 @@ function ProjectsCenterLine({
       onPointerMove={locked ? undefined : onPointerMove}
       onPointerUp={locked ? undefined : onPointerUp}
       onPointerCancel={locked ? undefined : onPointerUp}
+      onPointerLeave={locked ? undefined : (event) => {
+        if (draftLabel != null) return;
+        if (event.currentTarget.contains(event.relatedTarget)) return;
+        setArmY(null);
+      }}
       role="presentation"
     >
       <div className="projects-center-line__glow" aria-hidden="true" />
@@ -510,6 +545,58 @@ function ProjectsCenterLine({
           onSelect={onSelectNode}
         />
       ))}
+      {!locked && onOpenFront && draftLabel != null ? (
+        <input
+          className="projects-center-line__arm-name"
+          style={{ top: (draftAtY.current ?? lineMetrics.top) - lineMetrics.top }}
+          value={draftLabel}
+          placeholder="Μέτωπο"
+          aria-label="Όνομα μετώπου"
+          autoFocus
+          onChange={(event) => setDraftLabel(event.target.value)}
+          onPointerDown={(event) => event.stopPropagation()}
+          onBlur={(event) => {
+            if (cancelDraft.current) {
+              cancelDraft.current = false;
+              return;
+            }
+            const text = event.target.value.trim();
+            if (text && draftAtY.current != null) onOpenFront(draftAtY.current, text);
+            setDraftLabel(null);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              event.currentTarget.blur();
+            }
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              event.stopPropagation();
+              cancelDraft.current = true;
+              setDraftLabel(null);
+            }
+          }}
+        />
+      ) : null}
+      {!locked && onOpenFront && draftLabel == null && armY != null ? (
+        <div className="projects-center-line__arm-bridge" style={{ top: armY }}>
+          <button
+            type="button"
+            className="projects-center-line__arm"
+            title="Άνοιγμα μετώπου από εδώ"
+            aria-label="Άνοιγμα μετώπου από εδώ"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              cancelDraft.current = false;
+              draftAtY.current = lineMetrics.top + armY;
+              setDraftLabel('');
+            }}
+          >
+            +
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -668,6 +755,12 @@ const CanvasBoard = memo(function CanvasBoard({
   canPasteStyle,
   projectsLayout,
   lineMetrics,
+  fronts = [],
+  onOpenFront,
+  onRenameFront,
+  onRemoveFront,
+  onRecolorFront,
+  onMoveFront,
   projectsCheckpoints = [],
   isPremium,
   onArchiveCheckpoint,
@@ -815,6 +908,27 @@ const CanvasBoard = memo(function CanvasBoard({
           planProgressSegments={planProgressSegments}
           planCheckpoints={planCheckpoints}
           lifelineDaySpacing={isLifeline ? lifelinePlanContext?.daySpacing : null}
+          onOpenFront={isLifeline ? undefined : onOpenFront}
+        />
+      )}
+      {!isLifeline && projectsLayout?.direction === 'vertical' && (
+        <ProjectFrontLines
+          lineMetrics={lineMetrics}
+          fronts={fronts}
+          nodes={lineMetrics?.frontNodes || []}
+          onRename={onRenameFront}
+          onRemove={onRemoveFront}
+          onRecolor={onRecolorFront}
+          onOffset={onMoveFront}
+          renderDot={(node, lineTop) => (
+            <ProjectsTimelineDot
+              node={node}
+              lineTop={lineTop}
+              onMoveTimelineY={onMoveTimelineY}
+              onReorderCheckpoint={onReorderCheckpoint}
+              onSelect={onSelectMilestone}
+            />
+          )}
         />
       )}
 
@@ -1173,10 +1287,21 @@ export function ProjectsCanvas({
   onKeepThought,
   onDismissThought,
   onAddThought,
+  projectRhythm = null,
+  onUpdateProjectRhythm,
 }) {
   const [connectFrom, setConnectFrom] = useState(null);
   const [connectPreviewPos, setConnectPreviewPos] = useState(null);
   const dayView = useLifelineDayView();
+  const [rhythmOpen, setRhythmOpen] = useState(false);
+  const rhythmScoreLabel = useMemo(
+    () => (isLifeline ? '' : rhythmDayScore(projectRhythm, rhythmToday()).label),
+    [isLifeline, projectRhythm],
+  );
+
+  useEffect(() => {
+    setRhythmOpen(false);
+  }, [projectId]);
 
   const cancelConnectMode = useCallback(() => {
     setConnectFrom(null);
@@ -1977,6 +2102,23 @@ export function ProjectsCanvas({
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === 'Escape') {
+        const undoId = undoFrontRef.current;
+        const tag = e.target?.tagName?.toLowerCase();
+        if (undoId && tag !== 'input' && tag !== 'textarea' && tag !== 'select') {
+          undoFrontRef.current = null;
+          mapThemeChangeRef.current?.({
+            fronts: removeFront(frontsStateRef.current, undoId),
+          });
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+        if (rhythmOpen) {
+          const tag = e.target?.tagName?.toLowerCase();
+          if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+          setRhythmOpen(false);
+          return;
+        }
         if (isFullscreen) {
           if (document.fullscreenElement) {
             document.exitFullscreen().catch(() => {});
@@ -2007,7 +2149,7 @@ export function ProjectsCanvas({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isFullscreen, onFullscreenChange, toggleFullscreen, cancelConnectMode]);
+  }, [isFullscreen, onFullscreenChange, toggleFullscreen, cancelConnectMode, rhythmOpen]);
 
   const selectedStyle = useMemo(
     () => resolveNodeStyle(selectedNodeRef, stages, backlog, canvasStickies, canvasObstacles, canvasResources, canvasTasks),
@@ -2842,6 +2984,50 @@ export function ProjectsCanvas({
     onMapThemeChange?.(updates);
   }, [onMapThemeChange]);
 
+  const undoFrontRef = useRef(null);
+  const frontsStateRef = useRef(activeTheme?.fronts);
+  const mapThemeChangeRef = useRef(onMapThemeChange);
+  frontsStateRef.current = activeTheme?.fronts;
+  mapThemeChangeRef.current = onMapThemeChange;
+
+  const handleOpenFront = useCallback((atY, label) => {
+    const fronts = addFront(activeTheme?.fronts, { atY, label });
+    const known = new Set((activeTheme?.fronts || []).map((front) => front?.id));
+    const created = fronts.find((front) => !known.has(front.id));
+    undoFrontRef.current = created?.id ?? null;
+    onMapThemeChange?.({ fronts });
+    queueMicrotask(() => {
+      const clear = () => {
+        undoFrontRef.current = null;
+      };
+      window.addEventListener('pointerdown', clear, { capture: true, once: true });
+    });
+  }, [activeTheme, onMapThemeChange]);
+
+  const handleMoveFront = useCallback((id, offsetX) => {
+    onMapThemeChange?.({
+      fronts: setFrontOffset(activeTheme?.fronts, id, offsetX),
+    });
+  }, [activeTheme, onMapThemeChange]);
+
+  const handleRenameFront = useCallback((id, label) => {
+    onMapThemeChange?.({
+      fronts: renameFront(activeTheme?.fronts, id, label),
+    });
+  }, [activeTheme, onMapThemeChange]);
+
+  const handleRecolorFront = useCallback((id, color) => {
+    onMapThemeChange?.({
+      fronts: recolorFront(activeTheme?.fronts, id, color),
+    });
+  }, [activeTheme, onMapThemeChange]);
+
+  const handleRemoveFront = useCallback((id) => {
+    onMapThemeChange?.({
+      fronts: removeFront(activeTheme?.fronts, id),
+    });
+  }, [activeTheme, onMapThemeChange]);
+
   const lifelineDayHeight =
     activeTheme?.lifeline?.dayHeight ?? DEFAULT_LIFELINE_CONFIG.dayHeight;
 
@@ -3595,6 +3781,12 @@ export function ProjectsCanvas({
             canPasteStyle={Boolean(styleClipboard)}
             projectsLayout={projectsLayout}
             lineMetrics={lineMetrics}
+            fronts={activeTheme?.fronts}
+            onOpenFront={handleOpenFront}
+            onRenameFront={handleRenameFront}
+            onRemoveFront={handleRemoveFront}
+            onRecolorFront={handleRecolorFront}
+            onMoveFront={handleMoveFront}
             projectsCheckpoints={projectsCheckpoints}
             isPremium={isPremium}
             onArchiveCheckpoint={handleToggleCheckpointComplete}
@@ -3655,7 +3847,22 @@ export function ProjectsCanvas({
           />
           </ZoomCanvas>
 
+          {!isLifeline && rhythmOpen ? (
+            <ProjectRhythmPanel
+              rhythm={projectRhythm}
+              onChange={onUpdateProjectRhythm}
+              onClose={() => setRhythmOpen(false)}
+            />
+          ) : null}
+
           <div className={`projects-canvas__fab-dock${platform.isMobile ? ' projects-canvas__fab-dock--mobile' : ''}`}>
+            {!isLifeline ? (
+              <ProjectRhythmButton
+                open={rhythmOpen}
+                scoreLabel={rhythmScoreLabel}
+                onClick={() => setRhythmOpen((open) => !open)}
+              />
+            ) : null}
             <div className="projects-canvas__spacing" title={isLifeline && lifelineZoomMeta ? lifelineZoomMeta.description : 'Zoom'}>
               <button
                 type="button"

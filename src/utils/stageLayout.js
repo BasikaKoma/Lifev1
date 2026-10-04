@@ -109,6 +109,75 @@ function shouldDetachFromRoadmap(posX, w, layout = {}, gap = SIDE_GAP) {
   return Math.abs(cardCenterX - centerX) > gap + w / 2 + ROADMAP_DETACH_DISTANCE;
 }
 
+function centerLine(layout = {}) {
+  return { id: null, x: layout.centerX ?? CENTER_X };
+}
+
+function linesAt(layout = {}, cardCenterY) {
+  const lines = [centerLine(layout)];
+  for (const front of layout.fronts || []) {
+    if (!front || typeof front.x !== 'number') continue;
+    if (
+      typeof cardCenterY === 'number'
+      && Number.isFinite(front.bottom)
+      && cardCenterY > front.bottom + 160
+    ) {
+      continue;
+    }
+    lines.push({ id: front.id, x: front.x });
+  }
+  return lines;
+}
+
+function lineForItem(item, layout = {}) {
+  if (item?.frontId) {
+    const front = (layout.fronts || []).find((entry) => entry.id === item.frontId);
+    if (front) return { id: front.id, x: front.x };
+  }
+  return centerLine(layout);
+}
+
+function distToLine(posX, w, line) {
+  return Math.abs(posX + w / 2 - line.x);
+}
+
+function withinDetach(posX, w, line, gap) {
+  return distToLine(posX, w, line) <= gap + w / 2 + ROADMAP_DETACH_DISTANCE;
+}
+
+function withinAttach(posX, w, line, gap) {
+  return distToLine(posX, w, line) <= gap + w / 2 + ROADMAP_ATTACH_DISTANCE;
+}
+
+function nearestAttachLine(posX, w, cardCenterY, layout, gap) {
+  let best = null;
+  let bestDist = Infinity;
+  for (const line of linesAt(layout, cardCenterY)) {
+    const dist = distToLine(posX, w, line);
+    if (withinAttach(posX, w, line, gap) && dist < bestDist) {
+      best = line;
+      bestDist = dist;
+    }
+  }
+  return best;
+}
+
+function snapToLine(posX, posY, layout, size, line, gap) {
+  const w = size.w || IDEA_W;
+  const h = size.h || IDEA_H;
+  const centerY = posY + h / 2;
+  const local = { ...layout, centerX: line.x };
+  const side = posX + w / 2 < line.x ? 'left' : 'right';
+  return {
+    onRoadmap: true,
+    frontId: line.id,
+    timelineY: centerY,
+    roadmapSide: side,
+    x: getAttachedPosXForWidth(w, side, local, gap),
+    y: centerY - h / 2,
+  };
+}
+
 function snapCanvasItemToRoadmap(posX, posY, layout, size) {
   const w = size.w || IDEA_W;
   const h = size.h || IDEA_H;
@@ -123,31 +192,29 @@ function snapCanvasItemToRoadmap(posX, posY, layout, size) {
   };
 }
 
+function pickDragLine(posX, w, cardCenterY, layout, gap, item) {
+  const current = item?.onRoadmap ? lineForItem(item, layout) : null;
+  const nearest = nearestAttachLine(posX, w, cardCenterY, layout, gap);
+  if (current && nearest && nearest.id !== current.id) {
+    const distCurrent = distToLine(posX, w, current);
+    const distNearest = distToLine(posX, w, nearest);
+    if (distNearest + 12 < distCurrent) return nearest;
+  }
+  if (current && withinDetach(posX, w, current, gap)) return current;
+  return nearest;
+}
+
 /** Generic attach/detach for ideas, stickies, or any free card. */
 export function resolveCanvasItemDrag(item, posX, posY, layout = DEFAULT_ROADMAP_LAYOUT, size = { w: IDEA_W, h: IDEA_H }) {
   const w = size.w || IDEA_W;
   const h = size.h || IDEA_H;
-  const isAttached = item?.onRoadmap === true;
-
-  if (isAttached) {
-    if (shouldDetachFromRoadmap(posX, w, layout)) {
-      return {
-        onRoadmap: false,
-        timelineY: null,
-        roadmapSide: null,
-        x: posX,
-        y: posY,
-      };
-    }
-    return snapCanvasItemToRoadmap(posX, posY, layout, size);
-  }
-
-  if (shouldAttachToRoadmap(posX, w, layout)) {
-    return snapCanvasItemToRoadmap(posX, posY, layout, size);
-  }
+  const centerY = posY + h / 2;
+  const line = pickDragLine(posX, w, centerY, layout, SIDE_GAP, item);
+  if (line) return snapToLine(posX, posY, layout, size, line, SIDE_GAP);
 
   return {
     onRoadmap: false,
+    frontId: null,
     timelineY: null,
     roadmapSide: null,
     x: posX,
@@ -157,6 +224,68 @@ export function resolveCanvasItemDrag(item, posX, posY, layout = DEFAULT_ROADMAP
 
 export function isItemOnRoadmap(item) {
   return item?.onRoadmap === true && typeof item?.timelineY === 'number';
+}
+
+export function placeCanvasItemOnItsLine(item, layout = {}, size = { w: IDEA_W, h: IDEA_H }) {
+  const w = size.w || IDEA_W;
+  const h = size.h || IDEA_H;
+  const line = lineForItem(item, layout);
+  const local = line.id ? { ...layout, centerX: line.x } : layout;
+  const side = item?.roadmapSide === 'left' ? 'left' : 'right';
+  const timelineY = typeof item?.timelineY === 'number'
+    ? item.timelineY
+    : (item?.canvasY ?? 0) + h / 2;
+  return {
+    ...item,
+    onRoadmap: true,
+    frontId: line.id,
+    timelineY,
+    roadmapSide: side,
+    canvasX: getAttachedPosXForWidth(w, side, local),
+    canvasY: timelineY - h / 2,
+  };
+}
+
+function releaseFrontItem(item) {
+  return {
+    ...item,
+    frontId: null,
+    onRoadmap: false,
+    timelineY: null,
+    roadmapSide: null,
+  };
+}
+
+export function syncFrontAttachedItems(state, layout = {}) {
+  const frontIds = new Set((layout.fronts || []).map((front) => front.id));
+  const syncCanvas = (item, size) => {
+    if (!item?.frontId) return item;
+    if (!frontIds.has(item.frontId)) return releaseFrontItem(item);
+    if (!isItemOnRoadmap(item)) return item;
+    return placeCanvasItemOnItsLine(item, layout, size);
+  };
+  const syncStage = (stage) => {
+    const ideas = (stage.ideas || []).map((idea) => syncCanvas(idea, { w: IDEA_W, h: IDEA_H }));
+    if (stage.frontId && !frontIds.has(stage.frontId)) {
+      return { ...releaseFrontItem(stage), ideas };
+    }
+    if (!stage.frontId || !isOnRoadmap(stage)) return { ...stage, ideas };
+    return {
+      ...positionMilestoneOnTimeline(stage, getTimelineY(stage), layout, stage.roadmapSide || 'right'),
+      ideas,
+    };
+  };
+  return {
+    stages: (state.stages || []).map(syncStage),
+    backlog: (state.backlog || []).map((idea) => syncCanvas(idea, { w: IDEA_W, h: IDEA_H })),
+    canvasStickies: (state.canvasStickies || []).map((sticky) => syncCanvas(sticky, {
+      w: sticky.width || 200,
+      h: sticky.height || 140,
+    })),
+    canvasObstacles: (state.canvasObstacles || []).map((item) => syncCanvas(item, { w: IDEA_W, h: IDEA_H })),
+    canvasResources: (state.canvasResources || []).map((item) => syncCanvas(item, { w: IDEA_W, h: IDEA_H })),
+    canvasTasks: (state.canvasTasks || []).map((item) => syncCanvas(item, { w: IDEA_W, h: IDEA_H })),
+  };
 }
 
 export function syncHorizontalRoadmapPositions(stages, layout = {}) {
@@ -611,6 +740,8 @@ export function collectPlanProgressSegments(stages, layout = DEFAULT_ROADMAP_LAY
 
 export function positionMilestoneOnTimeline(stage, timelineY, layout = {}, sideHint) {
   const h = getMilestoneHeight();
+  const line = lineForItem(stage, layout);
+  const local = line.id ? { ...layout, centerX: line.x } : layout;
   const side =
     sideHint === 'left' || sideHint === 'right'
       ? sideHint
@@ -620,8 +751,9 @@ export function positionMilestoneOnTimeline(stage, timelineY, layout = {}, sideH
   return {
     ...stage,
     onRoadmap: true,
+    frontId: line.id,
     timelineY,
-    posX: getAttachedPosX(stage, side, layout),
+    posX: getAttachedPosX(stage, side, local),
     posY: timelineY - h / 2,
     roadmapSide: side,
   };
@@ -631,6 +763,7 @@ export function detachMilestoneFromRoadmap(stage, posX, posY) {
   return {
     ...stage,
     onRoadmap: false,
+    frontId: null,
     timelineY: null,
     posX,
     posY,
@@ -650,37 +783,27 @@ export function resolveMilestoneDrag(
   const h = getMilestoneHeight();
   const w = getMilestoneWidth();
   const centerY = posY + h / 2;
-  const side = resolveRoadmapSide(posX, layout);
+  const line = pickDragLine(posX, w, centerY, layout, MILESTONE_SIDE_GAP, stage);
 
-  if (isOnRoadmap(stage)) {
-    if (shouldDetachFromRoadmap(posX, w, layout, MILESTONE_SIDE_GAP)) {
-      return detachMilestoneFromRoadmap(stage, posX, posY);
-    }
-    if (isLifelinePlanContext(lifelineContext) && isPlanMode(stage)) {
+  if (line && !line.id && isOnRoadmap(stage) && isLifelinePlanContext(lifelineContext) && isPlanMode(stage)) {
+    if (withinDetach(posX, w, line, MILESTONE_SIDE_GAP)) {
       if (commitPlanDates) {
         return syncLifelinePlanMilestoneFromTimelineY(stage, centerY, lifelineContext, layout);
       }
       return previewLifelinePlanMilestoneDrag(stage, posX, posY, layout, lifelineContext);
     }
-    return positionMilestoneOnTimeline(stage, centerY, layout, side);
   }
 
-  if (shouldAttachToRoadmap(posX, w, layout, MILESTONE_SIDE_GAP)) {
-    let next = positionMilestoneOnTimeline(stage, centerY, layout, side);
-    if (isLifelinePlanContext(lifelineContext) && isPlanMode(next)) {
-      next = snapLifelinePlanMilestoneToEndDate(next, lifelineContext, layout);
+  if (line) {
+    const side = posX + w / 2 < line.x ? 'left' : 'right';
+    const snapped = positionMilestoneOnTimeline({ ...stage, frontId: line.id }, centerY, layout, side);
+    if (!line.id && isLifelinePlanContext(lifelineContext) && isPlanMode(snapped)) {
+      return snapLifelinePlanMilestoneToEndDate(snapped, lifelineContext, layout);
     }
-    return next;
+    return snapped;
   }
 
-  return {
-    ...stage,
-    onRoadmap: false,
-    timelineY: null,
-    posX,
-    posY,
-    roadmapSide: null,
-  };
+  return detachMilestoneFromRoadmap(stage, posX, posY);
 }
 
 /** Move spine and every item attached to Projects together. */
@@ -852,6 +975,7 @@ export function getCenterLineMetrics(stages, layout = DEFAULT_ROADMAP_LAYOUT, ex
     top: getTimelineY(stage),
     status: stage.status,
     side: stage.roadmapSide || 'right',
+    frontId: stage.frontId || null,
   }));
 
   const planStartNodes = stages
@@ -864,6 +988,7 @@ export function getCenterLineMetrics(stages, layout = DEFAULT_ROADMAP_LAYOUT, ex
       top: getPlanStartY(stage, spacing, lifelineContext),
       status: stage.status,
       side: stage.roadmapSide || 'right',
+      frontId: stage.frontId || null,
     }));
 
   const checkpointNodes = collectRoadmapCheckpoints(stages, layout, lifelineContext)
@@ -880,6 +1005,7 @@ export function getCenterLineMetrics(stages, layout = DEFAULT_ROADMAP_LAYOUT, ex
     top: checkpoint.timelineY,
     status: checkpoint.done || checkpoint.archived ? 'Done' : 'Locked',
     side: checkpoint.side || checkpoint.roadmapSide || 'right',
+    frontId: stages.find((stage) => stage.id === checkpoint.stageId)?.frontId || null,
   }));
 
   const ideaNodes = ideas.filter(isItemOnRoadmap).map((idea) => ({
@@ -889,6 +1015,7 @@ export function getCenterLineMetrics(stages, layout = DEFAULT_ROADMAP_LAYOUT, ex
     top: idea.timelineY,
     status: idea.status || 'Locked',
     side: idea.roadmapSide || 'right',
+    frontId: idea.frontId || null,
   }));
 
   const stickyNodes = stickies.filter(isItemOnRoadmap).map((sticky) => ({
@@ -898,6 +1025,7 @@ export function getCenterLineMetrics(stages, layout = DEFAULT_ROADMAP_LAYOUT, ex
     top: sticky.timelineY,
     status: 'Locked',
     side: sticky.roadmapSide || 'right',
+    frontId: sticky.frontId || null,
   }));
 
   const obstacleNodes = obstacles.filter(isItemOnRoadmap).map((item) => ({
@@ -907,6 +1035,7 @@ export function getCenterLineMetrics(stages, layout = DEFAULT_ROADMAP_LAYOUT, ex
     top: item.timelineY,
     status: item.status || 'Open',
     side: item.roadmapSide || 'right',
+    frontId: item.frontId || null,
   }));
 
   const resourceNodes = resources.filter(isItemOnRoadmap).map((item) => ({
@@ -916,6 +1045,7 @@ export function getCenterLineMetrics(stages, layout = DEFAULT_ROADMAP_LAYOUT, ex
     top: item.timelineY,
     status: item.status || 'Needed',
     side: item.roadmapSide || 'right',
+    frontId: item.frontId || null,
   }));
 
   const taskNodes = tasks.filter(isItemOnRoadmap).map((item) => ({
@@ -925,9 +1055,10 @@ export function getCenterLineMetrics(stages, layout = DEFAULT_ROADMAP_LAYOUT, ex
     top: item.timelineY,
     status: item.status || 'Todo',
     side: item.roadmapSide || 'right',
+    frontId: item.frontId || null,
   }));
 
-  const nodes = [
+  const tagged = [
     ...milestoneNodes,
     ...planStartNodes,
     ...checkpointNodes,
@@ -937,6 +1068,8 @@ export function getCenterLineMetrics(stages, layout = DEFAULT_ROADMAP_LAYOUT, ex
     ...resourceNodes,
     ...taskNodes,
   ].sort((a, b) => a.top - b.top);
+  const nodes = tagged.filter((node) => !node.frontId);
+  const frontNodes = tagged.filter((node) => node.frontId);
 
   const spineTop = typeof layout.top === 'number' ? layout.top : baseY - 800;
   const spineHeight = typeof layout.height === 'number' ? Math.max(240, layout.height) : 1000;
@@ -970,6 +1103,7 @@ export function getCenterLineMetrics(stages, layout = DEFAULT_ROADMAP_LAYOUT, ex
     spineHeight,
     configured: { top: spineTop, height: spineHeight },
     nodes,
+    frontNodes,
   };
 }
 

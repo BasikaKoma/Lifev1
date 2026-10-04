@@ -2017,8 +2017,10 @@ button.self-day-progress__event.self-day-progress__event--lane2 {
   display: flex;
   flex-direction: column;
   min-height: 148px;
+  min-width: 0;
   padding: 0.9rem 1rem;
   border-radius: 20px;
+  overflow: hidden;
   background: linear-gradient(145deg, var(--hub-card) 0%, rgba(8, 12, 10, 0.85) 100%);
   border: 1px solid var(--hub-border);
   backdrop-filter: blur(16px);
@@ -2909,7 +2911,8 @@ button.self-day-progress__event.self-day-progress__event--lane2 {
 
   .self-project-day__panel {
     min-height: 168px;
-    max-height: 188px;
+    height: auto;
+    max-height: none;
   }
 }
 

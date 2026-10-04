@@ -114,6 +114,7 @@ export async function applyAssistantActions(actions = []) {
           to: emailOrEmpty(action.target),
           subject: action.title,
           body: action.body,
+          projectTitle: action.projectTitle || '',
         });
         parts.push(`έστειλα το mail «${action.title}»`);
         continue;

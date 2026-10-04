@@ -9,7 +9,7 @@ import {
   startOfWeekMonday,
   weekDates,
 } from '../../lib/path/schema';
-import { blocksForDate, blockActionProgress, formatBlockStatusStamp, formatDuration, formatWeekRange } from '../../lib/path/logic';
+import { blocksForDate, blockActionProgress, blockStatusAt, defaultBlockDoneAt, formatBlockStatusStamp, formatDuration, formatWeekRange, fromDatetimeLocalValue, toDatetimeLocalValue } from '../../lib/path/logic';
 import { BlockFields, PathModal, TemplateFields } from './PathFields';
 import { PathBlockWorkspace } from './PathBlockWorkspace';
 
@@ -28,6 +28,7 @@ function BlockCard({
   onOpen,
   onEdit,
   onStatus,
+  onDoneAt,
   onNudge,
   onDropOnBlock,
   onDragOverBlock,
@@ -112,6 +113,25 @@ function BlockCard({
         {block.status !== 'Skipped' ? <button type="button" onClick={() => onStatus(block, 'Skipped')}>Skipped</button> : null}
         {block.status !== 'Planned' ? <button type="button" onClick={() => onStatus(block, 'Planned')}>Plan</button> : null}
       </div>
+      {block.status === 'Done' ? (
+        <label
+          className="path-block__done-at"
+          draggable={false}
+          onMouseDown={(event) => event.stopPropagation()}
+          onDragStart={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+        >
+          <span>Done</span>
+          <input
+            type="datetime-local"
+            aria-label={`Ώρα ολοκλήρωσης · ${block.title}`}
+            value={toDatetimeLocalValue(blockStatusAt(block))}
+            onChange={(event) => onDoneAt?.(block, event.target.value)}
+          />
+        </label>
+      ) : null}
     </article>
   );
 }
@@ -160,16 +180,20 @@ export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteL
   };
 
   const requestStatus = (block, status) => {
+    const at = status === 'Done' ? defaultBlockDoneAt(block) : undefined;
     if (status === 'Done' && block.taskId) {
-      setCompletePrompt({ block, status });
+      setCompletePrompt({ block, status, at });
       return;
     }
-    path.setBlockStatus(block.id, status, { completeLinkedTask: false });
+    path.setBlockStatus(block.id, status, { completeLinkedTask: false, at });
   };
 
   const confirmComplete = (completeLinkedTask) => {
     if (!completePrompt) return;
-    const linked = path.setBlockStatus(completePrompt.block.id, completePrompt.status, { completeLinkedTask });
+    const linked = path.setBlockStatus(completePrompt.block.id, completePrompt.status, {
+      completeLinkedTask,
+      at: completePrompt.at,
+    });
     if (completeLinkedTask && linked) onCompleteLinkedTask?.(linked);
     setCompletePrompt(null);
   };
@@ -229,6 +253,10 @@ export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteL
                   onOpen={(item) => setWorkspaceId(item.id)}
                   onEdit={setEditor}
                   onStatus={requestStatus}
+                  onDoneAt={(item, value) => {
+                    const at = fromDatetimeLocalValue(value);
+                    if (at) path.setBlockDoneAt(item.id, at);
+                  }}
                   onNudge={path.nudgeBlock}
                   onDragOverBlock={() => {
                     setOverDate(date);
@@ -283,6 +311,10 @@ export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteL
           onEdit={setEditor}
           onClose={() => setWorkspaceId(null)}
           onStatus={requestStatus}
+          onDoneAt={(value) => {
+            const at = fromDatetimeLocalValue(value);
+            if (at) path.setBlockDoneAt(workspaceBlock.id, at);
+          }}
         />
       ) : null}
 
@@ -354,6 +386,19 @@ export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteL
         <p className="path-card__meta" style={{ marginTop: 10 }}>
           {completePrompt?.block?.taskTitle || 'Linked task'}
         </p>
+        <label className="path-block__done-at" style={{ marginTop: 12 }}>
+          <span>Done</span>
+          <input
+            type="datetime-local"
+            aria-label="Ώρα ολοκλήρωσης"
+            value={toDatetimeLocalValue(completePrompt?.at)}
+            onChange={(event) => {
+              const at = fromDatetimeLocalValue(event.target.value);
+              if (!at) return;
+              setCompletePrompt((prev) => (prev ? { ...prev, at } : prev));
+            }}
+          />
+        </label>
         <div className="path-modal__actions">
           <button type="button" className="btn" onClick={() => confirmComplete(false)}>Done — keep task open</button>
           <button type="button" className="btn btn--primary" onClick={() => confirmComplete(true)}>Done + complete task</button>

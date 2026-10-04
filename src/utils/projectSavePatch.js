@@ -14,6 +14,7 @@ export const STATE_TO_COLUMN = {
   whiteboardStrokes: 'whiteboard_strokes',
   mapTheme: 'map_theme',
   projectBrief: 'brief',
+  projectRhythm: 'recurring',
   lifelineDays: 'lifeline_days',
   lifelineAnchorDate: 'lifeline_anchor_date',
 };
@@ -102,6 +103,7 @@ export function getStateValueForColumn(state, column) {
   if (column === 'whiteboard_strokes') return value || [];
   if (column === 'map_theme') return value || {};
   if (column === 'brief') return value || {};
+  if (column === 'recurring') return value || { items: [], logs: {} };
   if (column === 'lifeline_days') return value || {};
   if (column === 'lifeline_anchor_date') return value || null;
   return value;

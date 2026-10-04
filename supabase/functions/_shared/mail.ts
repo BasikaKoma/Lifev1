@@ -36,7 +36,23 @@ export type MailSession = {
   apiBase: string | null;
   accountsHost: string | null;
   email: string | null;
+  projectId: string | null;
+  connectionKey: string;
+  connectionId: string | null;
 };
+
+export function connectionKeyFor(projectId: string | null | undefined): string {
+  return projectId ? projectId : 'account';
+}
+
+export function parseProjectId(value: unknown): string | null {
+  if (value == null || value === '') return null;
+  const id = String(value).trim();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+    throw new Error('Invalid project');
+  }
+  return id;
+}
 
 export function getMailConfig() {
   const clientId = Deno.env.get('GOOGLE_CLIENT_ID');
@@ -129,7 +145,26 @@ function headerValue(headers: Array<{ name?: string; value?: string }>, name: st
   return found?.value || '';
 }
 
-async function syncGmailMailbox(admin: { from: (table: string) => any }, userId: string, token: string) {
+async function touchMailConnection(
+  admin: { from: (table: string) => any },
+  userId: string,
+  connectionId: string | null,
+  connectionKey: string,
+) {
+  let query = admin.from('mail_connections').update({
+    last_synced_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }).eq('user_id', userId);
+  query = connectionId ? query.eq('id', connectionId) : query.eq('connection_key', connectionKey);
+  const { error } = await query;
+  if (error) throw error;
+}
+
+async function syncGmailMailbox(admin: { from: (table: string) => any }, userId: string, session: MailSession) {
+  const token = session.token;
+  const projectId = session.projectId;
+  const connectionKey = session.connectionKey || connectionKeyFor(session.projectId);
+  const connectionId = session.connectionId;
   const list = await gmailFetch(token, `messages?maxResults=20&q=${encodeURIComponent('newer_than:21d')}`);
   const ids: string[] = (list.messages || []).map((item: { id?: string }) => item.id).filter(Boolean);
   const rows = [];
@@ -147,6 +182,8 @@ async function syncGmailMailbox(admin: { from: (table: string) => any }, userId:
     const internalMs = Number(message.internalDate);
     rows.push({
       user_id: userId,
+      project_id: projectId,
+      connection_key: connectionKey,
       gmail_id: id,
       thread_id: message.threadId || null,
       message_id_header: headerValue(headers, 'Message-ID').slice(0, 300) || null,
@@ -160,36 +197,43 @@ async function syncGmailMailbox(admin: { from: (table: string) => any }, userId:
     });
   }
   if (rows.length) {
-    const { error } = await admin.from('mail_messages').upsert(rows, { onConflict: 'user_id,gmail_id' });
+    const { error } = await admin.from('mail_messages').upsert(rows, { onConflict: 'user_id,connection_key,gmail_id' });
     if (error) throw error;
   }
-  await admin.from('mail_connections').update({
-    last_synced_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  }).eq('user_id', userId);
+  await touchMailConnection(admin, userId, connectionId, connectionKey);
   return { count: rows.length };
 }
 
 export async function syncMailbox(admin: { from: (table: string) => any }, userId: string, session: MailSession) {
   if (session.provider === 'zoho') return syncZohoMailbox(admin, userId, session);
-  return syncGmailMailbox(admin, userId, session.token);
+  return syncGmailMailbox(admin, userId, session);
 }
 
-export async function accessTokenForUser(admin: { from: (table: string) => any }, userId: string): Promise<MailSession> {
-  const { data, error } = await admin
-    .from('mail_connections')
-    .select('provider, email, access_token, refresh_token, expires_at, account_id, api_base, accounts_host')
-    .eq('user_id', userId)
-    .maybeSingle();
-  if (error) throw error;
-  if (!data?.access_token || !data.refresh_token) throw new Error('Mail is not connected');
-  const provider = data.provider === 'zoho' ? 'zoho' : 'gmail';
-  let token = data.access_token;
-  let refreshToken = data.refresh_token;
-  const expires = new Date(data.expires_at).getTime();
+type ConnectionRow = {
+  id: string;
+  project_id: string | null;
+  connection_key: string | null;
+  provider: string | null;
+  email: string | null;
+  access_token: string;
+  refresh_token: string;
+  expires_at: string;
+  account_id: string | null;
+  api_base: string | null;
+  accounts_host: string | null;
+};
+
+async function sessionFromRow(
+  admin: { from: (table: string) => any },
+  row: ConnectionRow,
+): Promise<MailSession> {
+  const provider = row.provider === 'zoho' ? 'zoho' : 'gmail';
+  let token = row.access_token;
+  let refreshToken = row.refresh_token;
+  const expires = new Date(row.expires_at).getTime();
   if (!(expires > Date.now() + 60_000)) {
     const refreshed = provider === 'zoho'
-      ? await refreshZohoToken(data.accounts_host, refreshToken)
+      ? await refreshZohoToken(row.accounts_host, refreshToken)
       : await refreshMailToken(refreshToken);
     token = refreshed.access_token;
     refreshToken = refreshed.refresh_token || refreshToken;
@@ -198,16 +242,50 @@ export async function accessTokenForUser(admin: { from: (table: string) => any }
       refresh_token: refreshToken,
       expires_at: tokenExpiresAt(refreshed.expires_in),
       updated_at: new Date().toISOString(),
-    }).eq('user_id', userId);
+    }).eq('id', row.id);
   }
+  const projectId = row.project_id || null;
   return {
     provider,
     token,
-    accountId: data.account_id || null,
-    apiBase: data.api_base || null,
-    accountsHost: data.accounts_host || null,
-    email: data.email || null,
+    accountId: row.account_id || null,
+    apiBase: row.api_base || null,
+    accountsHost: row.accounts_host || null,
+    email: row.email || null,
+    projectId,
+    connectionKey: row.connection_key || connectionKeyFor(projectId),
+    connectionId: row.id,
   };
+}
+
+const CONNECTION_COLUMNS = 'id, project_id, connection_key, provider, email, access_token, refresh_token, expires_at, account_id, api_base, accounts_host';
+
+export async function listMailSessions(admin: { from: (table: string) => any }, userId: string): Promise<MailSession[]> {
+  const { data, error } = await admin
+    .from('mail_connections')
+    .select(CONNECTION_COLUMNS)
+    .eq('user_id', userId);
+  if (error) throw error;
+  const sessions: MailSession[] = [];
+  for (const row of data || []) sessions.push(await sessionFromRow(admin, row));
+  return sessions;
+}
+
+export async function accessTokenForUser(
+  admin: { from: (table: string) => any },
+  userId: string,
+  projectId?: string | null,
+): Promise<MailSession> {
+  const key = connectionKeyFor(projectId);
+  const { data, error } = await admin
+    .from('mail_connections')
+    .select(CONNECTION_COLUMNS)
+    .eq('user_id', userId)
+    .eq('connection_key', key)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data?.access_token || !data.refresh_token) throw new Error('Mail is not connected');
+  return sessionFromRow(admin, data);
 }
 
 function encodeHeader(value: string): string {

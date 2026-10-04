@@ -1,6 +1,12 @@
 import { getServiceClient } from './supabase.ts';
-import { accessTokenForUser, syncMailbox } from './mail.ts';
+import { listMailSessions, syncMailbox } from './mail.ts';
 import { ERP_DOMAINS, fetchErpDomain } from './erp.ts';
+import {
+  isSymphonConnection,
+  SYMPHON_CONNECTION_COLUMNS,
+  syncSymphonSales,
+  type SymphonConnection,
+} from './symphon.ts';
 
 function athensToday(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Athens' }).format(new Date());
@@ -99,28 +105,40 @@ export async function pullAssistantForUser(userId: string) {
   const erpDomains: string[] = [];
   let itemCount = 0;
 
-  const { data: mailConn } = await admin.from('mail_connections').select('user_id').eq('user_id', userId).maybeSingle();
-  if (mailConn) {
+  const sessions = await listMailSessions(admin, userId);
+  if (sessions.length) {
     mailConnected = true;
-    try {
-      const session = await accessTokenForUser(admin, userId);
-      const synced = await syncMailbox(admin, userId, session);
-      mailCount = synced.count || 0;
-    } catch (err) {
-      console.error('mail pull failed', err instanceof Error ? err.message : '');
+    for (const session of sessions) {
+      try {
+        const synced = await syncMailbox(admin, userId, session);
+        mailCount += synced.count || 0;
+      } catch (err) {
+        console.error('mail pull failed', err instanceof Error ? err.message : '');
+      }
     }
   }
 
   const { data: erp } = await admin
     .from('erp_connections')
-    .select('base_url, api_key')
+    .select(SYMPHON_CONNECTION_COLUMNS)
     .eq('user_id', userId)
     .maybeSingle();
-  if (erp?.base_url && erp?.api_key) {
+  const erpRow = erp as SymphonConnection | null;
+  if (erpRow && isSymphonConnection(erpRow)) {
+    erpConnected = true;
+    if (erpRow.org_id) {
+      try {
+        await syncSymphonSales(admin, erpRow);
+        erpDomains.push('sales');
+      } catch (err) {
+        console.error('symphon sales failed', err instanceof Error ? err.message : '');
+      }
+    }
+  } else if (erpRow?.base_url && erpRow?.api_key) {
     erpConnected = true;
     for (const domain of ERP_DOMAINS) {
       try {
-        const data = await fetchErpDomain(erp.base_url, erp.api_key, domain);
+        const data = await fetchErpDomain(erpRow.base_url, erpRow.api_key, domain);
         const { error } = await admin.from('erp_snapshots').upsert({
           user_id: userId,
           domain,

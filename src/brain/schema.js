@@ -166,19 +166,20 @@ export const BRAIN_TOOLS = [
   },
   {
     name: 'list_mail',
-    description: 'Read synced mail summaries and which ones are urgent. Does not return the mailbox token.',
+    description: 'Read synced mail summaries for one project or every project mailbox. Each message includes project_id. Does not return the mailbox token.',
     parameters: {
       type: 'object',
       additionalProperties: false,
       required: ['urgentOnly'],
       properties: {
         urgentOnly: { type: 'boolean' },
+        projectId: { type: 'string', description: 'Project UUID. Empty string reads every mailbox.' },
       },
     },
   },
   {
     name: 'request_erp',
-    description: 'Request one ERP domain so the answer uses real numbers. Credentials stay on the server and are not returned.',
+    description: 'Request one ERP domain so the answer uses real numbers. Symphon fills sales with yesterday order metrics (orders, turnover, profit, cost, fees). Credentials stay on the server and are not returned.',
     parameters: {
       type: 'object',
       additionalProperties: false,

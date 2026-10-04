@@ -1,5 +1,43 @@
 import { getSupabaseForAssistant, invokeAssistantFunction } from './invoke';
 
+export function getErpReturnUrl() {
+  if (typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.()) {
+    return 'lifev1://erp-callback?erp=connected';
+  }
+  const configured = import.meta.env.VITE_APP_URL?.trim();
+  const origin = configured || window.location.origin;
+  const url = new URL(origin);
+  url.searchParams.set('erp', 'return');
+  return url.toString();
+}
+
+export function openErpAuthorizeUrl(url) {
+  if (typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.()) {
+    import('@capacitor/browser').then(({ Browser }) => {
+      Browser.open({ url });
+    }).catch(() => {
+      window.location.href = url;
+    });
+    return;
+  }
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+export async function startSymphonConnect() {
+  const payload = await invokeAssistantFunction('erp-oauth-start', { return_to: getErpReturnUrl() });
+  if (payload?.url) openErpAuthorizeUrl(payload.url);
+  return payload;
+}
+
+export async function listSymphonOrgs() {
+  const payload = await invokeAssistantFunction('erp-orgs', { action: 'list' });
+  return Array.isArray(payload?.orgs) ? payload.orgs : [];
+}
+
+export async function selectSymphonOrg(orgId) {
+  return invokeAssistantFunction('erp-orgs', { action: 'select', orgId });
+}
+
 export const ERP_DOMAINS = [
   'cash',
   'customers',

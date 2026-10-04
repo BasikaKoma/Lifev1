@@ -11,12 +11,14 @@ import {
   getEntityCheckpointPair,
   removeLinkedCheckpointId,
 } from '../utils/checkpointLinks';
-import { ORIGIN_Y, syncRoadmapPositions, positionMilestoneOnTimeline, resolveMilestoneDrag, resolveCanvasItemDrag, isOnRoadmap, getTimelineY, shiftRoadmapAttachedItems, reorderCheckpointsByTimelineY, getPlanEndY, getPlanStartY, snapLifelinePlanMilestoneToEndDate, syncLifelinePlanMilestoneFromTimelineY, alignLifelinePlanStages } from '../utils/stageLayout';
+import { ORIGIN_Y, syncRoadmapPositions, positionMilestoneOnTimeline, resolveMilestoneDrag, resolveCanvasItemDrag, isOnRoadmap, getTimelineY, shiftRoadmapAttachedItems, reorderCheckpointsByTimelineY, getPlanEndY, getPlanStartY, snapLifelinePlanMilestoneToEndDate, syncLifelinePlanMilestoneFromTimelineY, alignLifelinePlanStages, syncFrontAttachedItems } from '../utils/stageLayout';
+import { shiftFronts } from '../utils/projectFronts';
 import { ensureCanvasHeadroom, notifyCanvasWorldShift } from '../utils/canvasWorld';
 import { DEFAULT_MAP_THEME, mergeMapTheme, getRoadmapLayout } from '../utils/mapTheme';
 import { processStages, setStageComplete, toggleStageComplete as toggleStageCompleteState } from '../utils/logic';
 import { withCompletionTimestamp } from '../utils/archive';
 import { normalizeProjectBrief } from '../utils/projectBrief';
+import { normalizeProjectRhythm } from '../utils/projectRhythm';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { flushPathNow, hasPendingPathSave, queuePathSave, readPathBundleLocal, subscribePathSave } from '../lib/path/store';
 import { SAVE_INTERVAL_MS } from '../constants/save';
@@ -208,6 +210,7 @@ function assembleProjectState(data, { keepUi = false, prev = null, resetSelectio
     whiteboardStrokes: normalizeInk(payload.whiteboardStrokes),
     mapTheme: prepared.mapTheme,
     projectBrief: normalizeProjectBrief(pickLoadedJson(data.projectBrief, prev?.projectBrief, {}, keepUi)),
+    projectRhythm: normalizeProjectRhythm(pickLoadedJson(data.projectRhythm, prev?.projectRhythm, null, keepUi)),
     selectedStageId: resetSelection
       ? null
       : (keepUi && prev ? prev.selectedStageId : (data.selectedStageId || null)),
@@ -1172,7 +1175,12 @@ export function useAppState(userId) {
           stages = alignLifelinePlanStages(stages, mapTheme, anchorDates);
         }
       }
-      return { ...prev, mapTheme, stages };
+      const next = { ...prev, mapTheme, stages };
+      if (!prev.isLifeline && updates?.fronts) {
+        const laid = syncFrontAttachedItems(next, getRoadmapLayout(mapTheme));
+        return { ...next, ...laid };
+      }
+      return next;
     }, { debounce: true });
   }, [patchState, lifelineAnchors]);
 
@@ -1340,6 +1348,14 @@ export function useAppState(userId) {
         ? updater(normalizeProjectBrief(prev.projectBrief))
         : updater;
       return { ...prev, projectBrief: normalizeProjectBrief(nextBrief) };
+    });
+  }, [patchState]);
+
+  const setProjectRhythm = useCallback((updater) => {
+    patchState((prev) => {
+      const current = normalizeProjectRhythm(prev.projectRhythm);
+      const next = typeof updater === 'function' ? updater(current) : updater;
+      return { ...prev, projectRhythm: normalizeProjectRhythm(next) };
     });
   }, [patchState]);
 
@@ -1589,6 +1605,7 @@ export function useAppState(userId) {
             canvasY: next.y,
             timelineY: next.timelineY,
             roadmapSide: next.roadmapSide || idea.roadmapSide || 'right',
+            frontId: next.frontId || null,
           };
         };
         // node.id format idea:backlog:id or idea:stage:id — source in id
@@ -1625,6 +1642,7 @@ export function useAppState(userId) {
               canvasY: next.y,
               timelineY: next.timelineY,
               roadmapSide: next.roadmapSide || sticky.roadmapSide || 'right',
+              frontId: next.frontId || null,
             };
           }),
         };
@@ -1648,6 +1666,7 @@ export function useAppState(userId) {
               canvasY: next.y,
               timelineY: next.timelineY,
               roadmapSide: next.roadmapSide || item.roadmapSide || 'right',
+              frontId: next.frontId || null,
             };
           }),
         };
@@ -1671,6 +1690,7 @@ export function useAppState(userId) {
               canvasY: next.y,
               timelineY: next.timelineY,
               roadmapSide: next.roadmapSide || item.roadmapSide || 'right',
+              frontId: next.frontId || null,
             };
           }),
         };
@@ -1694,6 +1714,7 @@ export function useAppState(userId) {
               canvasY: next.y,
               timelineY: next.timelineY,
               roadmapSide: next.roadmapSide || item.roadmapSide || 'right',
+              frontId: next.frontId || null,
             };
           }),
         };
@@ -1744,6 +1765,7 @@ export function useAppState(userId) {
             posX: (s.posX ?? centerX) + 180,
             posY: s.posY ?? ORIGIN_Y,
             roadmapSide: null,
+            frontId: null,
           };
         }),
       };
@@ -2022,6 +2044,7 @@ export function useAppState(userId) {
                 onRoadmap: next.onRoadmap,
                 timelineY: next.timelineY,
                 roadmapSide: next.roadmapSide,
+          frontId: next.frontId || null,
               };
             }),
           };
@@ -2045,6 +2068,7 @@ export function useAppState(userId) {
             onRoadmap: next.onRoadmap,
             timelineY: next.timelineY,
             roadmapSide: next.roadmapSide,
+          frontId: next.frontId || null,
           };
         }),
       };
@@ -2068,6 +2092,7 @@ export function useAppState(userId) {
             onRoadmap: next.onRoadmap,
             timelineY: next.timelineY,
             roadmapSide: next.roadmapSide,
+          frontId: next.frontId || null,
           };
         }),
       };
@@ -2090,18 +2115,21 @@ export function useAppState(userId) {
       };
 
       const shifted = shiftRoadmapAttachedItems(prev, oldLayout, newLayout);
+      const dy = newLayout.top - oldLayout.top;
+      const themePatch = {
+        roadmap: {
+          centerX: newLayout.centerX,
+          top: newLayout.top,
+          height: newLayout.height,
+          baseY: newLayout.baseY,
+        },
+      };
+      if (dy && prev.mapTheme?.fronts) themePatch.fronts = shiftFronts(prev.mapTheme.fronts, dy);
 
       return {
         ...prev,
         ...shifted,
-        mapTheme: mergeMapTheme(prev.mapTheme, {
-          roadmap: {
-            centerX: newLayout.centerX,
-            top: newLayout.top,
-            height: newLayout.height,
-            baseY: newLayout.baseY,
-          },
-        }),
+        mapTheme: mergeMapTheme(prev.mapTheme, themePatch),
       };
     }, { debounce: true, canvasHeadroom: true });
   }, [patchState]);
@@ -2192,6 +2220,7 @@ export function useAppState(userId) {
         onRoadmap: false,
         timelineY: null,
         roadmapSide: null,
+        frontId: null,
       });
       return;
     }
@@ -2202,6 +2231,7 @@ export function useAppState(userId) {
       onRoadmap: false,
       timelineY: null,
       roadmapSide: null,
+      frontId: null,
     });
   }, [updateBacklogIdea, updateIdea]);
 
@@ -2372,6 +2402,7 @@ export function useAppState(userId) {
             onRoadmap: next.onRoadmap,
             timelineY: next.timelineY,
             roadmapSide: next.roadmapSide,
+          frontId: next.frontId || null,
           };
         }),
       };
@@ -2397,6 +2428,7 @@ export function useAppState(userId) {
       onRoadmap: false,
       timelineY: null,
       roadmapSide: null,
+      frontId: null,
     });
   }, [updateCanvasObstacle]);
 
@@ -2441,6 +2473,7 @@ export function useAppState(userId) {
             onRoadmap: next.onRoadmap,
             timelineY: next.timelineY,
             roadmapSide: next.roadmapSide,
+          frontId: next.frontId || null,
           };
         }),
       };
@@ -2466,6 +2499,7 @@ export function useAppState(userId) {
       onRoadmap: false,
       timelineY: null,
       roadmapSide: null,
+      frontId: null,
     });
   }, [updateCanvasResource]);
 
@@ -2531,6 +2565,7 @@ export function useAppState(userId) {
           onRoadmap: next.onRoadmap,
           timelineY: next.timelineY,
           roadmapSide: next.roadmapSide,
+          frontId: next.frontId || null,
         };
       };
 
@@ -2608,6 +2643,7 @@ export function useAppState(userId) {
             onRoadmap: next.onRoadmap,
             timelineY: next.timelineY,
             roadmapSide: next.roadmapSide,
+          frontId: next.frontId || null,
           };
         }),
       };
@@ -2633,6 +2669,7 @@ export function useAppState(userId) {
       onRoadmap: false,
       timelineY: null,
       roadmapSide: null,
+      frontId: null,
     });
   }, [updateCanvasTask]);
 
@@ -3560,6 +3597,7 @@ export function useAppState(userId) {
     projectList,
     setProjectTitle,
     setProjectBrief,
+    setProjectRhythm,
     setSelectedStageId,
     setFocusMode,
     setActiveView,
@@ -3691,6 +3729,7 @@ export function useAppState(userId) {
       whiteboardStrokes: [],
       mapTheme: DEFAULT_MAP_THEME,
       projectBrief: normalizeProjectBrief(),
+      projectRhythm: normalizeProjectRhythm(),
       selectedStageId: null,
       focusMode: false,
       activeView: 'self',

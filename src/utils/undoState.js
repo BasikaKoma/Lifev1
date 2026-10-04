@@ -13,6 +13,7 @@ export const UNDO_FIELDS = [
   'whiteboardStrokes',
   'mapTheme',
   'projectBrief',
+  'projectRhythm',
   'lifelineDays',
 ];
 

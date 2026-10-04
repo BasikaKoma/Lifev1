@@ -2,7 +2,7 @@ import { hasElectronBrain } from '../../platform/brain';
 import { getSupabaseClient, isSupabaseConfigured } from '../supabase';
 import { BUSINESS_DOMAINS, HUMAN_DOMAINS } from '../../brain/levels';
 import { listOpenItems } from './openItems';
-import { getMailStatus, listMailMessages } from './mail';
+import { listMailConnections, listMailMessages } from './mail';
 import { getErpStatus, listErpSnapshots } from './erp';
 import { redactSecrets } from '../../brain/redact';
 
@@ -67,16 +67,20 @@ export async function loadAssistantPack() {
     listOpenItems().catch(() => []),
     (async () => {
       try {
-        const status = await getMailStatus();
-        const messages = status?.connected ? await listMailMessages({ limit: 15 }) : [];
+        const mailboxes = await listMailConnections();
+        const messages = mailboxes.length ? await listMailMessages({ limit: 30 }) : [];
         return {
-          connected: Boolean(status?.connected),
-          email: status?.email || null,
+          connected: mailboxes.length > 0,
+          mailboxes: mailboxes.map((item) => ({
+            projectId: item.project_id || '',
+            email: item.email || '',
+            provider: item.provider || '',
+          })),
           urgent: messages.filter((item) => item.urgent),
           recent: messages,
         };
       } catch {
-        return { connected: false, email: null, urgent: [], recent: [] };
+        return { connected: false, mailboxes: [], urgent: [], recent: [] };
       }
     })(),
     (async () => {

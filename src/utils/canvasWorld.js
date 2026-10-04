@@ -1,4 +1,5 @@
 import { translateStrokePoints } from './inkStrokes';
+import { shiftFronts } from './projectFronts';
 
 /** Grow the board when content would go above this Y (canvas origin). */
 export const CANVAS_TOP_PAD = 8;
@@ -93,6 +94,9 @@ export function shiftCanvasWorld(state, dy) {
     })),
     mapTheme: {
       ...state.mapTheme,
+      ...(state.mapTheme?.fronts
+        ? { fronts: shiftFronts(state.mapTheme.fronts, dy) }
+        : null),
       roadmap: {
         ...roadmap,
         top: (typeof roadmap.top === 'number' ? roadmap.top : 80) + dy,

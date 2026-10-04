@@ -216,7 +216,28 @@ export function applyBlockStatus(block, status, at = nowIso()) {
     skippedAt: nextStatus === 'Skipped' ? at : (nextStatus === 'Planned' ? null : current.skippedAt),
     movedAt: nextStatus === 'Moved' ? at : (nextStatus === 'Planned' ? null : current.movedAt),
     statusHistory: history,
-    updatedAt: at,
+    updatedAt: nowIso(),
+  });
+}
+
+export function applyBlockStatusMoment(block, at) {
+  const current = createEmptyBlock(block || {});
+  const parsed = new Date(at);
+  if (!at || current.status === 'Planned' || Number.isNaN(parsed.getTime())) return current;
+  const stamp = parsed.toISOString();
+  const history = (current.statusHistory || []).map((event, index, list) => (
+    index === list.length - 1 && event.status === current.status
+      ? { ...event, at: stamp }
+      : event
+  ));
+  return createEmptyBlock({
+    ...current,
+    statusAt: stamp,
+    completedAt: current.status === 'Done' ? stamp : current.completedAt,
+    skippedAt: current.status === 'Skipped' ? stamp : current.skippedAt,
+    movedAt: current.status === 'Moved' ? stamp : current.movedAt,
+    statusHistory: history,
+    updatedAt: nowIso(),
   });
 }
 

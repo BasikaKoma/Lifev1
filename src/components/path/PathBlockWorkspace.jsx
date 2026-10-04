@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createEmptyBlockAction, createEmptyBlockResource, goalColorStyle, sortBlockActions } from '../../lib/path/schema';
-import { blockActionProgress, blockLinkedProject, formatBlockClock, formatBlockStatusStamp, formatDuration, reorderBlockActions, tasksForBlockProject } from '../../lib/path/logic';
+import { blockActionProgress, blockLinkedProject, blockStatusAt, defaultBlockDoneAt, formatBlockClock, formatBlockStatusStamp, formatDuration, fromDatetimeLocalValue, reorderBlockActions, tasksForBlockProject, toDatetimeLocalValue } from '../../lib/path/logic';
 
 const TEXT_SAVE_MS = 700;
 
@@ -35,6 +35,7 @@ function ActionRow({
   action,
   isOver,
   onToggle,
+  onTime,
   onText,
   onDelete,
   onDragOverAction,
@@ -80,8 +81,14 @@ function ActionRow({
         onChange={(event) => onText(action.id, event.target.value)}
         placeholder="Action"
       />
-      {action.completed && formatBlockClock(action.completedAt) ? (
-        <span className="path-workspace__action-time">{formatBlockClock(action.completedAt)}</span>
+      {action.completed ? (
+        <input
+          type="datetime-local"
+          className="path-workspace__action-time"
+          aria-label={`Ώρα ολοκλήρωσης · ${action.text || 'action'}`}
+          value={toDatetimeLocalValue(action.completedAt)}
+          onChange={(event) => onTime?.(action.id, event.target.value)}
+        />
       ) : null}
       <button type="button" className="path-day__add" onClick={() => onDelete(action.id)}>
         Delete
@@ -99,6 +106,7 @@ export function PathBlockWorkspace({
   onEdit,
   onClose,
   onStatus,
+  onDoneAt,
 }) {
   const [resourceTitle, setResourceTitle] = useState('');
   const [resourceUrl, setResourceUrl] = useState('');
@@ -214,10 +222,22 @@ export function PathBlockWorkspace({
           <MetaItem label="Start" value={block.startTime} />
           <MetaItem label="Duration" value={formatDuration(block.duration)} />
           <MetaItem label="Status" value={block.status} />
-          <MetaItem
-            label={block.status === 'Done' ? 'Done at' : block.status === 'Skipped' ? 'Skipped at' : block.status === 'Moved' ? 'Moved at' : 'Updated'}
-            value={formatBlockStatusStamp(block)}
-          />
+          {block.status === 'Done' ? (
+            <label className="path-workspace__done-at">
+              <span>Done at</span>
+              <input
+                type="datetime-local"
+                aria-label="Ώρα ολοκλήρωσης"
+                value={toDatetimeLocalValue(blockStatusAt(block))}
+                onChange={(event) => onDoneAt?.(event.target.value)}
+              />
+            </label>
+          ) : (
+            <MetaItem
+              label={block.status === 'Skipped' ? 'Skipped at' : block.status === 'Moved' ? 'Moved at' : 'Updated'}
+              value={formatBlockStatusStamp(block)}
+            />
+          )}
         </div>
 
         <div className="path-workspace__status">
@@ -262,11 +282,20 @@ export function PathBlockWorkspace({
                       ? {
                           ...item,
                           completed,
-                          completedAt: completed ? new Date().toISOString() : null,
+                          completedAt: completed ? (item.completedAt || defaultBlockDoneAt(block)) : null,
                           updatedAt: new Date().toISOString(),
                         }
                       : item
                   )))}
+                  onTime={(id, value) => {
+                    const at = fromDatetimeLocalValue(value);
+                    if (!at) return;
+                    patchActions(actions.map((item) => (
+                      item.id === id
+                        ? { ...item, completedAt: at, updatedAt: new Date().toISOString() }
+                        : item
+                    )));
+                  }}
                   onText={(id, text) => patchActions(actions.map((item) => (
                     item.id === id ? { ...item, text, updatedAt: new Date().toISOString() } : item
                   )))}

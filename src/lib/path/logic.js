@@ -330,6 +330,47 @@ export function blockStatusAt(block) {
     || null;
 }
 
+export function toDatetimeLocalValue(iso) {
+  if (!iso) return '';
+  const date = iso instanceof Date ? iso : new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+export function fromDatetimeLocalValue(value) {
+  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (!match) return null;
+  const date = new Date(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3]),
+    Number(match[4]),
+    Number(match[5]),
+    0,
+    0,
+  );
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+/** Done on a later day keeps the block's own date, so yesterday is not stamped as now. */
+export function defaultBlockDoneAt(block, now = new Date()) {
+  const today = toIsoDate(now);
+  if (!block?.date || block.date === today) return now.toISOString();
+  const parts = String(block.date).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!parts) return now.toISOString();
+  const clock = String(block.startTime || '').match(/^(\d{2}):(\d{2})/);
+  return new Date(
+    Number(parts[1]),
+    Number(parts[2]) - 1,
+    Number(parts[3]),
+    clock ? Number(clock[1]) : now.getHours(),
+    clock ? Number(clock[2]) : now.getMinutes(),
+    0,
+    0,
+  ).toISOString();
+}
+
 export function formatBlockClock(iso) {
   if (!iso) return '';
   const date = iso instanceof Date ? iso : new Date(iso);

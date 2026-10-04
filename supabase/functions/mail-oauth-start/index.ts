@@ -1,6 +1,6 @@
 import { handleCors, jsonResponse, errorResponse } from '../_shared/cors.ts';
 import { getServiceClient, getUserFromRequest } from '../_shared/supabase.ts';
-import { buildMailAuthorizeUrl } from '../_shared/mail.ts';
+import { buildMailAuthorizeUrl, parseProjectId } from '../_shared/mail.ts';
 import { buildZohoAuthorizeUrl, zohoRegion } from '../_shared/zohoMail.ts';
 
 function sanitizeReturnTo(value: unknown): string {
@@ -27,8 +27,20 @@ Deno.serve(async (req) => {
     const returnTo = sanitizeReturnTo(body?.return_to);
     const provider = body?.provider === 'zoho' ? 'zoho' : 'gmail';
     const region = provider === 'zoho' ? zohoRegion(body?.region).id : null;
+    const projectId = parseProjectId(body?.project_id ?? body?.projectId);
     const state = crypto.randomUUID();
     const admin = getServiceClient();
+    if (projectId) {
+      const { data: project, error: projectError } = await admin
+        .from('projects')
+        .select('id, user_id, is_lifeline')
+        .eq('id', projectId)
+        .maybeSingle();
+      if (projectError) throw projectError;
+      if (!project || project.user_id !== user.id || project.is_lifeline) {
+        throw new Error('Project not found');
+      }
+    }
 
     await admin.from('mail_oauth_states').delete().lt('expires_at', new Date().toISOString());
     const { error: stateError } = await admin.from('mail_oauth_states').insert({
@@ -37,6 +49,7 @@ Deno.serve(async (req) => {
       return_to: returnTo,
       provider,
       region,
+      project_id: projectId,
     });
     if (stateError) throw stateError;
 

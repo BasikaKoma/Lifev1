@@ -19,6 +19,9 @@ import {
   collectCanvasIdeas,
   collectRoadmapCheckpoints,
   isStageOnCanvas,
+  isOnRoadmap,
+  isItemOnRoadmap,
+  getTimelineY,
   CHECKPOINT_DOT_RADIUS,
 } from './stageLayout';
 import { getStickyDisplaySize, isNoteSettledByCheckpoints } from './noteSettle';
@@ -171,6 +174,64 @@ export function getNodeBounds(ref, entity) {
     };
   }
   return null;
+}
+
+// Dots are placed with top = timelineY - 10 (checkpoints use -9) and then
+// centered by their own height, so the visible center is not always timelineY.
+const LINE_DOT_SHIFT = {
+  milestone: 0,
+  idea: -2,
+  obstacle: -2,
+  resource: -2,
+  task: -2,
+  sticky: -3,
+  checkpoint: 0,
+};
+
+function lineXForFront(frontId, layout) {
+  if (frontId) {
+    const front = (layout?.fronts || []).find((entry) => entry.id === frontId);
+    if (front && typeof front.x === 'number') return front.x;
+  }
+  return layout?.centerX ?? CENTER_X;
+}
+
+/** Connection end at the timeline dot when the node sits on a line. */
+export function connectionAnchor(node, stages = [], layout = {}) {
+  const bounds = node?.bounds;
+  if (!bounds) return null;
+  const entity = node.entity;
+  const type = node.ref?.type;
+  if (!entity || !type) return bounds;
+
+  if (type === 'checkpoint') {
+    const stageId = entity.stageId || node.ref?.stageId;
+    const stage = stages.find((item) => item.id === stageId);
+    const y = entity.timelineY ?? entity.cy;
+    if (typeof y !== 'number') return bounds;
+    return { ...bounds, cx: lineXForFront(stage?.frontId, layout), cy: y };
+  }
+
+  if (type === 'milestone' && isOnRoadmap(entity)) {
+    return {
+      ...bounds,
+      cx: lineXForFront(entity.frontId, layout),
+      cy: getTimelineY(entity) + (LINE_DOT_SHIFT.milestone || 0),
+    };
+  }
+
+  if (
+    (type === 'idea' || type === 'sticky' || type === 'obstacle' || type === 'resource' || type === 'task')
+    && isItemOnRoadmap(entity)
+  ) {
+    return {
+      ...bounds,
+      cx: lineXForFront(entity.frontId, layout),
+      cy: entity.timelineY + (LINE_DOT_SHIFT[type] || 0),
+    };
+  }
+
+  return bounds;
 }
 
 export function isCanvasItemOnBoard(item) {
