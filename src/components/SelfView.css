@@ -918,6 +918,83 @@
   will-change: transform;
 }
 
+.self-figure__opacity {
+  position: absolute;
+  left: 50%;
+  bottom: calc(6% - 6px);
+  z-index: 10;
+  width: 120px;
+  margin: 0;
+  padding: 0;
+  transform: translateX(-50%);
+  pointer-events: auto;
+  line-height: 0;
+  background: none;
+  border: none;
+}
+
+.self-figure__opacity input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 10px;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  cursor: pointer;
+}
+
+.self-figure__opacity input[type="range"]::-webkit-slider-runnable-track {
+  height: 2px;
+  border: none;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    #34d399 0 var(--self-opacity-fill, 50%),
+    rgba(52, 211, 153, 0.28) var(--self-opacity-fill, 50%) 100%
+  );
+}
+
+.self-figure__opacity input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 7px;
+  height: 7px;
+  margin-top: -2.5px;
+  border: none;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 6px rgba(52, 211, 153, 0.55);
+  cursor: pointer;
+}
+
+.self-figure__opacity input[type="range"]::-moz-range-track {
+  height: 2px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(52, 211, 153, 0.28);
+}
+
+.self-figure__opacity input[type="range"]::-moz-range-progress {
+  height: 2px;
+  border: none;
+  border-radius: 999px;
+  background: #34d399;
+}
+
+.self-figure__opacity input[type="range"]::-moz-range-thumb {
+  width: 7px;
+  height: 7px;
+  border: none;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 6px rgba(52, 211, 153, 0.55);
+  cursor: pointer;
+}
+
 .self-figure__platform-ring {
   position: absolute;
   inset: 0;
@@ -952,7 +1029,8 @@
 
 .self-figure__loading,
 .self-figure__fallback {
-  position: relative;
+  position: absolute;
+  inset: 0;
   z-index: 2;
   display: flex;
   flex-direction: column;
@@ -961,6 +1039,7 @@
   width: 100%;
   height: 100%;
   gap: 0.85rem;
+  pointer-events: none;
 }
 
 .self-figure__loading-ring {

@@ -10,7 +10,6 @@ import {
   formatNoteClock,
   mergeDayRoutines,
   normalizeRoutineTemplates,
-  stampNewJournalBlocks,
   toggleRoutineDone,
 } from '../utils/lifelineDays';
 import { getSelfHubDayEntry } from '../utils/selfHubDays';
@@ -22,20 +21,24 @@ import {
   resolveDayTimeline,
   timelineSnapshotSignature,
 } from '../utils/selfHubTimelineEvents';
+import { useWorkTimer } from '../hooks/useWorkTimer';
+import { workTimerEntries } from '../lib/workTimer';
 import { SelfDayProgress } from './self/hub/SelfDayProgress';
 import { getDayLabView } from '../utils/lifelineSelfMetrics';
 import { healthMetricsToLifelinePatch } from '../lib/health/healthToLifeline';
 import { getSelfMetricVariant } from '../utils/selfMetricVariant';
 import { fetchOuraMetricsForDay } from '../lib/oura';
-import { fetchMetricsForDay, appendWaistReading } from '../lib/health/healthMetrics';
+import { fetchMetricsForDay, appendCircumferenceReading } from '../lib/health/healthMetrics';
 import {
   buildWeightCardFromReadings,
   getWeightReadingsForDay,
 } from '../lib/health/weightReadings';
 import {
-  buildWaistCardFromReadings,
-  getWaistReadingsForDay,
-} from '../lib/health/waistReadings';
+  CIRCUMFERENCE_KINDS,
+  buildCircumferenceCardFromReadings,
+  circumferenceSpec,
+  getCircumferenceReadingsForDay,
+} from '../lib/health/circumferenceReadings';
 import { openSourceLabel } from '../lib/assistant/openItems';
 import { DAY_VIEW_PHASE, DAY_VIEW_BODY_MS, originPercentFromRects, originToCssVars } from '../hooks/useLifelineDayView';
 import { SelfMetricCard } from './self/SelfMetricCard';
@@ -52,10 +55,61 @@ function hasDayLabChart(card) {
   return card?.chart?.type === 'weightLine';
 }
 
+function CircumferenceDayCard({ card, kind, onSave }) {
+  const spec = circumferenceSpec(kind);
+  if (!spec) return null;
+  if (card?.cm != null) {
+    return (
+      <article className={dayLabMetricCardClass(kind, card)}>
+        <header className="day-lab__weight-header">
+          <span className="day-lab__weight-icon" aria-hidden="true">
+            <SelfIcon name={card.icon || spec.icon} />
+          </span>
+          <span className="day-lab__weight-label">{card.label || spec.label}</span>
+          {card.delta != null ? (
+            <span
+              className={`day-lab__weight-delta${
+                card.delta > 0.3
+                  ? ' day-lab__weight-delta--up'
+                  : card.delta < -0.3
+                    ? ' day-lab__weight-delta--down'
+                    : ''
+              }`}
+            >
+              {card.delta > 0 ? '+' : ''}
+              {card.delta.toFixed(1)} {card.unit}
+            </span>
+          ) : !hasDayLabChart(card) && card.status ? (
+            <span className="day-lab__weight-status">{card.status}</span>
+          ) : null}
+        </header>
+        <p className="day-lab__weight-value">
+          {typeof card.cm === 'number' ? card.cm.toFixed(1) : card.cm}
+          <span className="day-lab__weight-unit">cm</span>
+        </p>
+        {hasDayLabChart(card) ? <SelfChart chart={card.chart} /> : null}
+      </article>
+    );
+  }
+
+  return (
+    <article className="day-lab__weight-card day-lab__weight-card--waist day-lab__weight-card--log">
+      <header className="day-lab__weight-header">
+        <span className="day-lab__weight-icon" aria-hidden="true">
+          <SelfIcon name={spec.icon} />
+        </span>
+        <span className="day-lab__weight-label">{spec.label}</span>
+      </header>
+      <p className="day-lab__weight-status">Καταχώρισε {spec.label.toLowerCase()} σε εκατοστά</p>
+      <WaistLogForm compact kind={kind} onSave={(cm) => onSave(kind, cm)} />
+    </article>
+  );
+}
+
 function dayLabMetricCardClass(kind, card) {
   return [
     'day-lab__weight-card',
-    kind === 'waist' ? 'day-lab__weight-card--waist' : '',
+    CIRCUMFERENCE_KINDS.includes(kind) ? 'day-lab__weight-card--waist' : '',
     hasDayLabChart(card) ? 'day-lab__weight-card--chart' : '',
   ].filter(Boolean).join(' ');
 }
@@ -182,7 +236,6 @@ function DayLabBody({
     const hubEntry = getSelfHubDayEntry(selfHubDays, date);
     return {
       ...lifelineEntry,
-      notes: hubEntry.journal?.notes || lifelineEntry.notes,
       todos: hubEntry.journal?.todos?.length ? hubEntry.journal.todos : lifelineEntry.todos,
       routines:
         hubEntry.journal?.routines && Object.keys(hubEntry.journal.routines).length
@@ -192,7 +245,6 @@ function DayLabBody({
       timelineSnapshot: hubEntry.timeline || lifelineEntry.timelineSnapshot,
     };
   }, [lifelineDays, selfHubDays, date]);
-  const [notes, setNotes] = useState(entry.notes);
   const [newThought, setNewThought] = useState('');
   const [savingThought, setSavingThought] = useState(false);
   const [newTodo, setNewTodo] = useState('');
@@ -230,6 +282,7 @@ function DayLabBody({
   );
   const completed = projectDay.completed;
 
+  const timer = useWorkTimer();
   const timeline = useMemo(
     () =>
       resolveDayTimeline({
@@ -238,8 +291,9 @@ function DayLabBody({
         routines: dayRoutines,
         projectDay,
         archived: entry.timelineSnapshot,
+        workEntries: workTimerEntries(),
       }),
-    [date, ouraRowForDay, dayRoutines, projectDay, entry.timelineSnapshot],
+    [date, ouraRowForDay, dayRoutines, projectDay, entry.timelineSnapshot, timer.session, timer.elapsedMs],
   );
   const dayProgress = useMemo(
     () => createDayProgressModel({ date, segments: timeline.segments }),
@@ -287,41 +341,35 @@ function DayLabBody({
     });
 
     const readings = getWeightReadingsForDay(healthMetricsForDay, date);
-    const waistReadings = getWaistReadingsForDay(healthMetricsForDay, date);
-    const waistCard = buildWaistCardFromReadings(waistReadings, {
-      delta: view.waist?.delta ?? null,
-    });
+    const circumference = {};
+    for (const kind of CIRCUMFERENCE_KINDS) {
+      const rows = getCircumferenceReadingsForDay(kind, healthMetricsForDay, date);
+      circumference[kind] = buildCircumferenceCardFromReadings(kind, rows, {
+        delta: view[kind]?.delta ?? null,
+      }) ?? view[kind] ?? null;
+    }
 
     if (!readings.length) {
-      return { ...view, waist: waistCard ?? view.waist ?? null };
+      return { ...view, ...circumference };
     }
 
     const weightCard = buildWeightCardFromReadings(readings, {
       delta: view.weight?.delta ?? null,
     });
-    if (!weightCard) return { ...view, waist: waistCard ?? view.waist ?? null };
+    if (!weightCard) return { ...view, ...circumference };
 
     return {
       ...view,
       preview: false,
       weight: weightCard,
-      waist: waistCard ?? view.waist ?? null,
+      ...circumference,
     };
   }, [entry.metrics, date, ouraRowForDay, healthMetricsForDay]);
 
   useEffect(() => {
     if (!visible) return;
-    setNotes(entry.notes);
     setNewTodo('');
-  }, [visible, date, entry.notes]);
-
-  const persistNotes = useCallback(
-    (value) => {
-      if (!date) return;
-      onUpdateDay?.(date, { notes: stampNewJournalBlocks(entry.notes, value) });
-    },
-    [date, entry.notes, onUpdateDay]
-  );
+  }, [visible, date]);
 
   useEffect(() => {
     if (!visible || !date || timeline.source !== 'live') return;
@@ -336,10 +384,6 @@ function DayLabBody({
     }
     onUpdateDay?.(date, { timelineSnapshot: next });
   }, [visible, date, timeline, entry.timelineSnapshot, onUpdateDay]);
-
-  const handleNotesBlur = () => {
-    if (notes !== entry.notes) persistNotes(notes);
-  };
 
   const handleAddTodo = (e) => {
     e.preventDefault();
@@ -386,9 +430,9 @@ function DayLabBody({
     [date, entry.routines, onUpdateDay]
   );
 
-  const handleSaveWaist = useCallback(async (cm) => {
+  const handleSaveCircumference = useCallback(async (kind, cm) => {
     if (!date) return null;
-    const saved = await appendWaistReading({ waistCm: cm, day: date });
+    const saved = await appendCircumferenceReading({ kind, cm, day: date });
     const rows = await fetchMetricsForDay(date).catch(() => []);
     setHealthMetricsForDay(rows ?? []);
     return saved;
@@ -540,35 +584,6 @@ function DayLabBody({
                   ))}
                 </ul>
               )}
-            </section>
-
-            <section className="day-lab__panel">
-              <h3 className="day-lab__panel-title">Σημειώσεις ημέρας</h3>
-              <textarea
-                className="input textarea day-lab__notes"
-                placeholder="Τι έγινε σήμερα; σκέψεις, στιγμές, μαθήματα…"
-                rows={4}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                onBlur={handleNotesBlur}
-              />
-              {projectDay.notes.length > 0 ? (
-                <ul className="day-lab__list day-lab__captured-notes">
-                  {projectDay.notes.map((item) => (
-                    <li key={item.id} className="day-lab__completed-item">
-                      <span className="day-lab__kind day-lab__kind--note">
-                        {kindLabel(item.kind) || 'Σημείωση'}
-                      </span>
-                      <div>
-                        <span className="day-lab__completed-title">{item.title}</span>
-                        <span className="day-lab__completed-meta">
-                          {[item.timeLabel, item.projectTitle, item.stageTitle].filter(Boolean).join(' · ')}
-                        </span>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
             </section>
 
             <section className="day-lab__panel">
@@ -734,52 +749,14 @@ function DayLabBody({
                 ) : null}
               </article>
             )}
-            {dayLab.waist?.cm != null ? (
-              <article className={dayLabMetricCardClass('waist', dayLab.waist)}>
-                <header className="day-lab__weight-header">
-                  <span className="day-lab__weight-icon" aria-hidden="true">
-                    <SelfIcon name="waist" />
-                  </span>
-                  <span className="day-lab__weight-label">{dayLab.waist.label || 'Μέση'}</span>
-                  {dayLab.waist.delta != null ? (
-                    <span
-                      className={`day-lab__weight-delta${
-                        dayLab.waist.delta > 0.3
-                          ? ' day-lab__weight-delta--up'
-                          : dayLab.waist.delta < -0.3
-                            ? ' day-lab__weight-delta--down'
-                            : ''
-                      }`}
-                    >
-                      {dayLab.waist.delta > 0 ? '+' : ''}
-                      {dayLab.waist.delta.toFixed(1)} {dayLab.waist.unit}
-                    </span>
-                  ) : !hasDayLabChart(dayLab.waist) && dayLab.waist.status ? (
-                    <span className="day-lab__weight-status">{dayLab.waist.status}</span>
-                  ) : null}
-                </header>
-                <p className="day-lab__weight-value">
-                  {typeof dayLab.waist.cm === 'number'
-                    ? dayLab.waist.cm.toFixed(1)
-                    : dayLab.waist.cm}
-                  <span className="day-lab__weight-unit">cm</span>
-                </p>
-                {hasDayLabChart(dayLab.waist) ? (
-                  <SelfChart chart={dayLab.waist.chart} />
-                ) : null}
-              </article>
-            ) : (
-              <article className="day-lab__weight-card day-lab__weight-card--waist day-lab__weight-card--log">
-                <header className="day-lab__weight-header">
-                  <span className="day-lab__weight-icon" aria-hidden="true">
-                    <SelfIcon name="waist" />
-                  </span>
-                  <span className="day-lab__weight-label">Μέση</span>
-                </header>
-                <p className="day-lab__weight-status">Καταχώρισε μέση σε εκατοστά</p>
-                <WaistLogForm compact onSave={handleSaveWaist} />
-              </article>
-            )}
+            {CIRCUMFERENCE_KINDS.map((kind) => (
+              <CircumferenceDayCard
+                key={kind}
+                kind={kind}
+                card={dayLab[kind]}
+                onSave={handleSaveCircumference}
+              />
+            ))}
           </aside>
         </div>
 

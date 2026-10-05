@@ -25,12 +25,11 @@ import {
   normalizeRoutineTemplates,
   toggleRoutineDone,
   getRoutineWeekScore,
-  collectNotesCreatedForDate,
-  isTimestampOnDate,
-  stampNoteText,
 } from '../utils/lifelineDays';
 import { getSelfHubDayEntry } from '../utils/selfHubDays';
 import { buildSelfHubTimelineEvents } from '../utils/selfHubTimelineEvents';
+import { useWorkTimer } from '../hooks/useWorkTimer';
+import { workTimerEntries } from '../lib/workTimer';
 import './SelfView.css';
 import './selfHub.css';
 
@@ -51,7 +50,6 @@ export function SelfView({
   lifelineDays = {},
   onUpdateLifelineDay,
   projectActivity = [],
-  notes = [],
   selfHubDays = {},
   mapTheme = null,
   isLifeline = false,
@@ -68,7 +66,6 @@ export function SelfView({
   const [menuOpen, setMenuOpen] = useState(false);
   const [focusMessage, setFocusMessage] = useState(null);
   const menuRef = useRef(null);
-  const recoveredJournalRef = useRef(false);
   const dayView = useLifelineDayView();
   const {
     isActive: dayViewActive,
@@ -93,30 +90,6 @@ export function SelfView({
   useEffect(() => {
     onRefreshProjectActivity?.();
   }, [onRefreshProjectActivity]);
-
-  useEffect(() => {
-    if (recoveredJournalRef.current || !onUpdateLifelineDay) return;
-    const today = localTodayIsoDate();
-    const journal = String(getDayEntry(lifelineDays, today).notes || '').trim();
-    if (journal) {
-      recoveredJournalRef.current = true;
-      return;
-    }
-    const fromActivity = collectNotesCreatedForDate(projectActivity, today).map((item) =>
-      stampNoteText(item.title, item.timestamp || new Date())
-    );
-    const fromLive = (notes || [])
-      .filter((note) => {
-        if (!note || note.archived) return false;
-        const created = note.createdAt || note.updatedAt;
-        return !created || isTimestampOnDate(created, today);
-      })
-      .map((note) => stampNoteText(note.body || note.title, note.createdAt || note.updatedAt || new Date()));
-    const unique = [...new Set([...fromLive, ...fromActivity].filter(Boolean))];
-    if (!unique.length) return;
-    recoveredJournalRef.current = true;
-    onUpdateLifelineDay(today, { notes: unique.join('\n\n') });
-  }, [lifelineDays, notes, onUpdateLifelineDay, projectActivity]);
 
   const hubView = useMemo(
     () =>
@@ -172,6 +145,7 @@ export function SelfView({
     [lifelineDays, routineTemplates, today]
   );
 
+  const timer = useWorkTimer();
   const timeline = useMemo(
     () =>
       buildSelfHubTimelineEvents({
@@ -180,8 +154,9 @@ export function SelfView({
         heartRate: hubView.floatingMetrics?.heartRate,
         ouraRow,
         date: today,
+        workEntries: workTimerEntries(),
       }),
-    [todayRoutines, hubView.projectDay, hubView.floatingMetrics, ouraRow, today],
+    [todayRoutines, hubView.projectDay, hubView.floatingMetrics, ouraRow, today, timer.session, timer.elapsedMs],
   );
   const dayProgress = useMemo(
     () => ({

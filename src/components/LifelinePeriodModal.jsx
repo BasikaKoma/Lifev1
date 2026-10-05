@@ -269,6 +269,8 @@ function PeriodLabBody({
   const [ouraRows, setOuraRows] = useState([]);
   const [weightReadings, setWeightReadings] = useState([]);
   const [waistReadings, setWaistReadings] = useState([]);
+  const [thighReadings, setThighReadings] = useState([]);
+  const [armReadings, setArmReadings] = useState([]);
   const [calls, setCalls] = useState([]);
   const brandItems = useMemo(() => readBrandBundleLocal()?.items || [], [open, date, kind]);
 
@@ -282,7 +284,7 @@ function PeriodLabBody({
     (async () => {
       const [oura, metrics, callRows] = await Promise.all([
         fetchOuraMetricsRange({ startDay, endDay }).catch(() => []),
-        fetchMetricsRange({ startDay, endDay, metricTypes: ['weight', 'waist'] }).catch(() => []),
+        fetchMetricsRange({ startDay, endDay, metricTypes: ['weight', 'waist', 'thigh', 'arm'] }).catch(() => []),
         listCalls().catch(() => []),
       ]);
       if (cancelled) return;
@@ -290,6 +292,8 @@ function PeriodLabBody({
       const rows = Array.isArray(metrics) ? metrics : [];
       setWeightReadings(rows.filter((row) => row.metricType === 'weight'));
       setWaistReadings(rows.filter((row) => row.metricType === 'waist'));
+      setThighReadings(rows.filter((row) => row.metricType === 'thigh'));
+      setArmReadings(rows.filter((row) => row.metricType === 'arm'));
       setCalls(Array.isArray(callRows) ? callRows : []);
     })();
 
@@ -316,6 +320,8 @@ function PeriodLabBody({
         ouraRows,
         weightReadings,
         waistReadings,
+        thighReadings,
+        armReadings,
       }),
     [
       range,
@@ -332,6 +338,8 @@ function PeriodLabBody({
       ouraRows,
       weightReadings,
       waistReadings,
+      thighReadings,
+      armReadings,
     ]
   );
 

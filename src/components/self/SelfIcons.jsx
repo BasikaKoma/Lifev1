@@ -40,6 +40,20 @@ export function SelfIcon({ name }) {
         <path d="M12 7.5v9" opacity="0.45" />
       </svg>
     ),
+    thigh: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M9 3c-1.2 4.2-1.6 7.2-.8 10.2.6 2.2 1.8 4.4 2.2 7.8" />
+        <path d="M15 3c1.2 4.2 1.6 7.2.8 10.2-.6 2.2-1.8 4.4-2.2 7.8" />
+        <path d="M8.2 11.5h7.6" />
+      </svg>
+    ),
+    arm: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M7 4c1.4 2.2 2 4.4 1.6 6.8-.4 2.2-1.6 3.6-1.6 6.2 0 2.2 1.2 4 3 4" />
+        <path d="M14 4c2.4 1.6 4.2 2.4 5.2 4.6 1.2 2.6.4 5.2-1.4 7.2" />
+        <path d="M8.4 10.2h5.2" />
+      </svg>
+    ),
     energy: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />

@@ -1,10 +1,9 @@
 import { normalizeWheel, wheelHasContent } from './wheel';
 
 export const PATH_TABS = [
+  { id: 'week', label: 'Week' },
   { id: 'wheel', label: 'Wheel' },
   { id: 'goals', label: 'Goals' },
-  { id: 'week', label: 'Week' },
-  { id: 'metrics', label: 'Metrics' },
   { id: 'routines', label: 'Routines' },
   { id: 'review', label: 'Review' },
 ];
@@ -254,6 +253,9 @@ export function createEmptyBlock(overrides = {}) {
     startTime: asNullableString(overrides.startTime || overrides.start_time),
     order: Number.isFinite(Number(overrides.order)) ? Number(overrides.order) : 0,
     duration: asNullableNumber(overrides.duration),
+    workedMinutes: asNullableNumber(
+      overrides.workedMinutes != null ? overrides.workedMinutes : overrides.worked_minutes,
+    ),
     blockType: pick(BLOCK_TYPES, overrides.blockType || overrides.block_type, 'Deep Work'),
     normalDuration: asNullableNumber(overrides.normalDuration || overrides.normal_duration),
     minimumDuration: asNullableNumber(overrides.minimumDuration || overrides.minimum_duration),
@@ -264,7 +266,13 @@ export function createEmptyBlock(overrides = {}) {
     taskSource: asNullableString(overrides.taskSource || overrides.task_source),
     completeLinkedTask: Boolean(overrides.completeLinkedTask),
     templateId: asNullableString(overrides.templateId || overrides.template_id),
+    ouraActivityId: asNullableString(overrides.ouraActivityId || overrides.oura_activity_id),
     notes: asFreeText(overrides.notes),
+    noteSketches: (Array.isArray(overrides.noteSketches || overrides.note_sketches)
+      ? (overrides.noteSketches || overrides.note_sketches)
+      : [])
+      .map(createEmptyNoteSketch)
+      .filter(Boolean),
     desiredOutcome: asFreeText(overrides.desiredOutcome || overrides.desired_outcome),
     resultSummary: asFreeText(overrides.resultSummary || overrides.result_summary),
     remaining: asFreeText(overrides.remaining),
@@ -301,6 +309,24 @@ export function createEmptyBlockAction(overrides = {}) {
     position: Number.isFinite(Number(overrides.position)) ? Number(overrides.position) : 0,
     createdAt: overrides.createdAt || overrides.created_at || now,
     updatedAt: overrides.updatedAt || overrides.updated_at || now,
+  };
+}
+
+function asSketchNumber(value, fallback) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : fallback;
+}
+
+export function createEmptyNoteSketch(overrides = {}) {
+  const image = asNullableString(overrides.image);
+  if (!image || !image.startsWith('data:image/')) return null;
+  return {
+    id: overrides.id || createPathId('sketch'),
+    image,
+    x: Math.max(0, asSketchNumber(overrides.x, 16)),
+    y: Math.max(0, asSketchNumber(overrides.y, 48)),
+    width: Math.min(960, Math.max(96, asSketchNumber(overrides.width, 220))),
+    createdAt: overrides.createdAt || overrides.created_at || nowIso(),
   };
 }
 

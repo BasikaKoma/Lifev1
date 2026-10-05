@@ -17,11 +17,13 @@ import { SelfView } from './components/SelfView';
 import { OuraConnectModal } from './components/OuraConnectModal';
 import { MetaConnectModal } from './components/brand/MetaConnectModal';
 import { AssistantOrb } from './components/AssistantOrb';
+import { WorkTimer } from './components/WorkTimer';
 import { QuickNoteOrb } from './components/QuickNoteOrb';
 import { AuthView } from './components/AuthView';
 import { ConfigErrorView } from './components/ConfigErrorView';
 import { APP_NAME } from './constants/branding';
 import { useOura, useOuraOAuthReturn } from './hooks/useOura';
+import { useOuraPathSync } from './hooks/useOuraPathSync';
 import { useMeta, useMetaOAuthReturn } from './hooks/useMeta';
 import { useProfile } from './hooks/useProfile';
 import { useHealthSelfHubSync } from './hooks/useHealthSelfHubSync';
@@ -74,7 +76,7 @@ export default function App() {
 function MainApp({ user, onSignOut }) {
   const [brainMode, setBrainMode] = useState('closed');
   const [pathBundle, setPathBundle] = useState(() => readPathBundleLocal());
-  const [pathTab, setPathTab] = useState(() => pathTabFromPathname(window.location.pathname) || 'wheel');
+  const [pathTab, setPathTab] = useState(() => pathTabFromPathname(window.location.pathname) || 'week');
 
   const {
     loading,
@@ -258,6 +260,12 @@ function MainApp({ user, onSignOut }) {
     updateLifelineDaysBatch,
   });
 
+  useOuraPathSync({
+    enabled: Boolean(user),
+    connected: Boolean(ouraStatus?.connected),
+    lastSyncedAt: ouraStatus?.last_synced_at,
+  });
+
   const {
     selfData: healthSelfData,
     healthMetrics,
@@ -425,7 +433,7 @@ function MainApp({ user, onSignOut }) {
     setActiveView(view);
   };
 
-  const openPath = (tab = 'wheel') => {
+  const openPath = (tab = 'week') => {
     setPathTab(tab);
     handleNavigate('path');
   };
@@ -970,6 +978,8 @@ function MainApp({ user, onSignOut }) {
       <div className="app__content" ref={pinchRef}>
         <main className="main">{renderContent()}</main>
       </div>
+
+      <WorkTimer />
 
       <MobileBottomNav
         activeView={activeView}

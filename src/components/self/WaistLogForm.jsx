@@ -1,16 +1,24 @@
 import { useState } from 'react';
-import { parseWaistCm, WAIST_MIN_CM, WAIST_MAX_CM } from '../../lib/health/waistReadings';
+import { circumferenceSpec, parseCircumferenceCm } from '../../lib/health/circumferenceReadings';
 
-export function WaistLogForm({ onSave, compact = false, disabled = false }) {
+export function WaistLogForm({
+  kind = 'waist',
+  onSave,
+  compact = false,
+  inline = false,
+  disabled = false,
+  submitLabel = 'Καταγραφή',
+}) {
   const [value, setValue] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    const cm = parseWaistCm(value);
+    const spec = circumferenceSpec(kind);
+    const cm = parseCircumferenceCm(kind, value);
     if (cm == null) {
-      setError(`Γράψε εκατοστά (${WAIST_MIN_CM}–${WAIST_MAX_CM})`);
+      setError(spec ? `Γράψε εκατοστά (${spec.min}–${spec.max})` : 'Άκυρη μέτρηση');
       return;
     }
     setError('');
@@ -31,30 +39,32 @@ export function WaistLogForm({ onSave, compact = false, disabled = false }) {
 
   return (
     <form
-      className={`waist-log${compact ? ' waist-log--compact' : ''}`}
+      className={`waist-log${compact ? ' waist-log--compact' : ''}${inline ? ' waist-log--inline' : ''}`}
       onSubmit={handleSubmit}
+      noValidate
     >
       <div className="waist-log__row">
         <input
           className="input waist-log__input"
           type="number"
           inputMode="decimal"
-          min={WAIST_MIN_CM}
-          max={WAIST_MAX_CM}
+          min={circumferenceSpec(kind)?.min}
+          max={circumferenceSpec(kind)?.max}
           step="0.1"
-          placeholder="π.χ. 92"
+          placeholder={inline ? '—' : 'π.χ. 92'}
           value={value}
           disabled={disabled || saving}
           onChange={(event) => setValue(event.target.value)}
-          aria-label="Μέση σε εκατοστά"
+          aria-label={`${circumferenceSpec(kind)?.label || 'Μέτρηση'} σε εκατοστά`}
         />
         <span className="waist-log__unit">cm</span>
         <button
           type="submit"
           className="btn btn--primary btn--sm waist-log__submit"
           disabled={disabled || saving}
+          aria-label={`Καταγραφή ${circumferenceSpec(kind)?.label || 'μέτρησης'}`}
         >
-          {saving ? '…' : 'Καταγραφή'}
+          {saving ? '…' : submitLabel}
         </button>
       </div>
       {error ? <p className="waist-log__error">{error}</p> : null}

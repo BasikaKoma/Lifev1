@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { SelfIcon } from '../SelfIcons';
 import { SelfChart } from '../SelfCharts';
+import { WaistLogForm } from '../WaistLogForm';
+import { appendCircumferenceReading } from '../../../lib/health/healthMetrics';
+import { CIRCUMFERENCE_KINDS, circumferenceSpec } from '../../../lib/health/circumferenceReadings';
 import { NO_DATA } from '../../../utils/selfHubSchema';
 
 const METRIC_ICONS = {
@@ -72,14 +75,43 @@ function formatKcal(value) {
   return new Intl.NumberFormat('en-US').format(value);
 }
 
-function WaistFoot({ waistCm }) {
-  const label = formatWaistCm(waistCm);
+function BodyCmFoot({ kind, value }) {
+  const spec = circumferenceSpec(kind);
+  const [savedCm, setSavedCm] = useState(null);
+  const label = formatWaistCm(value ?? savedCm);
+  if (!spec) return null;
+
+  if (!label) {
+    return (
+      <div className="self-float-metric__waist self-float-metric__waist--log">
+        <span className="self-float-metric__waist-label">{spec.label}</span>
+        <WaistLogForm
+          kind={kind}
+          compact
+          inline
+          submitLabel="OK"
+          onSave={async (cm) => {
+            const saved = await appendCircumferenceReading({ kind, cm });
+            if (saved?.value != null) setSavedCm(saved.value);
+            return saved;
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
-    <span className={`self-float-metric__waist${label ? '' : ' self-float-metric__waist--empty'}`}>
-      Μέση {label ?? '—'}
+    <span className="self-float-metric__waist">
+      {spec.label} {label}
       <span className="self-float-metric__detailed-unit">cm</span>
     </span>
   );
+}
+
+function BodyMeasures({ metric }) {
+  return CIRCUMFERENCE_KINDS.map((kind) => (
+    <BodyCmFoot key={kind} kind={kind} value={metric[`${kind}Cm`]} />
+  ));
 }
 
 function WeightCalories({ caloriesIn, caloriesOut }) {
@@ -228,7 +260,7 @@ function DetailedCaloriesCard({ metric, position }) {
           </div>
         ) : null}
 
-        <WaistFoot waistCm={metric.waistCm} />
+        <BodyMeasures metric={metric} />
       </div>
     </div>
   );
@@ -347,7 +379,7 @@ export function SelfFloatingMetric({
           {metric.label === 'Weight' ? (
             <>
               <WeightCalories caloriesIn={metric.caloriesIn} caloriesOut={metric.caloriesOut} />
-              <WaistFoot waistCm={metric.waistCm} />
+              <BodyMeasures metric={metric} />
             </>
           ) : Array.isArray(metric.pairs) && metric.pairs.length > 0 && metric.status ? (
             <span className="self-float-metric__secondary">{metric.status}</span>

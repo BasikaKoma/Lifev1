@@ -1,4 +1,4 @@
-import { buildWeeklyPlanPreview } from '../../../lib/path/logic';
+import { buildWeeklyPlanPreview, formatBlockWindow } from '../../../lib/path/logic';
 import { goalColorStyle, startOfWeekMonday } from '../../../lib/path/schema';
 
 /** @param {{ pathBundle?: object|null, onOpenPathWeek?: () => void }} props */
@@ -63,7 +63,7 @@ export function SelfPathWeekCard({ pathBundle, onOpenPathWeek }) {
               {preview.map((block) => (
                 <li key={block.id} style={goalColorStyle(block.color)}>
                   {block.color ? <span className="self-path-week__dot" /> : null}
-                  <span className="self-path-week__time">{block.startTime || '—'}</span>
+                  <span className="self-path-week__time">{formatBlockWindow(block.startTime, block.duration) || '—'}</span>
                   <span className={`self-path-week__title${block.status === 'Done' ? ' self-path-week__title--done' : ''}`}>
                     {block.title}
                   </span>

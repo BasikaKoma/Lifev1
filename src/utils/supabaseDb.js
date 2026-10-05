@@ -30,12 +30,16 @@ import { normalizeProjectBrief } from './projectBrief';
 import { normalizeProjectRhythm } from './projectRhythm';
 import { normalizeActiveView } from './appNavigation';
 import {
-  mergeLifelineReconcile,
   mergeLifelineRowData,
   protectLifelineDataFromAccidentalWipe,
 } from './lifelineMerge';
 import { isCloudSyncEnabled } from '../lib/vault/config';
 import { overlayVaultProjectData } from '../lib/vault/projects';
+import {
+  cloudConflictWarning,
+  localMetaMatchesCloud,
+  readCloudVersion,
+} from './cloudRevision';
 
 const MINIMAL_PROJECT_COLUMNS = new Set([
   'title',
@@ -228,6 +232,7 @@ function normalizeRow(row, { isLifeline = false, userId = null } = {}) {
     selectedStageId: row.selected_stage_id || null,
     focusMode: row.focus_mode === true,
     cloudUpdatedAt: row.updated_at || null,
+    cloudVersion: readCloudVersion(row),
     activeView: normalizeActiveViewFromDb(row.active_view),
   };
 }
@@ -543,24 +548,11 @@ export async function fetchProjectCloudUpdatedAt(projectId) {
   const supabase = requireSupabase();
   const userId = await requireUserId();
 
-  const { data: lifeline, error: lifelineError } = await supabase
-    .from('lifelines')
-    .select('updated_at')
-    .eq('id', projectId)
-    .eq('user_id', userId)
-    .maybeSingle();
+  const lifeline = await readCloudRevision(supabase, 'lifelines', projectId, userId);
+  if (lifeline?.cloudUpdatedAt) return lifeline;
 
-  if (!lifelineError && lifeline?.updated_at) {
-    return lifeline.updated_at;
-  }
-
-  const { data, error } = await supabase
-    .from('projects')
-    .select('updated_at')
-    .eq('id', projectId)
-    .maybeSingle();
-  if (error) throw error;
-  return data?.updated_at || null;
+  const project = await readCloudRevision(supabase, 'projects', projectId);
+  return project?.cloudUpdatedAt ? project : null;
 }
 
 export function subscribeToProjectChanges(projectId, onChange) {
@@ -881,68 +873,133 @@ export async function loadInitialProject() {
   return createProject('My Business');
 }
 
-async function updateProjectWithLock(supabase, projectId, row, expectedUpdatedAt) {
-  let query = supabase.from('projects').update(row).eq('id', projectId);
-  if (expectedUpdatedAt) {
-    query = query.eq('updated_at', expectedUpdatedAt);
-  }
+let versionColumnSupported = true;
+const projectWriteTails = new Map();
 
-  const { data, error } = await query.select('updated_at').maybeSingle();
-  if (error) return { error };
+function withProjectWriteLock(projectId, task) {
+  if (!projectId) return Promise.resolve().then(task);
+  const previous = projectWriteTails.get(projectId) || Promise.resolve();
+  const run = previous.catch(() => {}).then(task);
+  const settled = run.then(() => {}, () => {});
+  projectWriteTails.set(projectId, settled);
+  settled.finally(() => {
+    if (projectWriteTails.get(projectId) === settled) projectWriteTails.delete(projectId);
+  });
+  return run;
+}
 
-  if (data?.updated_at) {
-    return { updatedAt: data.updated_at };
-  }
-
-  if (!expectedUpdatedAt) {
-    return { error: new Error('Project not found or update returned no row') };
-  }
-
-  const { data: existing, error: fetchError } = await supabase
-    .from('projects')
-    .select('updated_at')
-    .eq('id', projectId)
-    .maybeSingle();
-
-  if (fetchError) return { error: fetchError };
-  if (!existing) return { error: new Error('Project not found') };
-
+function expectedRevision(state) {
   return {
-    conflict: true,
-    cloudUpdatedAt: existing.updated_at,
+    updatedAt: state?.cloudUpdatedAt || null,
+    version: state?.cloudVersion ?? null,
   };
 }
 
-async function updateLifelineWithLock(supabase, lifelineId, row, expectedUpdatedAt) {
-  let query = supabase.from('lifelines').update(row).eq('id', lifelineId);
-  if (expectedUpdatedAt) {
-    query = query.eq('updated_at', expectedUpdatedAt);
-  }
+function okSave(source, state, lockResult, writtenColumns, extra = {}) {
+  return {
+    ok: true,
+    source,
+    cloudUpdatedAt: lockResult?.updatedAt ?? state?.cloudUpdatedAt ?? null,
+    cloudVersion: lockResult?.version ?? state?.cloudVersion ?? null,
+    writtenColumns,
+    ...extra,
+  };
+}
 
-  const { data, error } = await query.select('updated_at').maybeSingle();
+function conflictSave(state, lockResult) {
+  return {
+    ok: false,
+    conflict: true,
+    cloudUpdatedAt: lockResult?.cloudUpdatedAt ?? null,
+    cloudVersion: lockResult?.cloudVersion ?? null,
+    warning: cloudConflictWarning(state?.projectTitle),
+  };
+}
+
+async function readCloudRevision(supabase, table, id, userId) {
+  const run = (withVersion) => {
+    let query = supabase
+      .from(table)
+      .select(withVersion ? 'updated_at, version' : 'updated_at')
+      .eq('id', id);
+    if (userId) query = query.eq('user_id', userId);
+    return query.maybeSingle();
+  };
+
+  let { data, error } = await run(versionColumnSupported);
+  if (error && versionColumnSupported && isMissingColumnError(error)) {
+    versionColumnSupported = false;
+    ({ data, error } = await run(false));
+  }
+  if (error) {
+    if (table === 'lifelines' && isMissingTableError(error)) return null;
+    if (table === 'lifelines') return null;
+    throw error;
+  }
+  if (!data?.updated_at) return null;
+  return {
+    cloudUpdatedAt: data.updated_at,
+    cloudVersion: readCloudVersion(data),
+  };
+}
+
+function lockExpectation(expected) {
+  if (!expected) return { updatedAt: null, version: null };
+  if ('updatedAt' in expected || 'version' in expected) {
+    return {
+      updatedAt: expected.updatedAt || null,
+      version: expected.version ?? null,
+    };
+  }
+  return {
+    updatedAt: expected.cloudUpdatedAt || null,
+    version: expected.cloudVersion ?? null,
+  };
+}
+
+async function updateRowWithLock(supabase, table, id, row, expected) {
+  const revision = lockExpectation(expected);
+
+  const attempt = async (useVersion) => {
+    let query = supabase.from(table).update(row).eq('id', id);
+    if (useVersion && revision.version != null) query = query.eq('version', revision.version);
+    else if (revision.updatedAt) query = query.eq('updated_at', revision.updatedAt);
+    const columns = useVersion ? 'updated_at, version' : 'updated_at';
+    return query.select(columns).maybeSingle();
+  };
+
+  let useVersion = versionColumnSupported;
+  let { data, error } = await attempt(useVersion);
+  if (error && useVersion && isMissingColumnError(error)) {
+    versionColumnSupported = false;
+    useVersion = false;
+    ({ data, error } = await attempt(false));
+  }
   if (error) return { error };
-
   if (data?.updated_at) {
-    return { updatedAt: data.updated_at };
+    return { updatedAt: data.updated_at, version: readCloudVersion(data) };
   }
 
-  if (!expectedUpdatedAt) {
-    return { error: new Error('Lifeline not found or update returned no row') };
+  const usedFilter = (useVersion && revision.version != null) || Boolean(revision.updatedAt);
+  if (!usedFilter) {
+    return { error: new Error('Project not found or update returned no row') };
   }
 
-  const { data: existing, error: fetchError } = await supabase
-    .from('lifelines')
-    .select('updated_at')
-    .eq('id', lifelineId)
-    .maybeSingle();
-
-  if (fetchError) return { error: fetchError };
-  if (!existing) return { error: new Error('Lifeline not found') };
-
+  const existing = await readCloudRevision(supabase, table, id);
+  if (!existing?.cloudUpdatedAt) return { error: new Error('Project not found') };
   return {
     conflict: true,
-    cloudUpdatedAt: existing.updated_at,
+    cloudUpdatedAt: existing.cloudUpdatedAt,
+    cloudVersion: existing.cloudVersion,
   };
+}
+
+async function updateProjectWithLock(supabase, projectId, row, expected) {
+  return updateRowWithLock(supabase, 'projects', projectId, row, expected);
+}
+
+async function updateLifelineWithLock(supabase, lifelineId, row, expected) {
+  return updateRowWithLock(supabase, 'lifelines', lifelineId, row, expected);
 }
 
 async function fetchLifelineProtectionSnapshot(supabase, lifelineId) {
@@ -963,18 +1020,17 @@ function applyLifelineSaveProtection(fullRow, cloudRow) {
 async function saveLifelineToSupabase(state, { columns: requestedColumns } = {}) {
   const supabase = requireSupabase();
   const lifelineId = state.projectId;
-  const expectedUpdatedAt = state.cloudUpdatedAt || null;
+  const expected = expectedRevision(state);
   const allowed = lifelineColumnCache || (await refreshLifelineColumns(lifelineId));
   let fullRow = buildPatchRow(state, requestedColumns, allowed);
 
   if (!Object.keys(fullRow).length) {
-    return { ok: true, source: 'supabase-lifeline', cloudUpdatedAt: expectedUpdatedAt, writtenColumns: [] };
+    return okSave('supabase-lifeline', state, null, []);
   }
 
-  let cloudRow = null;
   let reconcile = null;
   if (patchNeedsLifelineProtection(fullRow)) {
-    cloudRow = await fetchLifelineProtectionSnapshot(supabase, lifelineId);
+    const cloudRow = await fetchLifelineProtectionSnapshot(supabase, lifelineId);
     if (cloudRow) {
       const protectedResult = applyLifelineSaveProtection(fullRow, cloudRow);
       fullRow = protectedResult.row;
@@ -982,38 +1038,12 @@ async function saveLifelineToSupabase(state, { columns: requestedColumns } = {})
     }
   }
 
-  let first = await updateLifelineWithLock(supabase, lifelineId, fullRow, expectedUpdatedAt);
+  const first = await updateLifelineWithLock(supabase, lifelineId, fullRow, expected);
 
-  if (first.conflict && first.cloudUpdatedAt) {
-    if (patchNeedsLifelineProtection(fullRow)) {
-      cloudRow = await fetchLifelineProtectionSnapshot(supabase, lifelineId);
-      if (cloudRow) {
-        const protectedResult = applyLifelineSaveProtection(fullRow, cloudRow);
-        fullRow = protectedResult.row;
-        reconcile = mergeLifelineReconcile(reconcile, protectedResult.reconcile);
-      }
-    }
-    first = await updateLifelineWithLock(supabase, lifelineId, fullRow, first.cloudUpdatedAt);
-  }
-
-  if (first.conflict) {
-    return {
-      ok: false,
-      conflict: true,
-      cloudUpdatedAt: first.cloudUpdatedAt,
-      warning:
-        'Το Lifeline αποθηκεύτηκε από άλλη συσκευή. Πάτα «Φόρτωση cloud» για να συγχρονίσεις.',
-    };
-  }
+  if (first.conflict) return conflictSave(state, first);
 
   if (!first.error) {
-    return {
-      ok: true,
-      source: 'supabase-lifeline',
-      cloudUpdatedAt: first.updatedAt,
-      reconcile,
-      writtenColumns: Object.keys(fullRow),
-    };
+    return okSave('supabase-lifeline', state, first, Object.keys(fullRow), { reconcile });
   }
 
   if (isMissingTableError(first.error)) {
@@ -1026,7 +1056,7 @@ async function saveLifelineToSupabase(state, { columns: requestedColumns } = {})
 async function saveProjectToSupabaseLegacyLifeline(state, { columns: requestedColumns } = {}) {
   const supabase = requireSupabase();
   const projectId = state.projectId;
-  const expectedUpdatedAt = state.cloudUpdatedAt || null;
+  const expected = expectedRevision(state);
   const allowed = new Set([
     ...(projectColumnCache || MINIMAL_PROJECT_COLUMNS),
     ...(projectColumnCache || EXTENDED_PROJECT_COLUMNS),
@@ -1051,44 +1081,20 @@ async function saveProjectToSupabaseLegacyLifeline(state, { columns: requestedCo
     }
   }
 
-  let result = await updateProjectWithLock(supabase, projectId, legacyRow, expectedUpdatedAt);
+  const result = await updateProjectWithLock(supabase, projectId, legacyRow, expected);
 
-  if (result.conflict && result.cloudUpdatedAt) {
-    if (patchNeedsLifelineProtection(legacyRow)) {
-      const { data: freshCloud } = await supabase
-        .from('projects')
-        .select('stages, lifeline_days, canvas_ink, notes')
-        .eq('id', projectId)
-        .maybeSingle();
-      if (freshCloud) {
-        const protectedResult = applyLifelineSaveProtection(legacyRow, freshCloud);
-        legacyRow = protectedResult.row;
-        reconcile = mergeLifelineReconcile(reconcile, protectedResult.reconcile);
-      }
-    }
-    result = await updateProjectWithLock(supabase, projectId, legacyRow, result.cloudUpdatedAt);
-  }
-
-  if (result.conflict) {
-    return {
-      ok: false,
-      conflict: true,
-      cloudUpdatedAt: result.cloudUpdatedAt,
-      warning:
-        'Το Lifeline αποθηκεύτηκε από άλλη συσκευή. Πάτα «Φόρτωση cloud» για να συγχρονίσεις.',
-    };
-  }
+  if (result.conflict) return conflictSave(state, result);
   if (result.error) throw new Error(formatSupabaseError(result.error));
-  return {
-    ok: true,
-    source: 'supabase-lifeline-legacy',
-    cloudUpdatedAt: result.updatedAt,
-    reconcile,
-    writtenColumns: Object.keys(legacyRow).filter((key) => key !== 'is_lifeline'),
-  };
+  return okSave(
+    'supabase-lifeline-legacy',
+    state,
+    result,
+    Object.keys(legacyRow).filter((key) => key !== 'is_lifeline'),
+    { reconcile }
+  );
 }
 
-export async function saveProjectToSupabase(state, { columns: requestedColumns } = {}) {
+async function saveProjectToSupabaseBody(state, { columns: requestedColumns } = {}) {
   requireCloud();
   if (!state?.projectId) {
     throw new Error('No project to save');
@@ -1100,33 +1106,20 @@ export async function saveProjectToSupabase(state, { columns: requestedColumns }
 
   const supabase = requireSupabase();
   const projectId = state.projectId;
-  const expectedUpdatedAt = state.cloudUpdatedAt || null;
+  const expected = expectedRevision(state);
   const allowed = projectColumnCache || (await refreshProjectColumns(projectId));
   const patchRow = buildPatchRow(state, requestedColumns, allowed);
 
   if (!Object.keys(patchRow).length) {
-    return { ok: true, source: 'supabase', cloudUpdatedAt: expectedUpdatedAt, writtenColumns: [] };
+    return okSave('supabase', state, null, []);
   }
 
-  const first = await updateProjectWithLock(supabase, projectId, patchRow, expectedUpdatedAt);
+  const first = await updateProjectWithLock(supabase, projectId, patchRow, expected);
 
-  if (first.conflict) {
-    return {
-      ok: false,
-      conflict: true,
-      cloudUpdatedAt: first.cloudUpdatedAt,
-      warning:
-        'Το project αποθηκεύτηκε από άλλη συσκευή. Πάτα «Φόρτωση cloud» για να συγχρονίσεις.',
-    };
-  }
+  if (first.conflict) return conflictSave(state, first);
 
   if (!first.error) {
-    return {
-      ok: true,
-      source: 'supabase',
-      cloudUpdatedAt: first.updatedAt,
-      writtenColumns: Object.keys(patchRow),
-    };
+    return okSave('supabase', state, first, Object.keys(patchRow));
   }
 
   if (isMissingColumnError(first.error)) {
@@ -1134,44 +1127,30 @@ export async function saveProjectToSupabase(state, { columns: requestedColumns }
     const fallbackRow = buildPatchRow(state, requestedColumns, MINIMAL_PROJECT_COLUMNS);
     if (!Object.keys(fallbackRow).length) {
       return {
-        ok: true,
-        source: 'supabase-partial',
-        cloudUpdatedAt: expectedUpdatedAt,
-        writtenColumns: [],
+        ...okSave('supabase-partial', state, null, []),
         warning: `Cloud missing columns (${formatSupabaseError(first.error)}). Check Supabase schema.`,
       };
     }
-    const fallback = await updateProjectWithLock(
-      supabase,
-      projectId,
-      fallbackRow,
-      expectedUpdatedAt
-    );
+    const fallback = await updateProjectWithLock(supabase, projectId, fallbackRow, expected);
 
-    if (fallback.conflict) {
-      return {
-        ok: false,
-        conflict: true,
-        cloudUpdatedAt: fallback.cloudUpdatedAt,
-        warning:
-          'Το project αποθηκεύτηκε από άλλη συσκευή. Πάτα «Φόρτωση cloud» για να συγχρονίσεις.',
-      };
-    }
+    if (fallback.conflict) return conflictSave(state, fallback);
 
     if (fallback.error) {
       throw new Error(formatSupabaseError(fallback.error));
     }
 
     return {
-      ok: true,
-      source: 'supabase-minimal',
-      cloudUpdatedAt: fallback.updatedAt,
-      writtenColumns: Object.keys(fallbackRow),
+      ...okSave('supabase-minimal', state, fallback, Object.keys(fallbackRow)),
       warning: `Basic sync only (${formatSupabaseError(first.error)}). Check Supabase schema and reload API cache.`,
     };
   }
 
   throw new Error(formatSupabaseError(first.error));
+}
+
+export function saveProjectToSupabase(state, options = {}) {
+  if (options.unlocked) return saveProjectToSupabaseBody(state, options);
+  return withProjectWriteLock(state?.projectId, () => saveProjectToSupabaseBody(state, options));
 }
 
 export async function createProject(title = 'New Business', options = {}) {
@@ -1293,9 +1272,10 @@ export async function resetSupabaseProject(state) {
   }
 
   const supabase = requireSupabase();
-  const { error } = await supabase
-    .from('projects')
-    .update({
+  const result = await withProjectWriteLock(state.projectId, () => updateProjectWithLock(
+    supabase,
+    state.projectId,
+    {
       title: 'My Business',
       stages: defaults,
       goals: [],
@@ -1303,11 +1283,19 @@ export async function resetSupabaseProject(state) {
       active_view: 'projects',
       focus_mode: false,
       selected_stage_id: null,
-    })
-    .eq('id', state.projectId);
+    },
+    null
+  ));
 
-  if (error) throw error;
-  return reset;
+  if (result.error) throw new Error(formatSupabaseError(result.error));
+  if (result.conflict) {
+    throw new Error(cloudConflictWarning(state.projectTitle));
+  }
+  return {
+    ...reset,
+    cloudUpdatedAt: result.updatedAt || state.cloudUpdatedAt || null,
+    cloudVersion: result.version ?? state.cloudVersion ?? null,
+  };
 }
 
 export async function switchActiveProject(projectId) {
@@ -1318,13 +1306,36 @@ export async function switchActiveProject(projectId) {
   return { ...loaded, projectList: list };
 }
 
+function lifelineBundleRow(baseTheme, days, hubDays) {
+  const mapTheme = mergeMapTheme(baseTheme, {
+    lifeline: {
+      ...(baseTheme?.lifeline || {}),
+      selfHubDays: hubDays,
+    },
+  });
+  return {
+    row: sanitizeForDb({
+      lifeline_days: days,
+      map_theme: mapTheme,
+    }),
+    mapTheme,
+  };
+}
+
 /** Persist Self Hub live store + lifeline archive on the lifeline project (background). */
 export async function patchLifelineProjectBundle(lifelineProjectId, { selfHubDays, lifelineDays }) {
   requireCloud();
   const supabase = requireSupabase();
   await requireUserId();
   if (!lifelineProjectId) return { ok: false };
+  return withProjectWriteLock(lifelineProjectId, () => patchLifelineProjectBundleBody(
+    supabase,
+    lifelineProjectId,
+    { selfHubDays, lifelineDays }
+  ));
+}
 
+async function patchLifelineProjectBundleBody(supabase, lifelineProjectId, { selfHubDays, lifelineDays }) {
   const loaded = await loadProjectById(lifelineProjectId);
   const incomingDays =
     lifelineDays != null ? normalizeLifelineDays(lifelineDays) : normalizeLifelineDays(loaded.lifelineDays);
@@ -1333,54 +1344,50 @@ export async function patchLifelineProjectBundle(lifelineProjectId, { selfHubDay
     ...normalizeSelfHubDays(loaded.mapTheme?.lifeline?.selfHubDays),
     ...normalizeSelfHubDays(selfHubDays ?? loaded.mapTheme?.lifeline?.selfHubDays),
   };
-
-  const mapTheme = mergeMapTheme(loaded.mapTheme, {
-    lifeline: {
-      ...(loaded.mapTheme?.lifeline || {}),
-      selfHubDays: mergedHubDays,
-    },
-  });
-
-  const row = sanitizeForDb({
-    lifeline_days: mergedDays,
-    map_theme: mapTheme,
-  });
+  const built = lifelineBundleRow(loaded.mapTheme, mergedDays, mergedHubDays);
 
   const localState = {
     ...loaded,
     lifelineDays: mergedDays,
-    mapTheme,
+    mapTheme: built.mapTheme,
   };
   writeLocalColumnsQuiet(localState, ['lifeline_days', 'map_theme'], []);
 
   if (!isCloudSyncEnabled()) {
-    return { ok: true, source: 'vault', cloudUpdatedAt: loaded.cloudUpdatedAt };
+    return {
+      ok: true,
+      source: 'vault',
+      cloudUpdatedAt: loaded.cloudUpdatedAt,
+      cloudVersion: loaded.cloudVersion ?? null,
+    };
   }
 
-  const expectedUpdatedAt = loaded.cloudUpdatedAt || null;
-  let first = await updateLifelineWithLock(supabase, lifelineProjectId, row, expectedUpdatedAt);
+  let first = await updateLifelineWithLock(
+    supabase,
+    lifelineProjectId,
+    built.row,
+    expectedRevision(loaded)
+  );
 
   if (first.conflict) {
     const reloaded = await loadProjectById(lifelineProjectId);
     const retryDays = mergeLifelineDaysMaps(reloaded.lifelineDays, incomingDays);
-    const retryRow = sanitizeForDb({
-      lifeline_days: retryDays,
-      map_theme: mapTheme,
-    });
+    const retryHub = {
+      ...normalizeSelfHubDays(reloaded.mapTheme?.lifeline?.selfHubDays),
+      ...normalizeSelfHubDays(selfHubDays ?? {}),
+    };
+    const retry = lifelineBundleRow(reloaded.mapTheme, retryDays, retryHub);
     first = await updateLifelineWithLock(
       supabase,
       lifelineProjectId,
-      retryRow,
-      reloaded.cloudUpdatedAt
+      retry.row,
+      expectedRevision(reloaded)
     );
   }
 
-  if (first.conflict || first.error) return { ok: false, conflict: Boolean(first.conflict) };
-  return { ok: true, source: 'supabase-lifeline', cloudUpdatedAt: first.updatedAt };
-
-  const { error } = await supabase.from('projects').update(row).eq('id', lifelineProjectId);
-  if (error) throw error;
-  return { ok: true, source: 'supabase' };
+  if (first.conflict) return conflictSave({ projectTitle: 'Lifeline' }, first);
+  if (first.error) return { ok: false, conflict: false, warning: formatSupabaseError(first.error) };
+  return okSave('supabase-lifeline', loaded, first, ['lifeline_days', 'map_theme']);
 }
 
 const CAPTURE_MERGE_COLUMNS = ['notes', 'backlog', 'stages', 'goals', 'canvas_tasks'];
@@ -1413,45 +1420,84 @@ export async function peekProjectById(projectId) {
 
 async function mergeLocalCaptureBase(peeked) {
   const meta = await readLocalMeta(peeked.projectId);
-  if (!meta?.dirtyColumns?.length) return peeked;
-  const sameCloud = !meta.cloudUpdatedAt || meta.cloudUpdatedAt === peeked.cloudUpdatedAt;
-  if (!sameCloud) return peeked;
+  if (!meta?.dirtyColumns?.length) return { state: peeked, mergedLocalDirty: false };
+  if (!localMetaMatchesCloud(meta, peeked)) return { state: peeked, mergedLocalDirty: false };
   const dirtyCapture = meta.dirtyColumns.filter((column) => CAPTURE_MERGE_COLUMNS.includes(column));
-  if (!dirtyCapture.length) return peeked;
+  if (!dirtyCapture.length) return { state: peeked, mergedLocalDirty: false };
   const values = await readLocalColumns(peeked.projectId, dirtyCapture);
-  return applyColumnValuesToState(peeked, values);
+  return {
+    state: applyColumnValuesToState(peeked, values),
+    mergedLocalDirty: true,
+  };
+}
+
+function stampSavedState(state, result) {
+  return {
+    ...state,
+    cloudUpdatedAt: result?.cloudUpdatedAt || state?.cloudUpdatedAt || null,
+    cloudVersion: result?.cloudVersion ?? state?.cloudVersion ?? null,
+  };
 }
 
 async function persistRemoteCapture(projectId, mutate, { retryCapture } = {}) {
+  return withProjectWriteLock(projectId, () => persistRemoteCaptureBody(projectId, mutate, { retryCapture }));
+}
+
+async function persistRemoteCaptureBody(projectId, mutate, { retryCapture } = {}) {
   const peeked = await peekProjectById(projectId);
   const sourced = isCloudSyncEnabled() ? peeked : await overlayVaultProjectData(peeked);
-  const base = await mergeLocalCaptureBase(sourced);
-  const applied = mutate(base);
+  const merged = await mergeLocalCaptureBase(sourced);
+  const applied = mutate(merged.state);
   if (!isCloudSyncEnabled()) {
     writeLocalColumnsQuiet(applied.state, applied.columns, []);
     return {
       ...applied,
       projectTitle: applied.state.projectTitle,
       isLifeline: applied.state.isLifeline === true,
+      mergedLocalDirty: merged.mergedLocalDirty,
+      writtenColumns: applied.columns,
     };
   }
-  const result = await saveProjectToSupabase(applied.state, { columns: applied.columns });
+  const result = await saveProjectToSupabase(applied.state, {
+    columns: applied.columns,
+    unlocked: true,
+  });
 
   if (result.conflict) {
     const fresh = await peekProjectById(projectId);
     const retry = mutate(fresh, retryCapture);
-    const retryResult = await saveProjectToSupabase(retry.state, { columns: retry.columns });
+    const retryResult = await saveProjectToSupabase(retry.state, {
+      columns: retry.columns,
+      unlocked: true,
+    });
     if (retryResult.conflict) {
-      throw new Error('Το project άλλαξε από άλλη συσκευή. Δοκίμασε ξανά.');
+      return {
+        ...retry,
+        ok: false,
+        conflict: true,
+        projectTitle: fresh.projectTitle || retry.state?.projectTitle,
+        isLifeline: retry.state?.isLifeline === true,
+        warning: retryResult.warning || cloudConflictWarning(fresh.projectTitle),
+        cloudUpdatedAt: retryResult.cloudUpdatedAt,
+        cloudVersion: retryResult.cloudVersion ?? null,
+        writtenColumns: retry.columns,
+        mergedLocalDirty: false,
+      };
     }
     if (!retryResult.ok) {
       throw new Error(retryResult.warning || 'Failed to save capture');
     }
-    writeLocalColumnsQuiet(retry.state, retry.columns, []);
+    const saved = stampSavedState(retry.state, retryResult);
+    writeLocalColumnsQuiet(saved, retryResult.writtenColumns || retry.columns, []);
     return {
       ...retry,
-      projectTitle: retry.state.projectTitle,
-      isLifeline: retry.state.isLifeline === true,
+      state: saved,
+      projectTitle: saved.projectTitle,
+      isLifeline: saved.isLifeline === true,
+      cloudUpdatedAt: retryResult.cloudUpdatedAt,
+      cloudVersion: retryResult.cloudVersion ?? null,
+      writtenColumns: retryResult.writtenColumns || retry.columns,
+      mergedLocalDirty: false,
     };
   }
 
@@ -1459,11 +1505,17 @@ async function persistRemoteCapture(projectId, mutate, { retryCapture } = {}) {
     throw new Error(result.warning || 'Failed to save capture');
   }
 
-  writeLocalColumnsQuiet(applied.state, applied.columns, []);
+  const saved = stampSavedState(applied.state, result);
+  writeLocalColumnsQuiet(saved, result.writtenColumns || applied.columns, []);
   return {
     ...applied,
-    projectTitle: applied.state.projectTitle,
-    isLifeline: applied.state.isLifeline === true,
+    state: saved,
+    projectTitle: saved.projectTitle,
+    isLifeline: saved.isLifeline === true,
+    cloudUpdatedAt: result.cloudUpdatedAt,
+    cloudVersion: result.cloudVersion ?? null,
+    writtenColumns: result.writtenColumns || applied.columns,
+    mergedLocalDirty: merged.mergedLocalDirty,
   };
 }
 

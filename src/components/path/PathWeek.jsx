@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { localTodayIsoDate } from '../../utils/selfDateUtils';
 import {
   createEmptyBlock,
@@ -9,7 +9,10 @@ import {
   startOfWeekMonday,
   weekDates,
 } from '../../lib/path/schema';
-import { blocksForDate, blockActionProgress, blockStatusAt, defaultBlockDoneAt, formatBlockStatusStamp, formatDuration, formatWeekRange, fromDatetimeLocalValue, toDatetimeLocalValue } from '../../lib/path/logic';
+import { blocksForDate, blockActionProgress, blockStatusAt, defaultBlockDoneAt, formatBlockStatusStamp, formatBlockWindow, formatDuration, formatWeekRange, fromDatetimeLocalValue, toDatetimeLocalValue } from '../../lib/path/logic';
+import { useWorkTimer } from '../../hooks/useWorkTimer';
+import { formatClock } from '../../lib/workTimer';
+import { ConfirmDialog } from '../ConfirmDialog';
 import { BlockFields, PathModal, TemplateFields } from './PathFields';
 import { PathBlockWorkspace } from './PathBlockWorkspace';
 
@@ -25,24 +28,47 @@ function BlockCard({
   isOver,
   canMoveUp,
   canMoveDown,
+  timing = false,
+  liveClock = null,
   onOpen,
   onEdit,
+  onStart,
   onStatus,
   onDoneAt,
   onNudge,
   onDropOnBlock,
   onDragOverBlock,
+  onDelete,
 }) {
+  const dragMoved = useRef(false);
   const progress = blockActionProgress(block);
   const statusStamp = formatBlockStatusStamp(block);
   return (
     <article
-      className={`path-block${color ? ' path-block--goal' : ''}${isOver ? ' path-block--over' : ''}`}
+      className={`path-block${color ? ' path-block--goal' : ''}${isOver ? ' path-block--over' : ''}${timing ? ' path-block--timing' : ''}${timing && block.blockType === 'Deep Work' ? ' path-block--timing-deep' : ''}`}
       style={goalColorStyle(color)}
       draggable
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        onOpen(block);
+      }}
+      onClick={(event) => {
+        if (dragMoved.current) return;
+        if (event.target.closest('button, input, label, a, select, textarea')) return;
+        onOpen(block);
+      }}
       onDragStart={(event) => {
+        dragMoved.current = true;
         event.dataTransfer.setData('text/plain', block.id);
         event.dataTransfer.effectAllowed = 'move';
+      }}
+      onDragEnd={() => {
+        window.setTimeout(() => {
+          dragMoved.current = false;
+        }, 0);
       }}
       onDragOver={(event) => {
         event.preventDefault();
@@ -58,12 +84,12 @@ function BlockCard({
       }}
     >
       <div className="path-block__top">
-        <button type="button" onClick={() => onOpen(block)} style={{ all: 'unset', cursor: 'pointer', flex: 1, minWidth: 0 }}>
+        <div className="path-block__main">
           <div className="path-block__title">{block.title}</div>
           <div className="path-block__time">
-            {[block.startTime, formatDuration(block.duration), block.blockType].filter(Boolean).join(' · ')}
+            {[formatBlockWindow(block.startTime, block.duration), block.blockType].filter(Boolean).join(' · ')}
           </div>
-        </button>
+        </div>
         <div className="path-block__reorder" onMouseDown={(event) => event.stopPropagation()}>
           <button
             type="button"
@@ -75,6 +101,17 @@ function BlockCard({
             }}
           >
             ✎
+          </button>
+          <button
+            type="button"
+            className="path-block__icon path-block__icon--delete"
+            aria-label="Delete block"
+            onClick={(event) => {
+              event.stopPropagation();
+              onDelete?.(block);
+            }}
+          >
+            ✕
           </button>
           <button
             type="button"
@@ -100,14 +137,31 @@ function BlockCard({
           </button>
         </div>
       </div>
+      {block.desiredOutcome ? (
+        <p className="path-block__outcome">{block.desiredOutcome}</p>
+      ) : null}
       <div className="path-pills">
         <span className={`path-pill ${STATUS_CLASS[block.status] || ''}`}>
           {block.status}
           {statusStamp ? ` · ${statusStamp}` : ''}
         </span>
         {progress ? <span className="path-pill path-pill--actions">{progress.done}/{progress.total} actions</span> : null}
+        {block.workedMinutes ? <span className="path-pill">{formatDuration(block.workedMinutes)} tracked</span> : null}
       </div>
       <div className="path-block__actions">
+        {block.status !== 'Done' && block.status !== 'Skipped' ? (
+          <button
+            type="button"
+            className={`path-block__start${block.blockType === 'Deep Work' ? ' path-block__start--deep' : ''}${timing ? ' path-block__start--live' : ''}`}
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              if (!timing) onStart?.(block);
+            }}
+          >
+            {timing ? liveClock : (block.blockType === 'Deep Work' ? 'Deep Work' : 'Start')}
+          </button>
+        ) : null}
         {block.status !== 'Done' ? <button type="button" onClick={() => onStatus(block, 'Done')}>Done</button> : null}
         {block.status !== 'Moved' ? <button type="button" onClick={() => onStatus(block, 'Moved')}>Moved</button> : null}
         {block.status !== 'Skipped' ? <button type="button" onClick={() => onStatus(block, 'Skipped')}>Skipped</button> : null}
@@ -136,13 +190,15 @@ function BlockCard({
   );
 }
 
-export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteLinkedTask }) {
+export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteLinkedTask, onWorkspaceChange }) {
   const [editor, setEditor] = useState(null);
   const [workspaceId, setWorkspaceId] = useState(null);
   const [templateEditor, setTemplateEditor] = useState(null);
   const [completePrompt, setCompletePrompt] = useState(null);
   const [overDate, setOverDate] = useState(null);
   const [overBlockId, setOverBlockId] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const timer = useWorkTimer();
   const today = localTodayIsoDate();
   const dates = useMemo(() => weekDates(weekStart), [weekStart]);
 
@@ -155,6 +211,11 @@ export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteL
       setWorkspaceId(null);
     }
   }, [workspaceId, path.blocks]);
+
+  useEffect(() => {
+    onWorkspaceChange?.(Boolean(workspaceId));
+    return () => onWorkspaceChange?.(false);
+  }, [workspaceId, onWorkspaceChange]);
 
   const openNew = (date) => {
     setEditor(createEmptyBlock({
@@ -202,8 +263,37 @@ export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteL
     ? path.blocks.find((block) => block.id === workspaceId) || null
     : null;
 
+  const confirmDelete = () => {
+    if (!pendingDelete) return;
+    path.removeBlock(pendingDelete.id);
+    if (workspaceId === pendingDelete.id) setWorkspaceId(null);
+    if (editor?.id === pendingDelete.id) setEditor(null);
+    setPendingDelete(null);
+  };
+
   return (
     <div>
+      {workspaceBlock ? (
+        <PathBlockWorkspace
+          block={workspaceBlock}
+          goal={path.goals.find((goal) => goal.id === workspaceBlock.goalId) || null}
+          tasks={tasks}
+          saving={path.saving}
+          onPatch={(patch) => {
+            const current = path.blocks.find((item) => item.id === workspaceBlock.id) || workspaceBlock;
+            path.upsertBlock({ ...current, ...patch });
+          }}
+          onEdit={setEditor}
+          onDelete={setPendingDelete}
+          onClose={() => setWorkspaceId(null)}
+          onStatus={requestStatus}
+          onDoneAt={(value) => {
+            const at = fromDatetimeLocalValue(value);
+            if (at) path.setBlockDoneAt(workspaceBlock.id, at);
+          }}
+        />
+      ) : (
+      <>
       <div className="path-week-nav">
         <div className="path-view__actions">
           <button type="button" className="btn" onClick={() => onWeekStart(shiftWeek(weekStart, -1))}>Prev</button>
@@ -250,8 +340,12 @@ export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteL
                   isOver={overBlockId === block.id}
                   canMoveUp={blockIndex > 0}
                   canMoveDown={blockIndex < dayBlocks.length - 1}
+                  timing={timer.session?.blockId === block.id}
+                  liveClock={timer.session?.blockId === block.id ? formatClock(timer.elapsedMs) : null}
                   onOpen={(item) => setWorkspaceId(item.id)}
+                  onStart={timer.startBlock}
                   onEdit={setEditor}
+                  onDelete={setPendingDelete}
                   onStatus={requestStatus}
                   onDoneAt={(item, value) => {
                     const at = fromDatetimeLocalValue(value);
@@ -297,26 +391,8 @@ export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteL
           </ul>
         </section>
       ) : null}
-
-      {workspaceBlock ? (
-        <PathBlockWorkspace
-          block={workspaceBlock}
-          goal={path.goals.find((goal) => goal.id === workspaceBlock.goalId) || null}
-          tasks={tasks}
-          saving={path.saving}
-          onPatch={(patch) => {
-            const current = path.blocks.find((item) => item.id === workspaceBlock.id) || workspaceBlock;
-            path.upsertBlock({ ...current, ...patch });
-          }}
-          onEdit={setEditor}
-          onClose={() => setWorkspaceId(null)}
-          onStatus={requestStatus}
-          onDoneAt={(value) => {
-            const at = fromDatetimeLocalValue(value);
-            if (at) path.setBlockDoneAt(workspaceBlock.id, at);
-          }}
-        />
-      ) : null}
+      </>
+      )}
 
       <PathModal open={Boolean(editor)} title={editor && path.blocks.some((block) => block.id === editor.id) ? 'Edit block' : 'New block'} onClose={() => setEditor(null)}>
         {editor ? (
@@ -335,12 +411,8 @@ export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteL
               {path.blocks.some((block) => block.id === editor.id) ? (
                 <button
                   type="button"
-                  className="btn"
-                  onClick={() => {
-                    path.removeBlock(editor.id);
-                    if (workspaceId === editor.id) setWorkspaceId(null);
-                    setEditor(null);
-                  }}
+                  className="btn btn--danger"
+                  onClick={() => setPendingDelete(editor)}
                 >
                   Delete
                 </button>
@@ -404,6 +476,15 @@ export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteL
           <button type="button" className="btn btn--primary" onClick={() => confirmComplete(true)}>Done + complete task</button>
         </div>
       </PathModal>
+
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        title="Διαγραφή block"
+        message={pendingDelete?.title ? `Να διαγραφεί το «${pendingDelete.title}»;` : 'Να διαγραφεί αυτό το block;'}
+        confirmLabel="Διαγραφή"
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

@@ -4,9 +4,6 @@ import {
   GOAL_COLORS,
   GOAL_ROLES,
   GOAL_STATUSES,
-  METRIC_DIRECTIONS,
-  METRIC_FREQUENCIES,
-  METRIC_TYPES,
   WEEKDAYS,
   normalizeGoalColor,
 } from '../../lib/path/schema';
@@ -282,46 +279,6 @@ export function TemplateFields({ template, onChange, goals = [] }) {
       </PathField>
       <PathField label="Minimum action" wide>
         <input className="input" value={template.minimumAction || ''} onChange={(event) => onChange({ minimumAction: event.target.value || null })} />
-      </PathField>
-    </div>
-  );
-}
-
-export function MetricFields({ metric, onChange, goals = [] }) {
-  return (
-    <div className="path-form">
-      <PathField label="Name" wide>
-        <input className="input" value={metric.name || ''} onChange={(event) => onChange({ name: event.target.value })} />
-      </PathField>
-      <PathField label="Goal">
-        <select className="input" value={metric.goalId || ''} onChange={(event) => onChange({ goalId: event.target.value || null })}>
-          <option value="">No goal</option>
-          {goals.map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}
-        </select>
-      </PathField>
-      <PathField label="Type">
-        <select className="input" value={metric.type || 'Outcome'} onChange={(event) => onChange({ type: event.target.value })}>
-          {METRIC_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
-        </select>
-      </PathField>
-      <PathField label="Direction">
-        <select className="input" value={metric.direction || 'Increase'} onChange={(event) => onChange({ direction: event.target.value })}>
-          {METRIC_DIRECTIONS.map((direction) => <option key={direction} value={direction}>{direction}</option>)}
-        </select>
-      </PathField>
-      <PathField label="Frequency">
-        <select className="input" value={metric.frequency || 'Weekly'} onChange={(event) => onChange({ frequency: event.target.value })}>
-          {METRIC_FREQUENCIES.map((frequency) => <option key={frequency} value={frequency}>{frequency}</option>)}
-        </select>
-      </PathField>
-      <PathField label="Unit">
-        <input className="input" value={metric.unit || ''} onChange={(event) => onChange({ unit: event.target.value || null })} />
-      </PathField>
-      <PathField label="Baseline">
-        <input className="input" type="number" value={metric.baseline ?? ''} onChange={(event) => onChange({ baseline: event.target.value === '' ? null : Number(event.target.value) })} />
-      </PathField>
-      <PathField label="Target">
-        <input className="input" type="number" value={metric.target ?? ''} onChange={(event) => onChange({ target: event.target.value === '' ? null : Number(event.target.value) })} />
       </PathField>
     </div>
   );

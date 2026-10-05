@@ -65,7 +65,7 @@ import {
   buildLifelinePlanContext,
   resolvePlanDayHeight,
 } from '../utils/planMode';
-import { patchDayEntry, normalizeLifelineDays, mergeLifelineDaysMaps, routineTemplatesEqual, patchMultipleDayEntries, getDayEntry, normalizeRoutineTemplates, appendDayJournalNote } from '../utils/lifelineDays';
+import { patchDayEntry, normalizeLifelineDays, mergeLifelineDaysMaps, routineTemplatesEqual, patchMultipleDayEntries, getDayEntry, normalizeRoutineTemplates } from '../utils/lifelineDays';
 import { appendThought, applyThoughtToPathNextStep, removeThought, snapshotThoughtContext, updateThought } from '../utils/dayThoughts';
 import { normalizeNorthStars, northStarsEqual } from '../utils/lifelineNorthStars';
 import { mapLifelineReconcileToState } from '../utils/lifelineMerge';
@@ -83,7 +83,8 @@ import {
   diffDirtyColumns,
   persistableValuesEqual,
 } from '../utils/projectSavePatch';
-import { writeLocalColumns, flushLocalWrites } from '../utils/projectLocalStore';
+import { writeLocalColumns, writeLocalMeta, flushLocalWrites } from '../utils/projectLocalStore';
+import { cloudConflictWarning, revisionsMatch } from '../utils/cloudRevision';
 import { normalizeActiveView } from '../utils/appNavigation';
 import { flushVaultWrites, isCloudSyncEnabled, overlayVaultProjectData } from '../lib/vault';
 import { registerVaultProjectSource } from '../lib/vault/liveSource';
@@ -216,6 +217,7 @@ function assembleProjectState(data, { keepUi = false, prev = null, resetSelectio
       : (keepUi && prev ? prev.selectedStageId : (data.selectedStageId || null)),
     focusMode: data.focusMode === true,
     cloudUpdatedAt: data.cloudUpdatedAt || null,
+    cloudVersion: data.cloudVersion ?? null,
     activeView: keepUi && prev
       ? normalizeActiveView(prev.activeView)
       : normalizeActiveView(data.activeView),
@@ -240,6 +242,8 @@ export function useAppState(userId) {
   const [loading, setLoading] = useState(true);
   const [syncError, setSyncError] = useState(null);
   const [syncConflict, setSyncConflict] = useState(false);
+  const syncConflictRef = useRef(false);
+  const conflictProjectIdRef = useRef(null);
   const [syncing, setSyncing] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const stateRef = useRef(null);
@@ -288,17 +292,45 @@ export function useAppState(userId) {
     ownWriteGraceUntilRef.current = Date.now() + 4000;
   }, []);
 
-  const applyCloudTimestamp = useCallback((cloudUpdatedAt) => {
-    if (!cloudUpdatedAt) return;
-    markOwnCloudWrite();
-    if (stateRef.current) {
-      stateRef.current = { ...stateRef.current, cloudUpdatedAt };
+  const cachedConflictId = useCallback(() => {
+    for (const [id, cached] of sessionProjectsRef.current) {
+      if (cached?.conflict) return id;
     }
-    setState((prev) =>
-      prev && prev.cloudUpdatedAt !== cloudUpdatedAt
-        ? { ...prev, cloudUpdatedAt }
-        : prev
-    );
+    return null;
+  }, []);
+
+  const setConflictFlag = useCallback((value, projectId = null) => {
+    if (value === true) {
+      if (projectId) conflictProjectIdRef.current = projectId;
+      syncConflictRef.current = true;
+      setSyncConflict(true);
+      return;
+    }
+    const remaining = cachedConflictId();
+    conflictProjectIdRef.current = remaining;
+    syncConflictRef.current = Boolean(remaining);
+    setSyncConflict(Boolean(remaining));
+  }, [cachedConflictId]);
+
+  const applyCloudTimestamp = useCallback((revision) => {
+    const cloudUpdatedAt = typeof revision === 'string' ? revision : revision?.cloudUpdatedAt;
+    const cloudVersion = typeof revision === 'string' ? null : (revision?.cloudVersion ?? null);
+    if (!cloudUpdatedAt && cloudVersion == null) return;
+    markOwnCloudWrite();
+    const stamp = (target) => {
+      if (!target) return target;
+      const next = { ...target };
+      if (cloudUpdatedAt) next.cloudUpdatedAt = cloudUpdatedAt;
+      if (cloudVersion != null) next.cloudVersion = cloudVersion;
+      return next;
+    };
+    if (stateRef.current) stateRef.current = stamp(stateRef.current);
+    setState((prev) => {
+      if (!prev) return prev;
+      const next = stamp(prev);
+      if (next.cloudUpdatedAt === prev.cloudUpdatedAt && next.cloudVersion === prev.cloudVersion) return prev;
+      return next;
+    });
   }, [markOwnCloudWrite]);
 
   const applyLifelineBundleLocally = useCallback((bundle, { fromRemote = false } = {}) => {
@@ -388,14 +420,23 @@ export function useAppState(userId) {
       dirtyColumns: new Set(dirtyColumnsRef.current),
       dirty: dirtyRef.current,
       syncedPersistable: syncedPersistableRef.current,
+      conflict: conflictProjectIdRef.current === current.projectId,
     });
   }, []);
 
   const persistInactiveSessionProjects = useCallback(async () => {
     const currentId = stateRef.current?.projectId;
-    let lastError = null;
+    let conflict = null;
     for (const [id, cached] of sessionProjectsRef.current) {
       if (id === currentId || !cached?.dirty || !cached.state) continue;
+      if (cached.conflict) {
+        conflict = conflict || {
+          conflict: true,
+          projectId: id,
+          warning: cloudConflictWarning(cached.state.projectTitle),
+        };
+        continue;
+      }
       const columns = [...cached.dirtyColumns];
       if (!columns.length) {
         cached.dirty = false;
@@ -404,27 +445,41 @@ export function useAppState(userId) {
       try {
         const result = isCloudSyncEnabled()
           ? await saveProjectToSupabase(cached.state, { columns })
-          : { ok: true, source: 'vault', cloudUpdatedAt: cached.state.cloudUpdatedAt, writtenColumns: columns };
+          : {
+            ok: true,
+            source: 'vault',
+            cloudUpdatedAt: cached.state.cloudUpdatedAt,
+            cloudVersion: cached.state.cloudVersion ?? null,
+            writtenColumns: columns,
+          };
         await flushVaultWrites();
         if (result?.conflict) {
-          lastError = result.warning || 'Conflict with another device';
+          cached.conflict = true;
+          conflict = conflict || {
+            conflict: true,
+            projectId: id,
+            warning: result.warning || cloudConflictWarning(cached.state.projectTitle),
+          };
           continue;
         }
         if (result?.ok === false) {
-          lastError = result.warning || 'Database save failed';
-          continue;
+          throw new Error(result.warning || 'Database save failed');
         }
         cached.dirty = false;
         cached.dirtyColumns = new Set();
+        cached.conflict = false;
+        cached.state = {
+          ...cached.state,
+          ...(result.cloudUpdatedAt ? { cloudUpdatedAt: result.cloudUpdatedAt } : {}),
+          ...(result.cloudVersion != null ? { cloudVersion: result.cloudVersion } : {}),
+        };
         cached.syncedPersistable = capturePersistable(cached.state);
-        if (result.cloudUpdatedAt) {
-          cached.state = { ...cached.state, cloudUpdatedAt: result.cloudUpdatedAt };
-        }
+        writeLocalMeta(cached.state, []);
       } catch (err) {
-        lastError = err?.message || 'Database save failed';
+        throw new Error(err?.message || 'Database save failed');
       }
     }
-    if (lastError) throw new Error(lastError);
+    return conflict;
   }, []);
 
   const sessionHasUnsavedWork = useCallback(() => {
@@ -510,9 +565,11 @@ export function useAppState(userId) {
   const restoreSessionProject = useCallback((projectId, extras = {}) => {
     const cached = sessionProjectsRef.current.get(projectId);
     if (!cached?.state) return false;
+    const wasConflict = cached.conflict === true;
     sessionProjectsRef.current.delete(projectId);
     const pendingHub = snapshotPendingHub();
-    setSyncConflict(false);
+    if (wasConflict) setConflictFlag(true, projectId);
+    else setConflictFlag(false);
     clearHistory();
     const next = { ...cached.state };
     if (extras.activeView) {
@@ -539,7 +596,7 @@ export function useAppState(userId) {
     setHasUnsavedChanges(sessionHasUnsavedWork());
     setStoredProjectId(projectId);
     return true;
-  }, [applyLifelineBundleLocally, clearHistory, hydrateLifelineHubFromState, sessionHasUnsavedWork, snapshotPendingHub]);
+  }, [applyLifelineBundleLocally, clearHistory, hydrateLifelineHubFromState, sessionHasUnsavedWork, setConflictFlag, snapshotPendingHub]);
 
   const applyLoadedProject = useCallback(
     (data) => {
@@ -750,7 +807,10 @@ export function useAppState(userId) {
 
   const applyRemoteProject = useCallback((data, { keepUi = true } = {}) => {
     applyingRemoteRef.current = true;
-    setSyncConflict(false);
+    if (conflictProjectIdRef.current && conflictProjectIdRef.current === stateRef.current?.projectId) {
+      conflictProjectIdRef.current = null;
+    }
+    setConflictFlag(false);
     setSyncError(null);
     clearHistory();
     const prev = stateRef.current;
@@ -783,30 +843,57 @@ export function useAppState(userId) {
     queueMicrotask(() => {
       applyingRemoteRef.current = false;
     });
-  }, [clearHistory, rememberSyncedState, hydrateLifelineHubFromState]);
+  }, [clearHistory, rememberSyncedState, hydrateLifelineHubFromState, setConflictFlag]);
+
+  const rebaseConflictedSessionProjects = useCallback(async () => {
+    for (const [, cached] of [...sessionProjectsRef.current.entries()]) {
+      if (!cached?.conflict || !cached.state?.projectId) continue;
+      const fresh = assembleProjectState(
+        await overlayVaultProjectData(await loadProjectById(cached.state.projectId)),
+        { resetSelection: true }
+      );
+      const next = {
+        ...fresh,
+        activeView: cached.state.activeView,
+        selectedStageId: cached.state.selectedStageId,
+        focusMode: cached.state.focusMode,
+      };
+      for (const column of cached.dirtyColumns || []) {
+        const field = COLUMN_TO_STATE[column];
+        if (field) next[field] = cached.state[field];
+      }
+      cached.state = next;
+      cached.syncedPersistable = capturePersistable(fresh);
+      cached.conflict = false;
+      writeLocalMeta(next, [...(cached.dirtyColumns || [])]);
+    }
+  }, []);
 
   const reloadFromCloud = useCallback(async () => {
     const projectId = stateRef.current?.projectId;
-    if (!projectId) return;
+    if (!projectId && !cachedConflictId()) return;
     setLoading(true);
     setSyncError(null);
     try {
-      const data = await loadProjectById(projectId);
-      applyRemoteProject(await overlayVaultProjectData(data), { keepUi: true });
-      setSyncConflict(false);
+      if (projectId) {
+        const data = await loadProjectById(projectId);
+        applyRemoteProject(await overlayVaultProjectData(data), { keepUi: true });
+      }
+      await rebaseConflictedSessionProjects();
+      setConflictFlag(false);
       setHasUnsavedChanges(sessionHasUnsavedWork());
     } catch (err) {
       setSyncError(err.message || 'Failed to reload from cloud');
     } finally {
       setLoading(false);
     }
-  }, [applyRemoteProject, sessionHasUnsavedWork]);
+  }, [applyRemoteProject, cachedConflictId, rebaseConflictedSessionProjects, sessionHasUnsavedWork, setConflictFlag]);
 
   const handleSaveResult = useCallback((result, savedColumns, savedSnapshot) => {
     if (result?.conflict) {
-      setSyncConflict(true);
       setHasUnsavedChanges(true);
-      setSyncError(result.warning || 'Conflict with another device');
+      setSyncError(result.warning || cloudConflictWarning(savedSnapshot?.projectTitle));
+      setConflictFlag(true, savedSnapshot?.projectId || stateRef.current?.projectId);
       return;
     }
     if (result?.ok !== false) {
@@ -828,8 +915,11 @@ export function useAppState(userId) {
       }
       dirtyRef.current = dirtyColumnsRef.current.size > 0;
       setHasUnsavedChanges(sessionHasUnsavedWork());
-      setSyncConflict(false);
-      setSyncError(result?.warning || null);
+      if (conflictProjectIdRef.current === (savedSnapshot?.projectId || stateRef.current?.projectId)) {
+        conflictProjectIdRef.current = null;
+      }
+      setConflictFlag(false);
+      if (!syncConflictRef.current) setSyncError(result?.warning || null);
       markOwnCloudWrite();
       if (result?.reconcile) {
         const patch = mapLifelineReconcileToState(result.reconcile);
@@ -837,28 +927,21 @@ export function useAppState(userId) {
           applyLifelineBundleLocally({ lifelineDays: patch.lifelineDays }, { fromRemote: true });
         }
       }
-      if (result?.cloudUpdatedAt) {
-        if (stateRef.current) {
-          stateRef.current = {
-            ...stateRef.current,
-            cloudUpdatedAt: result.cloudUpdatedAt,
-          };
-        }
-        setState((prev) => (
-          prev && prev.cloudUpdatedAt !== result.cloudUpdatedAt
-            ? { ...prev, cloudUpdatedAt: result.cloudUpdatedAt }
-            : prev
-        ));
+      if (result?.cloudUpdatedAt || result?.cloudVersion != null) {
+        applyCloudTimestamp(result);
+      }
+      if (stateRef.current?.projectId) {
+        writeLocalMeta(stateRef.current, [...dirtyColumnsRef.current]);
       }
       return;
     }
     if (result?.warning) {
       setSyncError(result.warning);
     }
-  }, [markOwnCloudWrite, sessionHasUnsavedWork, applyLifelineBundleLocally]);
+  }, [applyCloudTimestamp, applyLifelineBundleLocally, markOwnCloudWrite, sessionHasUnsavedWork, setConflictFlag]);
 
   const runSave = useCallback(async (columnsWanted) => {
-    if (syncConflict) return savePromiseRef.current;
+    if (syncConflictRef.current || syncConflict) return savePromiseRef.current;
     if (columnsWanted?.length) {
       for (const column of columnsWanted) pendingCloudRef.current.add(column);
     } else {
@@ -952,15 +1035,20 @@ export function useAppState(userId) {
         selfHubDays: selfHubDaysRef.current,
         lifelineDays: lifelineDaysRef.current,
       });
-      if (result?.ok && result.cloudUpdatedAt) {
-        applyCloudTimestamp(result.cloudUpdatedAt);
+      if (result?.ok && (result.cloudUpdatedAt || result.cloudVersion != null)) {
+        applyCloudTimestamp(result);
+      } else if (result?.conflict) {
+        pendingLifelineBundleRef.current = true;
+        setHasUnsavedChanges(true);
+        setSyncError(result.warning || cloudConflictWarning('Lifeline'));
+        setConflictFlag(true, lifelineProjectId);
       } else if (!result?.ok) {
         pendingLifelineBundleRef.current = true;
       }
     } catch {
       pendingLifelineBundleRef.current = true;
     }
-  }, [lifelineProjectId, applyCloudTimestamp]);
+  }, [lifelineProjectId, applyCloudTimestamp, setConflictFlag]);
 
   const flushSaveNow = useCallback(async () => {
     setSyncing(true);
@@ -972,10 +1060,10 @@ export function useAppState(userId) {
         pathError = err;
       }
 
-      if (syncConflict) {
+      if (syncConflictRef.current || syncConflict) {
         setSyncError(
           pathError?.message
-          || 'Το project ενημερώθηκε από άλλη συσκευή. Πάτα «Φόρτωση cloud» για συγχρονισμό.'
+          || cloudConflictWarning(stateRef.current?.projectTitle)
         );
         return false;
       }
@@ -994,7 +1082,13 @@ export function useAppState(userId) {
           await runSave([...dirtyColumnsRef.current]);
           if (!dirtyRef.current) pendingLifelineBundleRef.current = false;
         }
-        await persistInactiveSessionProjects();
+        const inactive = await persistInactiveSessionProjects();
+        if (inactive?.conflict) {
+          setHasUnsavedChanges(true);
+          setSyncError(inactive.warning);
+          setConflictFlag(true, inactive.projectId);
+          return false;
+        }
         await flushLocalWrites();
         await flushVaultWrites();
         const stillDirty = sessionHasUnsavedWork();
@@ -1003,8 +1097,8 @@ export function useAppState(userId) {
           setSyncError(pathError.message || 'Το Path δεν αποθηκεύτηκε στο cloud.');
           return false;
         }
-        if (!stillDirty) setSyncError(null);
-        return !stillDirty && !syncConflict;
+        if (!stillDirty && !syncConflictRef.current) setSyncError(null);
+        return !stillDirty && !syncConflictRef.current;
       } catch (err) {
         setSyncError(err?.message || 'Η αποθήκευση απέτυχε');
         return false;
@@ -1012,7 +1106,7 @@ export function useAppState(userId) {
     } finally {
       if (!savingRef.current) setSyncing(false);
     }
-  }, [runSave, syncConflict, flushPendingLifelineBundle, persistInactiveSessionProjects, sessionHasUnsavedWork]);
+  }, [runSave, syncConflict, flushPendingLifelineBundle, persistInactiveSessionProjects, sessionHasUnsavedWork, setConflictFlag]);
 
   useEffect(() => subscribePathSave(() => {
     setHasUnsavedChanges(sessionHasUnsavedWork());
@@ -1077,18 +1171,14 @@ export function useAppState(userId) {
     const unsub = subscribeToProjectChanges(projectId, (remote) => {
       if (remote.projectId !== stateRef.current?.projectId) return;
       if (savingRef.current || Date.now() < ownWriteGraceUntilRef.current) {
-        applyCloudTimestamp(remote.cloudUpdatedAt);
+        applyCloudTimestamp(remote);
         return;
       }
-      if (remote.cloudUpdatedAt && remote.cloudUpdatedAt === stateRef.current?.cloudUpdatedAt) {
-        return;
-      }
+      if (revisionsMatch(stateRef.current, remote)) return;
       if (dirtyRef.current || pendingLifelineBundleRef.current) {
-        setSyncConflict(true);
         setHasUnsavedChanges(true);
-        setSyncError(
-          'Το project ενημερώθηκε από άλλη συσκευή. Πάτα «Φόρτωση cloud» για συγχρονισμό.'
-        );
+        setSyncError(cloudConflictWarning(stateRef.current?.projectTitle));
+        setConflictFlag(true, remote.projectId);
         return;
       }
       applyRemoteProject(remote, { keepUi: true });
@@ -1102,17 +1192,16 @@ export function useAppState(userId) {
         || pendingLifelineBundleRef.current
         || savingRef.current
         || syncConflict
+        || syncConflictRef.current
       ) return;
       try {
-        const remoteAt = await fetchProjectCloudUpdatedAt(snapshot.projectId);
-        if (!remoteAt || remoteAt === snapshot.cloudUpdatedAt) return;
+        const remoteRevision = await fetchProjectCloudUpdatedAt(snapshot.projectId);
+        if (!remoteRevision?.cloudUpdatedAt || revisionsMatch(snapshot, remoteRevision)) return;
         const data = await loadProjectById(snapshot.projectId);
         if (dirtyRef.current || pendingLifelineBundleRef.current) {
-          setSyncConflict(true);
           setHasUnsavedChanges(true);
-          setSyncError(
-            'Το project ενημερώθηκε από άλλη συσκευή. Πάτα «Φόρτωση cloud» για συγχρονισμό.'
-          );
+          setSyncError(cloudConflictWarning(snapshot.projectTitle));
+          setConflictFlag(true, snapshot.projectId);
           return;
         }
         applyRemoteProject(data, { keepUi: true });
@@ -1127,7 +1216,7 @@ export function useAppState(userId) {
       unsub();
       window.removeEventListener('focus', pullIfClean);
     };
-  }, [loading, state?.projectId, applyRemoteProject, syncConflict, applyCloudTimestamp]);
+  }, [loading, state?.projectId, applyRemoteProject, syncConflict, applyCloudTimestamp, setConflictFlag]);
 
   const updateMapTheme = useCallback((updates) => {
     patchState((prev) => {
@@ -1234,7 +1323,7 @@ export function useAppState(userId) {
 
   const applyProject = useCallback((data) => {
     const pendingHub = snapshotPendingHub();
-    setSyncConflict(false);
+    setConflictFlag(false);
     clearHistory();
     if (Array.isArray(data.projectList)) setProjectList(data.projectList);
     if (data.lifelineProjectId) setLifelineProjectId(data.lifelineProjectId);
@@ -1253,7 +1342,7 @@ export function useAppState(userId) {
       applyLifelineBundleLocally(pendingHub);
     }
     setHasUnsavedChanges(sessionHasUnsavedWork());
-  }, [applyLifelineBundleLocally, clearHistory, hydrateLifelineHubFromState, rememberSyncedState, sessionHasUnsavedWork, snapshotPendingHub]);
+  }, [applyLifelineBundleLocally, clearHistory, hydrateLifelineHubFromState, rememberSyncedState, sessionHasUnsavedWork, setConflictFlag, snapshotPendingHub]);
 
   const switchProject = useCallback(async (projectId, options = {}) => {
     const focusNextCheckpoint = options.focusNextCheckpoint === true;
@@ -2954,6 +3043,7 @@ export function useAppState(userId) {
     setState((prev) => {
       if (!prev) return prev;
       const next = { ...prev, ...reset, projectId: prev.projectId };
+      stateRef.current = next;
       rememberSyncedState(next);
       return next;
     });
@@ -3309,6 +3399,68 @@ export function useAppState(userId) {
     return partial?.id || null;
   }, []);
 
+  const commitRemoteProjectWrite = useCallback((projectId, remote) => {
+    if (!remote) return remote;
+    const warning = remote.warning || cloudConflictWarning(remote.projectTitle);
+    if (remote.conflict || remote.ok === false) {
+      const cached = sessionProjectsRef.current.get(projectId);
+      if (cached) cached.conflict = true;
+      setHasUnsavedChanges(true);
+      setSyncError(warning);
+      setConflictFlag(true, projectId);
+      throw new Error(warning);
+    }
+
+    const columns = remote.writtenColumns || remote.columns || [];
+    const source = remote.state;
+    const stampState = (target) => {
+      if (!target) return target;
+      const next = { ...target };
+      if (remote.cloudUpdatedAt) next.cloudUpdatedAt = remote.cloudUpdatedAt;
+      if (remote.cloudVersion != null) next.cloudVersion = remote.cloudVersion;
+      if (source) {
+        for (const column of columns) {
+          const field = COLUMN_TO_STATE[column];
+          if (field && source[field] !== undefined) next[field] = source[field];
+        }
+      }
+      return next;
+    };
+
+    markOwnCloudWrite();
+
+    if (stateRef.current?.projectId === projectId) {
+      const next = stampState(stateRef.current);
+      for (const column of columns) dirtyColumnsRef.current.delete(column);
+      dirtyRef.current = dirtyColumnsRef.current.size > 0;
+      stateRef.current = next;
+      setState(next);
+      setHasUnsavedChanges(sessionHasUnsavedWork());
+      writeLocalMeta(next, [...dirtyColumnsRef.current]);
+      return remote;
+    }
+
+    const cached = sessionProjectsRef.current.get(projectId);
+    if (!cached?.state) return remote;
+
+    const overlap = columns.some((column) => cached.dirtyColumns?.has(column));
+    if (!remote.mergedLocalDirty && cached.dirty && overlap) {
+      cached.conflict = true;
+      setHasUnsavedChanges(true);
+      setSyncError(cloudConflictWarning(cached.state.projectTitle));
+      setConflictFlag(true, projectId);
+      throw new Error(cloudConflictWarning(cached.state.projectTitle));
+    }
+
+    cached.state = stampState(cached.state);
+    for (const column of columns) cached.dirtyColumns?.delete(column);
+    cached.dirty = (cached.dirtyColumns?.size || 0) > 0;
+    cached.conflict = false;
+    writeLocalMeta(cached.state, [...cached.dirtyColumns]);
+    setHasUnsavedChanges(sessionHasUnsavedWork());
+    return remote;
+  }, [markOwnCloudWrite, sessionHasUnsavedWork, setConflictFlag]);
+
   const applyBrainActions = useCallback(async (rawActions) => {
     const actions = normalizeBrainActions(rawActions);
     if (!actions.length) return { created: false, message: null };
@@ -3370,7 +3522,10 @@ export function useAppState(userId) {
         continue;
       }
 
-      const remote = await mutateRemoteProject(projectId, (state) => applyBrainMutationsToState(state, group));
+      const remote = commitRemoteProjectWrite(
+        projectId,
+        await mutateRemoteProject(projectId, (state) => applyBrainMutationsToState(state, group))
+      );
       const label = remote?.projectTitle ? ` στο «${remote.projectTitle}»` : '';
       if (remote?.parts?.length) {
         parts.push(...remote.parts.map((part) => `${part}${label}`));
@@ -3401,7 +3556,7 @@ export function useAppState(userId) {
       projectId: openedId,
       message: parts.length ? `Έτοιμο: ${parts.join(', ')}.` : 'Άνοιξα το project.',
     };
-  }, [flushSaveNow, openProjectCanvas, patchState, resolveBrainProjectId]);
+  }, [commitRemoteProjectWrite, flushSaveNow, openProjectCanvas, patchState, resolveBrainProjectId]);
 
   const applySmartCapture = useCallback(async (capture) => {
     const current = stateRef.current;
@@ -3416,7 +3571,14 @@ export function useAppState(userId) {
       itemId: capture.itemId || generateId(),
     };
 
-    if (classified.type === 'thought') {
+    const isLifelineTarget =
+      Boolean(lifelineProjectId && targetId === lifelineProjectId) ||
+      (current.isLifeline === true && targetId === currentId);
+    const saveAsThought =
+      classified.type === 'thought' ||
+      ((classified.type || 'note') === 'note' && isLifelineTarget);
+
+    if (saveAsThought) {
       const today = toDateString(new Date());
       const lifelineSource = mergeLifelineDaysMaps(
         lifelineDaysRef.current,
@@ -3437,32 +3599,6 @@ export function useAppState(userId) {
         projectId: lifelineProjectId || targetId,
         projectTitle: 'Lifeline',
         message: 'Αποθηκεύτηκε: Σκέψη → Σήμερα',
-      };
-    }
-
-    const isLifelineTarget =
-      Boolean(lifelineProjectId && targetId === lifelineProjectId) ||
-      (current.isLifeline === true && targetId === currentId);
-
-    if ((classified.type || 'note') === 'note' && isLifelineTarget) {
-      const today = toDateString(new Date());
-      const lifelineSource = mergeLifelineDaysMaps(
-        lifelineDaysRef.current,
-        current.isLifeline ? current.lifelineDays : {}
-      );
-      const previousNotes = getDayEntry(lifelineSource, today).notes || '';
-      const nextNotes = appendDayJournalNote(previousNotes, classified.body || classified.title);
-      updateLifelineDay(today, { notes: nextNotes });
-      flushSaveNow().catch(() => {});
-      return {
-        remote: false,
-        itemId: `journal:${today}`,
-        type: 'journal-note',
-        date: today,
-        previousNotes,
-        projectId: targetId,
-        projectTitle: current.isLifeline ? current.projectTitle : 'Lifeline',
-        message: 'Αποθηκεύτηκε: Σημείωση → Σημειώσεις ημέρας',
       };
     }
 
@@ -3487,7 +3623,10 @@ export function useAppState(userId) {
       };
     }
 
-    const remote = await appendCaptureToRemoteProject(targetId, classified);
+    const remote = commitRemoteProjectWrite(
+      targetId,
+      await appendCaptureToRemoteProject(targetId, classified)
+    );
     refreshProjectActivity().catch(() => {});
     return {
       remote: true,
@@ -3502,7 +3641,7 @@ export function useAppState(userId) {
         projectTitle: remote.projectTitle || classified.projectTitle,
       }),
     };
-  }, [flushSaveNow, lifelineProjectId, patchState, refreshProjectActivity, updateLifelineDay]);
+  }, [commitRemoteProjectWrite, flushSaveNow, lifelineProjectId, patchState, refreshProjectActivity, updateLifelineDay]);
 
   const undoSmartCapture = useCallback(async (ref) => {
     if (!ref?.itemId) return;
@@ -3527,9 +3666,12 @@ export function useAppState(userId) {
       patchState((prev) => removeCaptureFromState(prev, ref).state);
       return;
     }
-    await removeCaptureFromRemoteProject(ref.projectId, ref);
+    commitRemoteProjectWrite(
+      ref.projectId,
+      await removeCaptureFromRemoteProject(ref.projectId, ref)
+    );
     refreshProjectActivity().catch(() => {});
-  }, [patchState, refreshProjectActivity, updateLifelineDay]);
+  }, [commitRemoteProjectWrite, patchState, refreshProjectActivity, updateLifelineDay]);
 
   const promoteThought = useCallback(async (dateStr, thoughtId, kind) => {
     const date = toDateString(dateStr) || toDateString(new Date());
@@ -3564,7 +3706,10 @@ export function useAppState(userId) {
         promoted.itemId = applied?.itemId || null;
         promoted.projectId = targetId;
       } else {
-        const remote = await appendCaptureToRemoteProject(targetId, capture);
+        const remote = commitRemoteProjectWrite(
+          targetId,
+          await appendCaptureToRemoteProject(targetId, capture)
+        );
         promoted.itemId = remote.itemId;
         promoted.projectId = targetId;
       }
@@ -3581,7 +3726,7 @@ export function useAppState(userId) {
       thoughts: updateThought(thoughts, thoughtId, { promoted }),
     });
     return promoted;
-  }, [patchState, updateLifelineDay]);
+  }, [commitRemoteProjectWrite, patchState, updateLifelineDay]);
 
   const base = {
     loading,

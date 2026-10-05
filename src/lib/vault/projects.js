@@ -37,6 +37,7 @@ function metaPayload(state, dirtyColumns) {
     title: state.projectTitle || 'My Business',
     isLifeline: state.isLifeline === true,
     cloudUpdatedAt: state.cloudUpdatedAt || null,
+    cloudVersion: state.cloudVersion ?? null,
     dirtyColumns: [...(dirtyColumns || [])],
     localUpdatedAt: Date.now(),
     ui: {

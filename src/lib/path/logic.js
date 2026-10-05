@@ -151,14 +151,35 @@ export function blocksForDate(blocks = [], date) {
     .sort(compareBlocks);
 }
 
+function clockMinutes(value) {
+  const match = String(value || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) return null;
+  return hours * 60 + minutes;
+}
+
+/** Morning first. Planned start wins; otherwise the done/skipped/moved clock. */
+function blockSortMinutes(block) {
+  const start = clockMinutes(block?.startTime);
+  if (start != null) return start;
+  const at = blockStatusAt(block);
+  if (!at) return null;
+  const date = new Date(at);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.getHours() * 60 + date.getMinutes();
+}
+
 export function compareBlocks(a, b) {
+  const timeA = blockSortMinutes(a);
+  const timeB = blockSortMinutes(b);
+  if (timeA != null && timeB != null && timeA !== timeB) return timeA - timeB;
+  if ((timeA == null) !== (timeB == null)) return timeA == null ? 1 : -1;
   const orderA = Number.isFinite(Number(a?.order)) ? Number(a.order) : 9999;
   const orderB = Number.isFinite(Number(b?.order)) ? Number(b.order) : 9999;
   if (orderA !== orderB) return orderA - orderB;
-  const timeA = a.startTime || '99:99';
-  const timeB = b.startTime || '99:99';
-  if (timeA !== timeB) return timeA.localeCompare(timeB);
-  return String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
+  return String(a?.createdAt || '').localeCompare(String(b?.createdAt || ''));
 }
 
 export function nextBlockOrder(blocks = [], date) {
@@ -321,6 +342,18 @@ export function formatDuration(minutes) {
   return rest ? `${hours}h ${rest}m` : `${hours}h`;
 }
 
+/** "09:00–11:00" when a block has both a start and a duration. */
+export function formatBlockWindow(startTime, duration) {
+  const match = String(startTime || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+  const minutes = toNum(duration);
+  if (!match) return startTime || null;
+  if (minutes == null || minutes <= 0) return `${match[1].padStart(2, '0')}:${match[2]}`;
+  const startMin = Number(match[1]) * 60 + Number(match[2]);
+  const endMin = startMin + Math.round(minutes);
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${pad(Number(match[1]))}:${match[2]}–${pad(Math.floor(endMin / 60) % 24)}:${pad(endMin % 60)}`;
+}
+
 export function blockStatusAt(block) {
   if (!block || block.status === 'Planned') return null;
   return block.statusAt
@@ -464,6 +497,7 @@ export function buildWeeklyPlanPreview(bundle, weekStart = startOfWeekMonday()) 
         id: block.id,
         title: block.title,
         startTime: block.startTime,
+        duration: block.duration,
         status: block.status,
         color: colorByGoal.get(block.goalId) || null,
       })),

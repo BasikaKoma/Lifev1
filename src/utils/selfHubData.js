@@ -304,6 +304,8 @@ function buildFromSelfData(selfData, { displayName, stages, ouraRow, projectActi
   const activityScore = numericValue(metrics.activity);
   const weightKg = metrics.weight?.kg ?? numericValue(metrics.weight);
   const waistCm = numericCalories(metrics.weight?.waistCm);
+  const thighCm = numericCalories(metrics.weight?.thighCm);
+  const armCm = numericCalories(metrics.weight?.armCm);
   const caloriesIn = numericCalories(metrics.calories?.intake);
   const caloriesOut = numericCalories(metrics.calories?.burned);
 
@@ -351,6 +353,8 @@ function buildFromSelfData(selfData, { displayName, stages, ouraRow, projectActi
       hrValue != null ||
       weightKg != null ||
       waistCm != null ||
+      thighCm != null ||
+      armCm != null ||
       activityScore != null);
 
   const deepWorkMessage =
@@ -424,19 +428,27 @@ function buildFromSelfData(selfData, { displayName, stages, ouraRow, projectActi
         caloriesOut,
         waistCm,
         waistDelta: metrics.weight?.waistDelta ?? null,
+        thighCm,
+        thighDelta: metrics.weight?.thighDelta ?? null,
+        armCm,
+        armDelta: metrics.weight?.armDelta ?? null,
         source:
           weightKg != null
             ? usingScale
               ? 'scale'
               : 'oura'
-            : waistCm != null
+            : waistCm != null || thighCm != null || armCm != null
               ? 'manual'
               : caloriesIn != null || caloriesOut != null
                 ? 'oura'
                 : 'none',
-        updatedAt: metrics.weight?.recordedAt ?? metrics.weight?.waistRecordedAt ?? referenceTime,
+        updatedAt: metrics.weight?.recordedAt
+          ?? metrics.weight?.waistRecordedAt
+          ?? metrics.weight?.thighRecordedAt
+          ?? metrics.weight?.armRecordedAt
+          ?? referenceTime,
         confidence:
-          weightKg != null || waistCm != null
+          weightKg != null || waistCm != null || thighCm != null || armCm != null
             ? 'high'
             : caloriesIn != null || caloriesOut != null
               ? 'medium'
@@ -587,10 +599,16 @@ function mergeWeightMetric(baseWeight, hubWeight) {
   if (!baseWeight) return null;
   const hasKg = baseWeight.kg != null || (typeof baseWeight.value === 'number' && Number.isFinite(baseWeight.value));
   const waistCm = baseWeight.waistCm ?? hubWeight?.waistCm ?? null;
+  const thighCm = baseWeight.thighCm ?? hubWeight?.thighCm ?? null;
+  const armCm = baseWeight.armCm ?? hubWeight?.armCm ?? null;
   const merged = {
     ...baseWeight,
     waistCm,
     waistDelta: baseWeight.waistDelta ?? hubWeight?.waistDelta ?? null,
+    thighCm,
+    thighDelta: baseWeight.thighDelta ?? hubWeight?.thighDelta ?? null,
+    armCm,
+    armDelta: baseWeight.armDelta ?? hubWeight?.armDelta ?? null,
   };
   if (hasKg) return merged;
 

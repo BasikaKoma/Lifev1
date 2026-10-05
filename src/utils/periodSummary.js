@@ -149,8 +149,8 @@ function weightFromMetrics(metrics) {
   return NUMBER(metrics?.weight?.kg);
 }
 
-function waistFromMetrics(metrics) {
-  return NUMBER(metrics?.waist?.cm);
+function cmFromMetrics(metrics, kind) {
+  return NUMBER(metrics?.[kind]?.cm);
 }
 
 function isoDay(value) {
@@ -167,7 +167,7 @@ function inRange(iso, startDate, endDate) {
   return Boolean(day && day >= startDate && day <= endDate);
 }
 
-function buildDayHealth(date, lifelineDays, selfHubDays, ouraByDay, weightByDay, waistByDay) {
+function buildDayHealth(date, lifelineDays, selfHubDays, ouraByDay, weightByDay, bodyByDay) {
   const day = getDayEntry(lifelineDays, date);
   const hub = getSelfHubDayEntry(selfHubDays, date);
   const metrics = hub.health || day.metrics;
@@ -182,7 +182,9 @@ function buildDayHealth(date, lifelineDays, selfHubDays, ouraByDay, weightByDay,
     avgHr: NUMBER(oura?.avg_heart_rate) ?? NUMBER(sleepSession?.average_heart_rate) ?? avgHrFromMetrics(metrics),
     hrv: NUMBER(sleepSession?.average_hrv) ?? metricFromList(metrics, 'hrv'),
     weight: NUMBER(weightByDay?.[date]) ?? weightFromMetrics(metrics),
-    waist: waistFromMetrics(metrics) ?? NUMBER(waistByDay?.[date]),
+    waist: cmFromMetrics(metrics, 'waist') ?? NUMBER(bodyByDay?.waist?.[date]),
+    thigh: cmFromMetrics(metrics, 'thigh') ?? NUMBER(bodyByDay?.thigh?.[date]),
+    arm: cmFromMetrics(metrics, 'arm') ?? NUMBER(bodyByDay?.arm?.[date]),
     notes: String(day.notes || hub.journal?.notes || '').trim(),
     todos: Array.isArray(hub.journal?.todos) && hub.journal.todos.length
       ? hub.journal.todos
@@ -266,6 +268,8 @@ function summarizeBody(days, prevDays) {
   const hrv = seriesStats(days, 'hrv');
   const weight = seriesStats(days, 'weight');
   const waist = seriesStats(days, 'waist');
+  const thigh = seriesStats(days, 'thigh');
+  const arm = seriesStats(days, 'arm');
   const prevReadiness = seriesStats(prevDays, 'readiness');
   const prevActivity = seriesStats(prevDays, 'activity');
   const prevHr = seriesStats(prevDays, 'restingHr');
@@ -273,7 +277,9 @@ function summarizeBody(days, prevDays) {
   const prevHrv = seriesStats(prevDays, 'hrv');
   const prevWeight = seriesStats(prevDays, 'weight');
   const prevWaist = seriesStats(prevDays, 'waist');
-  const hasData = [readiness.avg, activity.avg, hr.avg, avgHr.avg, hrv.avg, weight.avg, waist.avg].some((value) => value != null);
+  const prevThigh = seriesStats(prevDays, 'thigh');
+  const prevArm = seriesStats(prevDays, 'arm');
+  const hasData = [readiness.avg, activity.avg, hr.avg, avgHr.avg, hrv.avg, weight.avg, waist.avg, thigh.avg, arm.avg].some((value) => value != null);
   if (!hasData) return emptyCard('body', 'Σώμα', 'Readiness · activity');
 
   return {
@@ -292,6 +298,8 @@ function summarizeBody(days, prevDays) {
       row('HRV', hrv.avg, prevHrv.avg, { suffix: ' ms' }),
       row('Βάρος', weight.avg, prevWeight.avg, { digits: 1, suffix: ' kg', invert: true }),
       row('Μέση', waist.avg, prevWaist.avg, { digits: 1, suffix: ' cm', invert: true }),
+      row('Μηρός', thigh.avg, prevThigh.avg, { digits: 1, suffix: ' cm', invert: true }),
+      row('Μπράτσο', arm.avg, prevArm.avg, { digits: 1, suffix: ' cm', invert: true }),
     ],
     notes: [],
   };
@@ -777,6 +785,8 @@ export function summarizePeriod({
   ouraRows = [],
   weightReadings = [],
   waistReadings = [],
+  thighReadings = [],
+  armReadings = [],
 } = {}) {
   const range = startDate && endDate
     ? { kind, startDate: toDateString(startDate), endDate: toDateString(endDate) }
@@ -796,9 +806,13 @@ export function summarizePeriod({
   const prevDates = eachDateInclusive(previous.startDate, previous.endDate);
   const ouraByDay = indexOura(ouraRows);
   const weightByDay = indexWeight(weightReadings, { average: true });
-  const waistByDay = indexWeight(waistReadings);
-  const days = dates.map((date) => buildDayHealth(date, lifelineDays, selfHubDays, ouraByDay, weightByDay, waistByDay));
-  const prevDays = prevDates.map((date) => buildDayHealth(date, lifelineDays, selfHubDays, ouraByDay, weightByDay, waistByDay));
+  const bodyByDay = {
+    waist: indexWeight(waistReadings),
+    thigh: indexWeight(thighReadings),
+    arm: indexWeight(armReadings),
+  };
+  const days = dates.map((date) => buildDayHealth(date, lifelineDays, selfHubDays, ouraByDay, weightByDay, bodyByDay));
+  const prevDays = prevDates.map((date) => buildDayHealth(date, lifelineDays, selfHubDays, ouraByDay, weightByDay, bodyByDay));
   const blocks = blocksInDates(pathBundle?.blocks, dates);
   const prevBlocks = blocksInDates(pathBundle?.blocks, prevDates);
   const completed = completedInDates(projectActivity, dates);

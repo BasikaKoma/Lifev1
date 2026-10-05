@@ -7,9 +7,10 @@ import {
   getWeightReadingsForDay,
 } from './weightReadings';
 import {
-  buildWaistCardFromReadings,
-  getWaistReadingsForDay,
-} from './waistReadings';
+  CIRCUMFERENCE_KINDS,
+  buildCircumferenceCardFromReadings,
+  getCircumferenceReadingsForDay,
+} from './circumferenceReadings';
 
 function buildWeightCard(kg, delta = null, readings = []) {
   const card = buildWeightCardFromReadings(readings.length ? readings : [{ value: kg, recordedAt: new Date().toISOString() }], { delta });
@@ -44,26 +45,30 @@ function weightDeltaForDay(dayMetrics, previousDayMetrics, day) {
   return Math.round((weight - prevWeight) * 10) / 10;
 }
 
-function latestWaistValue(dayMetrics, day) {
-  const readings = getWaistReadingsForDay(dayMetrics, day);
+function latestCircumferenceValue(kind, dayMetrics, day) {
+  const readings = getCircumferenceReadingsForDay(kind, dayMetrics, day);
   if (readings.length) return readings[readings.length - 1].value;
-  return dayMetrics.find((metric) => metric.metricType === 'waist')?.value ?? null;
+  return dayMetrics.find((metric) => metric.metricType === kind)?.value ?? null;
 }
 
-function waistDeltaForDay(dayMetrics, previousDayMetrics, day) {
-  const waist = latestWaistValue(dayMetrics, day);
+function circumferenceDeltaForDay(kind, dayMetrics, previousDayMetrics, day) {
+  const current = latestCircumferenceValue(kind, dayMetrics, day);
   const prevDay = previousDayMetrics?.[0]?.day;
-  const prevWaist = latestWaistValue(previousDayMetrics ?? [], prevDay);
-  if (waist == null || prevWaist == null) return null;
-  return Math.round((waist - prevWaist) * 10) / 10;
+  const previous = latestCircumferenceValue(kind, previousDayMetrics ?? [], prevDay);
+  if (current == null || previous == null) return null;
+  return Math.round((current - previous) * 10) / 10;
 }
 
-function attachWaistCard(patch, dayMetrics, day, delta = null) {
-  const readings = getWaistReadingsForDay(dayMetrics, day);
-  if (!readings.length) return patch;
-  const card = buildWaistCardFromReadings(readings, { delta });
-  if (!card) return patch;
-  return { ...patch, waist: card, preview: false };
+function attachCircumferenceCards(patch, dayMetrics, day, deltas = {}) {
+  let next = patch;
+  for (const kind of CIRCUMFERENCE_KINDS) {
+    const readings = getCircumferenceReadingsForDay(kind, dayMetrics, day);
+    if (!readings.length) continue;
+    const card = buildCircumferenceCardFromReadings(kind, readings, { delta: deltas[kind] ?? null });
+    if (!card) continue;
+    next = { ...next, [kind]: card, preview: false };
+  }
+  return next;
 }
 
 function metricsByDay(healthMetrics) {
@@ -81,7 +86,9 @@ export function healthMetricsToLifelinePatch(day, dayMetrics, { delta = null, sy
   const ouraActivity = dayMetrics.find((m) => m.metricType === 'activity' && m.source === 'oura');
   const ouraCalories = dayMetrics.find((m) => m.metricType === 'active_calories' && m.source === 'oura');
   const weight = dayMetrics.find((m) => m.metricType === 'weight');
-  const waist = dayMetrics.find((m) => m.metricType === 'waist');
+  const hasCircumference = CIRCUMFERENCE_KINDS.some((kind) =>
+    dayMetrics.some((metric) => metric.metricType === kind),
+  );
 
   const avgHr = dayMetrics.find((m) => m.metricType === 'avg_heart_rate' && m.source === 'oura')?.value ?? null;
   const restingHr = dayMetrics.find((m) => m.metricType === 'resting_heart_rate' && m.source === 'oura')?.value ?? null;
@@ -124,7 +131,7 @@ export function healthMetricsToLifelinePatch(day, dayMetrics, { delta = null, sy
     );
   }
 
-  if (!baseMetrics && !weight && !waist) return null;
+  if (!baseMetrics && !weight && !hasCircumference) return null;
 
   const sources = new Set(dayMetrics.map((m) => m.source));
   const source = sources.size > 1 ? 'merged' : sources.values().next().value ?? 'health';
@@ -147,7 +154,7 @@ export function healthMetricsToLifelinePatch(day, dayMetrics, { delta = null, sy
     patch.preview = false;
   }
 
-  return attachWaistCard(patch, dayMetrics, day, null);
+  return attachCircumferenceCards(patch, dayMetrics, day);
 }
 
 export function buildLifelineMetricsPatchesFromHealth(healthMetrics, ouraRows = []) {
@@ -168,7 +175,12 @@ export function buildLifelineMetricsPatchesFromHealth(healthMetrics, ouraRows = 
     const dayIndex = sortedDays.indexOf(day);
     const prevDay = dayIndex > 0 ? sortedDays[dayIndex - 1] : null;
     const delta = prevDay ? weightDeltaForDay(dayMetrics, byDay[prevDay], day) : null;
-    const waistDelta = prevDay ? waistDeltaForDay(dayMetrics, byDay[prevDay], day) : null;
+    const circumferenceDeltas = Object.fromEntries(
+      CIRCUMFERENCE_KINDS.map((kind) => [
+        kind,
+        prevDay ? circumferenceDeltaForDay(kind, dayMetrics, byDay[prevDay], day) : null,
+      ]),
+    );
 
     let metrics = ouraRow
       ? ouraRowToLifelineMetrics(ouraRow)
@@ -190,7 +202,7 @@ export function buildLifelineMetricsPatchesFromHealth(healthMetrics, ouraRows = 
       };
     }
 
-    metrics = attachWaistCard(metrics, dayMetrics, day, waistDelta);
+    metrics = attachCircumferenceCards(metrics, dayMetrics, day, circumferenceDeltas);
     patches[day] = { metrics };
   }
 

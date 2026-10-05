@@ -5,11 +5,11 @@ import {
   shouldAppendWeightReading,
 } from './weightReadings';
 import {
-  WAIST_METRIC_TYPE,
-  WAIST_SOURCE,
-  WAIST_UNIT,
-  parseWaistCm,
-} from './waistReadings';
+  CIRCUMFERENCE_SOURCE,
+  CIRCUMFERENCE_UNIT,
+  circumferenceSpec,
+  parseCircumferenceCm,
+} from './circumferenceReadings';
 
 export function todayIsoDate() {
   const now = new Date();
@@ -310,26 +310,28 @@ export async function appendWeightReading({
   return metric;
 }
 
-export async function appendWaistReading({
-  waistCm,
+export async function appendCircumferenceReading({
+  kind,
+  cm: rawCm,
   day = todayIsoDate(),
   recordedAt = new Date().toISOString(),
 }) {
-  const cm = parseWaistCm(waistCm);
-  if (cm == null) return null;
+  const spec = circumferenceSpec(kind);
+  const cm = parseCircumferenceCm(kind, rawCm);
+  if (!spec || cm == null) return null;
 
   const existingRows = await fetchMetricsForDay(day);
   const existing = existingRows.find(
-    (metric) => metric.metricType === WAIST_METRIC_TYPE && metric.source === WAIST_SOURCE,
+    (metric) => metric.metricType === spec.id && metric.source === CIRCUMFERENCE_SOURCE,
   );
   if (existing?.value != null) return existing;
 
   const metric = {
     day,
-    metricType: WAIST_METRIC_TYPE,
+    metricType: spec.id,
     value: cm,
-    unit: WAIST_UNIT,
-    source: WAIST_SOURCE,
+    unit: CIRCUMFERENCE_UNIT,
+    source: CIRCUMFERENCE_SOURCE,
     recordedAt,
     payload: {
       readings: [{ value: cm, recordedAt }],
@@ -340,6 +342,14 @@ export async function appendWaistReading({
   await upsertMetricsBatch([metric]);
   notifyHealthMetricsChanged();
   return metric;
+}
+
+export async function appendWaistReading({
+  waistCm,
+  day = todayIsoDate(),
+  recordedAt = new Date().toISOString(),
+}) {
+  return appendCircumferenceReading({ kind: 'waist', cm: waistCm, day, recordedAt });
 }
 
 export function scaleMeasurementToHealthMetrics(measurement) {

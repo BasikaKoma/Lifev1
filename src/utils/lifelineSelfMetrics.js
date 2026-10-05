@@ -77,8 +77,11 @@ export function normalizeDayMetrics(raw) {
 
   const hasLeft = Array.isArray(raw.leftMetrics) && raw.leftMetrics.length > 0;
   const hasWeight = raw.weight != null && raw.weight.kg != null;
-  const hasWaist = raw.waist != null && raw.waist.cm != null;
-  if (!hasLeft && !hasWeight && !hasWaist) return null;
+  const hasCm = (card) => card != null && card.cm != null;
+  const hasWaist = hasCm(raw.waist);
+  const hasThigh = hasCm(raw.thigh);
+  const hasArm = hasCm(raw.arm);
+  if (!hasLeft && !hasWeight && !hasWaist && !hasThigh && !hasArm) return null;
 
   return {
     source: typeof raw.source === 'string' ? raw.source : 'oura',
@@ -97,6 +100,8 @@ export function normalizeDayMetrics(raw) {
     dayScore: raw.dayScore && typeof raw.dayScore === 'object' ? raw.dayScore : null,
     weight: hasWeight ? raw.weight : null,
     waist: hasWaist ? raw.waist : null,
+    thigh: hasThigh ? raw.thigh : null,
+    arm: hasArm ? raw.arm : null,
   };
 }
 
@@ -150,6 +155,8 @@ export function getEmptyDayLabView(date = null) {
     dayScore: null,
     weight: null,
     waist: null,
+    thigh: null,
+    arm: null,
   });
 }
 
@@ -157,7 +164,7 @@ export function getDayLabView({ entryMetrics, date, ouraRow = null }) {
   const stored = entryMetrics?.preview === true ? null : entryMetrics;
   const fromOura = ouraRow ? ouraRowToLifelineMetrics(ouraRow) : null;
   const storedHasData = Boolean(
-    stored && (stored.leftMetrics?.length || stored.weight || stored.waist || stored.dayScore)
+    stored && (stored.leftMetrics?.length || stored.weight || stored.waist || stored.thigh || stored.arm || stored.dayScore)
   );
 
   if (storedHasData) {
@@ -168,6 +175,8 @@ export function getDayLabView({ entryMetrics, date, ouraRow = null }) {
         preview: false,
         weight: stored.weight ?? fromOura?.weight ?? null,
         waist: stored.waist ?? fromOura?.waist ?? null,
+        thigh: stored.thigh ?? fromOura?.thigh ?? null,
+        arm: stored.arm ?? fromOura?.arm ?? null,
         leftMetrics: stored.leftMetrics?.length ? stored.leftMetrics : fromOura?.leftMetrics,
         rightMetrics: stored.rightMetrics?.length ? stored.rightMetrics : fromOura?.rightMetrics,
       },

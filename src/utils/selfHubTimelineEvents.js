@@ -1,6 +1,7 @@
 import { parseOuraPayload } from './heartRateMetric';
 import { parseDate } from './lifeline';
 import { localTodayIsoDate } from './selfDateUtils';
+import { formatClock, workTimerEntries } from '../lib/workTimer';
 
 /**
  * Builds small "event cards" placed along the Self hub day timeline.
@@ -39,6 +40,7 @@ export const SELF_TIMELINE_EVENT_TYPES = {
   session: { icon: 'aura', tone: 'violet', typeLabel: 'Session', priority: 4 },
   tag: { icon: 'tag', tone: 'sky', typeLabel: 'Tag', priority: 8 },
   path: { icon: 'checkCircle', tone: 'emerald', typeLabel: 'Path', priority: 3 },
+  timer: { icon: 'checkCircle', tone: 'emerald', typeLabel: 'Timer', priority: 2 },
 };
 
 const WORKOUT_LABELS = {
@@ -111,10 +113,10 @@ function humanizeKey(value, map, fallback) {
   return String(value).replace(/[_-]+/g, ' ');
 }
 
-function makeEvent(type, { id, hour, label, timeLabel, typeLabel }) {
+function makeEvent(type, { id, hour, label, timeLabel, typeLabel, facts }) {
   const config = SELF_TIMELINE_EVENT_TYPES[type];
   if (!config || hour == null || !Number.isFinite(hour)) return null;
-  return {
+  const event = {
     id,
     hour: Math.max(0, Math.min(24, hour)),
     type,
@@ -124,6 +126,158 @@ function makeEvent(type, { id, hour, label, timeLabel, typeLabel }) {
     tone: config.tone,
     timeLabel: timeLabel ?? hmFromHour(hour),
   };
+  if (Array.isArray(facts) && facts.length) event.facts = facts;
+  return event;
+}
+
+const MOOD_LABELS = {
+  bad: 'Άσχημη',
+  worse: 'Χειρότερη',
+  same: 'Ίδια',
+  good: 'Καλή',
+  great: 'Εξαιρετική',
+};
+
+const INTENSITY_LABELS = {
+  easy: 'Χαλαρή',
+  moderate: 'Μέτρια',
+  hard: 'Έντονη',
+};
+
+function finiteNumbers(items) {
+  if (!Array.isArray(items)) return [];
+  return items.filter((value) => typeof value === 'number' && Number.isFinite(value) && value > 0);
+}
+
+function seriesSummary(series) {
+  const values = finiteNumbers(series?.items);
+  if (!values.length) return null;
+  const sum = values.reduce((total, value) => total + value, 0);
+  return {
+    avg: Math.round(sum / values.length),
+    min: Math.round(Math.min(...values)),
+    max: Math.round(Math.max(...values)),
+  };
+}
+
+function formatRange(summary, unit) {
+  if (!summary) return null;
+  if (summary.min === summary.max) return { value: String(summary.avg), unit };
+  return {
+    value: `${summary.min}–${summary.max}`,
+    unit,
+    detail: `μ.ό. ${summary.avg}`,
+  };
+}
+
+function formatDurationMs(ms) {
+  if (!Number.isFinite(ms) || ms < 30000) return null;
+  const minutes = Math.round(ms / 60000);
+  if (minutes < 60) return { value: String(minutes), unit: 'λ' };
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return { value: rest ? `${hours}ώ ${rest}` : String(hours), unit: rest ? 'λ' : 'ώ' };
+}
+
+function formatDurationSeconds(seconds) {
+  const value = Number(seconds);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  return formatDurationMs(value * 1000);
+}
+
+function durationBetween(startIso, endIso) {
+  const start = new Date(startIso).getTime();
+  const end = new Date(endIso).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+  return formatDurationMs(end - start);
+}
+
+function samplesDuring(samples, startIso, endIso) {
+  const start = new Date(startIso).getTime();
+  const end = new Date(endIso).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return [];
+  return (samples || [])
+    .filter((sample) => {
+      const time = new Date(sample?.timestamp).getTime();
+      return time >= start && time <= end && typeof sample?.bpm === 'number' && sample.bpm > 0;
+    })
+    .map((sample) => sample.bpm);
+}
+
+function addFact(facts, label, value) {
+  if (value == null || value === '') return;
+  if (typeof value === 'object') {
+    if (value.value == null || value.value === '') return;
+    facts.push({ label, value: String(value.value), unit: value.unit, detail: value.detail });
+    return;
+  }
+  facts.push({ label, value: String(value) });
+}
+
+function heartRateFact(summary) {
+  const readout = formatRange(summary, 'bpm');
+  return readout ? { label: 'Παλμοί', ...readout, value: String(readout.value) } : null;
+}
+
+function workoutFacts(item, samples) {
+  const facts = [];
+  addFact(facts, 'Διάρκεια', durationBetween(item?.start_datetime, item?.end_datetime));
+  addFact(facts, 'Ένταση', INTENSITY_LABELS[String(item?.intensity || '').toLowerCase()]);
+  if (typeof item?.calories === 'number' && item.calories > 0) {
+    addFact(facts, 'Θερμίδες', { value: String(Math.round(item.calories)), unit: 'kcal' });
+  }
+  if (typeof item?.distance === 'number' && item.distance > 0) {
+    addFact(
+      facts,
+      'Απόσταση',
+      item.distance >= 1000
+        ? { value: (item.distance / 1000).toFixed(2), unit: 'km' }
+        : { value: String(Math.round(item.distance)), unit: 'm' },
+    );
+  }
+  const heart = heartRateFact(seriesSummary({
+    items: samplesDuring(samples, item?.start_datetime, item?.end_datetime),
+  }));
+  if (heart) facts.push(heart);
+  return facts;
+}
+
+function sessionFacts(item, samples) {
+  const facts = [];
+  addFact(facts, 'Διάρκεια', durationBetween(item?.start_datetime, item?.end_datetime));
+  addFact(facts, 'Διάθεση', MOOD_LABELS[String(item?.mood || '').toLowerCase()]);
+  const heart = heartRateFact(
+    seriesSummary(item?.heart_rate)
+    || seriesSummary({ items: samplesDuring(samples, item?.start_datetime, item?.end_datetime) }),
+  );
+  if (heart) facts.push(heart);
+  const hrv = formatRange(seriesSummary(item?.heart_rate_variability), 'ms');
+  if (hrv) facts.push({ label: 'HRV', ...hrv, value: String(hrv.value) });
+  return facts;
+}
+
+function sleepFacts(session) {
+  const facts = [];
+  addFact(facts, 'Διάρκεια', formatDurationSeconds(session?.total_sleep_duration));
+  if (typeof session?.efficiency === 'number') {
+    addFact(facts, 'Αποδοτικότητα', { value: String(Math.round(session.efficiency)), unit: '%' });
+  }
+  if (typeof session?.average_heart_rate === 'number') {
+    addFact(facts, 'Παλμοί', { value: String(Math.round(session.average_heart_rate)), unit: 'bpm' });
+  }
+  if (typeof session?.lowest_heart_rate === 'number') {
+    addFact(facts, 'Χαμηλότεροι παλμοί', { value: String(Math.round(session.lowest_heart_rate)), unit: 'bpm' });
+  }
+  if (typeof session?.average_hrv === 'number') {
+    addFact(facts, 'HRV', { value: String(Math.round(session.average_hrv)), unit: 'ms' });
+  }
+  if (typeof session?.average_breath === 'number') {
+    addFact(facts, 'Αναπνοές', { value: Number(session.average_breath).toFixed(1), unit: '/λ' });
+  }
+  addFact(facts, 'Βαθύς', formatDurationSeconds(session?.deep_sleep_duration));
+  addFact(facts, 'REM', formatDurationSeconds(session?.rem_sleep_duration));
+  addFact(facts, 'Ελαφρύς', formatDurationSeconds(session?.light_sleep_duration));
+  return facts;
 }
 
 /** Clip an ISO interval onto a local calendar day, returning hours 0–24. */
@@ -293,12 +447,15 @@ function sleepEventsAndSegments(sessions, dateStr) {
       windows.push({ start: clip.startHour, end: clip.endHour });
     }
 
+    const facts = sleepFacts(session);
+
     if (clip.startOnDate) {
       const event = makeEvent('sleep', {
         id: `sleep-start-${session.id || startIso || index}`,
         hour: clip.startHour,
         label: sleepLabel,
         timeLabel: hmFromHour(clip.startHour),
+        facts,
       });
       if (event) events.push(event);
     }
@@ -309,6 +466,7 @@ function sleepEventsAndSegments(sessions, dateStr) {
         hour: clip.endHour,
         label: isNap ? 'Τέλος υπνάκου' : 'Ξύπνημα',
         timeLabel: hmFromHour(clip.endHour),
+        facts,
       });
       if (event) events.push(event);
     }
@@ -317,7 +475,7 @@ function sleepEventsAndSegments(sessions, dateStr) {
   return { events, segments, windows };
 }
 
-function rangedOuraEvents(items, { type, dateStr, idPrefix, labelOf, tone }) {
+function rangedOuraEvents(items, { type, dateStr, idPrefix, labelOf, tone, factsOf }) {
   const events = [];
   const segments = [];
   if (!Array.isArray(items)) return { events, segments };
@@ -339,12 +497,57 @@ function rangedOuraEvents(items, { type, dateStr, idPrefix, labelOf, tone }) {
       hour,
       label,
       timeLabel: hmFromHour(hour),
+      facts: factsOf?.(item) || [],
     });
     if (event) events.push(event);
 
     if (clip && clip.endHour - clip.startHour >= 0.12) {
       const segment = makeSegment(tone, clip.startHour, clip.endHour, label);
       if (segment) segments.push(segment);
+    }
+  });
+
+  return { events, segments };
+}
+
+function workTimerEventsAndSegments(entries, dateStr) {
+  const events = [];
+  const segments = [];
+  if (!Array.isArray(entries)) return { events, segments };
+
+  entries.forEach((entry) => {
+    const clips = [];
+    (entry.runs || []).forEach((run) => {
+      const clip = intervalOnDate(new Date(run.start).toISOString(), new Date(run.end).toISOString(), dateStr);
+      if (clip) clips.push(clip);
+    });
+    if (!clips.length) return;
+    const elapsedMs = clips.reduce((sum, clip) => sum + (clip.endHour - clip.startHour) * 3600000, 0);
+    if (elapsedMs < 1000) return;
+    const clock = formatClock(elapsedMs);
+    const tone = entry.blockType === 'Deep Work' ? 'deep' : 'work';
+    clips.forEach((clip) => {
+      const endHour = clip.endHour - clip.startHour < 0.025
+        ? Math.min(24, clip.startHour + 0.025)
+        : clip.endHour;
+      if (endHour <= clip.startHour) return;
+      segments.push({
+        start: clip.startHour,
+        end: endHour,
+        tone,
+        label: `${entry.label || 'Work'} · ${clock}`,
+      });
+    });
+    const event = makeEvent('timer', {
+      id: `work-${entry.id}`,
+      hour: clips[0].startHour,
+      label: entry.label || 'Work',
+      timeLabel: clock,
+      typeLabel: entry.blockType || 'Timer',
+    });
+    if (event) {
+      event.tone = entry.blockType === 'Deep Work' ? 'gold' : 'emerald';
+      events.push(event);
     }
   });
 
@@ -378,6 +581,7 @@ function ouraTimelineFromRow(ouraRow, dateStr) {
   if (!ouraRow) return empty;
 
   const payload = parseOuraPayload(ouraRow.payload);
+  const samples = Array.isArray(payload.heart_rate_samples) ? payload.heart_rate_samples : [];
   const sleep = sleepEventsAndSegments(payload.sleep_sessions, dateStr);
 
   const workouts = rangedOuraEvents(payload.workouts, {
@@ -386,6 +590,7 @@ function ouraTimelineFromRow(ouraRow, dateStr) {
     idPrefix: 'workout',
     tone: 'workout',
     labelOf: (item) => humanizeKey(item?.activity || item?.label, WORKOUT_LABELS, 'Προπόνηση'),
+    factsOf: (item) => workoutFacts(item, samples),
   });
 
   const sessions = rangedOuraEvents(payload.sessions, {
@@ -394,6 +599,7 @@ function ouraTimelineFromRow(ouraRow, dateStr) {
     idPrefix: 'session',
     tone: 'session',
     labelOf: (item) => humanizeKey(item?.type || item?.mood, SESSION_LABELS, 'Session'),
+    factsOf: (item) => sessionFacts(item, samples),
   });
 
   return {
@@ -405,7 +611,7 @@ function ouraTimelineFromRow(ouraRow, dateStr) {
     ],
     segments: [...sleep.segments, ...workouts.segments, ...sessions.segments],
     windows: sleep.windows,
-    samples: Array.isArray(payload.heart_rate_samples) ? payload.heart_rate_samples : [],
+    samples,
   };
 }
 
@@ -439,14 +645,17 @@ export function buildSelfHubTimelineEvents({
   ouraRow = null,
   date = localTodayIsoDate(),
   limit = 18,
+  workEntries = workTimerEntries(),
 } = {}) {
   const oura = ouraTimelineFromRow(ouraRow, date);
+  const work = workTimerEventsAndSegments(workEntries, date);
   const events = [
     ...oura.events,
     ...routineEvents(routines),
     ...noteEvents(projectDay?.notes),
     ...completedEvents(projectDay?.completed, date),
     ...pulseEvents(heartRate, oura.samples, oura.windows),
+    ...work.events,
   ];
 
   const seen = new Set();
@@ -458,7 +667,7 @@ export function buildSelfHubTimelineEvents({
 
   return {
     events: capEvents(deduped, limit),
-    segments: oura.segments,
+    segments: [...oura.segments, ...work.segments],
   };
 }
 
@@ -517,7 +726,17 @@ export function resolveDayTimeline({
   heartRate = null,
   archived = null,
   limit = 18,
+  workEntries = workTimerEntries(),
 } = {}) {
+  const base = buildSelfHubTimelineEvents({
+    routines,
+    projectDay,
+    heartRate,
+    ouraRow,
+    date,
+    limit,
+    workEntries: [],
+  });
   const live = buildSelfHubTimelineEvents({
     routines,
     projectDay,
@@ -525,9 +744,10 @@ export function resolveDayTimeline({
     ouraRow,
     date,
     limit,
+    workEntries,
   });
-  const hasLive = live.events.length > 0 || live.segments.length > 0;
-  if (hasLive) {
+  const hasBase = base.events.length > 0 || base.segments.length > 0;
+  if (hasBase) {
     return {
       events: live.events,
       segments: live.segments,
@@ -537,12 +757,18 @@ export function resolveDayTimeline({
 
   const stored = normalizeTimelineSnapshot(archived);
   if (stored) {
+    const workEvents = live.events.filter((event) => String(event.id).startsWith('work-'));
+    const workSegments = live.segments.filter((segment) => segment.tone === 'deep' || segment.tone === 'work');
     return {
-      events: stored.events,
-      segments: stored.segments,
+      events: [...stored.events.filter((event) => !String(event.id).startsWith('work-')), ...workEvents],
+      segments: [...stored.segments.filter((segment) => segment.tone !== 'deep' && segment.tone !== 'work'), ...workSegments],
       source: 'archive',
     };
   }
 
-  return { events: [], segments: [], source: 'none' };
+  return {
+    events: live.events,
+    segments: live.segments,
+    source: live.events.length || live.segments.length ? 'live' : 'none',
+  };
 }

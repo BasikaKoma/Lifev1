@@ -7,6 +7,7 @@ import {
   capturePersistable,
   getStateValueForColumn,
 } from './projectSavePatch';
+import { localMetaMatchesCloud } from './cloudRevision';
 
 const DB_NAME = 'next-move-local';
 const DB_VERSION = 1;
@@ -125,6 +126,7 @@ export async function readLocalProject(projectId) {
       projectTitle: meta?.title || 'My Business',
       isLifeline: meta?.isLifeline === true,
       cloudUpdatedAt: meta?.cloudUpdatedAt || null,
+      cloudVersion: meta?.cloudVersion ?? null,
     },
     values
   );
@@ -133,6 +135,7 @@ export async function readLocalProject(projectId) {
     ...persistable,
     isLifeline: meta?.isLifeline === true,
     cloudUpdatedAt: meta?.cloudUpdatedAt || null,
+    cloudVersion: meta?.cloudVersion ?? null,
     activeView: meta?.ui?.activeView || 'projects',
     selectedStageId: meta?.ui?.selectedStageId || null,
     focusMode: meta?.ui?.focusMode === true,
@@ -192,6 +195,7 @@ function metaRecord(state, dirtyColumns) {
     title: state.projectTitle || 'My Business',
     isLifeline: state.isLifeline === true,
     cloudUpdatedAt: state.cloudUpdatedAt || null,
+    cloudVersion: state.cloudVersion ?? null,
     dirtyColumns: [...(dirtyColumns || [])],
     localUpdatedAt: Date.now(),
     ui: {
@@ -279,7 +283,7 @@ export async function mergeUnsyncedLocal(projectState) {
     focusMode: typeof ui.focusMode === 'boolean' ? ui.focusMode : projectState.focusMode,
   };
 
-  const sameCloud = !meta.cloudUpdatedAt || meta.cloudUpdatedAt === projectState.cloudUpdatedAt;
+  const sameCloud = localMetaMatchesCloud(meta, projectState);
   if (sameCloud && meta.dirtyColumns?.length) {
     const values = await readLocalColumns(projectState.projectId, meta.dirtyColumns);
     state = applyColumnValuesToState(state, values);

@@ -11,7 +11,7 @@ import {
   nowIso,
   startOfWeekMonday,
 } from '../lib/path/schema';
-import { loadPathBundle, queuePathSave, subscribePathSave } from '../lib/path/store';
+import { loadPathBundle, queuePathSave, subscribePathBundle, subscribePathSave } from '../lib/path/store';
 import { deletePlanSourceFile, syncPlanSourceFile } from '../lib/path/planFile';
 import { blocksForDate, materializeWeekBlocks, nextBlockOrder, reorderDayBlocks } from '../lib/path/logic';
 
@@ -40,6 +40,15 @@ export function usePath() {
   useEffect(() => subscribePathSave((status) => {
     setSaving(status.saving);
     setError(status.error || '');
+  }), []);
+
+  useEffect(() => subscribePathBundle((next) => {
+    setBundle((prev) => {
+      if (!prev || !next) return prev;
+      if (String(next.updatedAt || '') === String(prev.updatedAt || '')) return prev;
+      if (String(next.updatedAt || '') < String(prev.updatedAt || '')) return prev;
+      return next;
+    });
   }), []);
 
   const persist = useCallback((next) => {

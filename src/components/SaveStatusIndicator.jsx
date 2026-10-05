@@ -16,7 +16,7 @@ export function SaveStatusIndicator({
     label = 'Αποθήκευση…';
   } else if (syncConflict) {
     status = 'error';
-    label = 'Σύγκρουση με άλλη συσκευή';
+    label = 'Νεότερη έκδοση στο cloud';
   } else if (syncError) {
     status = 'error';
     label = 'Αποτυχία αποθήκευσης';
@@ -27,7 +27,7 @@ export function SaveStatusIndicator({
 
   const canSave = Boolean(onSave) && !syncing && !syncConflict;
   const errorText = syncError || (syncConflict
-    ? 'Το project άλλαξε αλλού. Φόρτωσε το cloud πριν ξανααποθηκεύσεις.'
+    ? 'Η έκδοση στο cloud είναι νεότερη. Φόρτωσε την πριν ξανααποθηκεύσεις.'
     : '');
 
   return (

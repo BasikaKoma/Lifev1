@@ -7,7 +7,7 @@ const LANE_COUNT = 3;
 const MIN_GAP_PX = 10;
 const FALLBACK_TRACK_PX = 880;
 const CLUSTER_SPAN_HOURS = 0.4;
-const CLUSTER_EDGE_PX = 8;
+const LABEL_CAP_PX = 128;
 
 function estimateChipWidthPx(event, density) {
   const padding = density === 'icon' ? 16 : 26;
@@ -16,7 +16,7 @@ function estimateChipWidthPx(event, density) {
   let width = padding + icon + 2;
   if (density !== 'icon' && event.timeLabel) width += gap + 44;
   if (density === 'full' && event.label) {
-    width += gap + Math.min(String(event.label).length * 7.2, 96);
+    width += gap + Math.min(String(event.label).length * 7.2, 192);
   }
   return width;
 }
@@ -29,7 +29,7 @@ function layoutTimelineEvents(events, trackWidthPx, laneCount = LANE_COUNT) {
   if (!events.length) return [];
   const width = trackWidthPx > 0 ? trackWidthPx : FALLBACK_TRACK_PX;
   const gapPct = (MIN_GAP_PX / width) * 100;
-  const densities = ['full', 'time', 'icon'];
+  const densities = ['full', 'time'];
 
   const sorted = events
     .map((event, index) => ({ event, index, pos: (event.hour / 24) * 100 }))
@@ -54,7 +54,7 @@ function layoutTimelineEvents(events, trackWidthPx, laneCount = LANE_COUNT) {
     }
 
     if (!chosen) {
-      const half = ((estimateChipWidthPx(item.event, 'icon') / width) * 100) / 2;
+      const half = ((estimateChipWidthPx(item.event, 'time') / width) * 100) / 2;
       let lane = 0;
       let bestRight = Infinity;
       for (let i = 0; i < laneCount; i += 1) {
@@ -63,7 +63,7 @@ function layoutTimelineEvents(events, trackWidthPx, laneCount = LANE_COUNT) {
           lane = i;
         }
       }
-      chosen = { density: 'icon', lane, right: item.pos + half };
+      chosen = { density: 'time', lane, right: item.pos + half };
     }
 
     laneRights[chosen.lane] = chosen.right;
@@ -84,50 +84,7 @@ function estimateClusterWidthPx(events) {
     (max, event) => Math.max(max, String(event.label || '').length),
     0,
   );
-  return Math.max(96, 58 + longest * 5.4);
-}
-
-/** Room above the track so every separate chip in a stack stays visible. */
-function clusterLiftRem(eventCount) {
-  const stackRem = eventCount * 1.12 + Math.max(0, eventCount - 1) * 0.14 + 0.5;
-  return Math.max(0, stackRem - 5.05);
-}
-
-function clusterNudgePx(posPct, cardWidthPx, trackWidthPx, neighbors = []) {
-  const width = trackWidthPx > 0 ? trackWidthPx : FALLBACK_TRACK_PX;
-  const center = (posPct / 100) * width;
-  const gap = 10;
-  let nudge = 0;
-
-  const bounds = () => {
-    const left = center - cardWidthPx / 2 + nudge;
-    return { left, right: left + cardWidthPx };
-  };
-
-  const clampToTrack = () => {
-    let { left, right } = bounds();
-    if (left < CLUSTER_EDGE_PX) nudge += CLUSTER_EDGE_PX - left;
-    ({ left, right } = bounds());
-    if (right > width - CLUSTER_EDGE_PX) nudge -= right - (width - CLUSTER_EDGE_PX);
-  };
-
-  clampToTrack();
-
-  for (const neighbor of neighbors) {
-    const neighborHalf = estimateChipWidthPx(neighbor, neighbor.density) / 2;
-    const neighborCenter = (neighbor.pos / 100) * width;
-    const neighborLeft = neighborCenter - neighborHalf - gap;
-    const neighborRight = neighborCenter + neighborHalf + gap;
-    const { left, right } = bounds();
-    if (right <= neighborLeft || left >= neighborRight) continue;
-    if (neighbor.pos <= posPct) nudge += neighborRight - left;
-    else nudge -= right - neighborLeft;
-  }
-
-  clampToTrack();
-
-  const maxNudge = Math.max(0, cardWidthPx / 2 - 18);
-  return Math.max(-maxNudge, Math.min(maxNudge, nudge));
+  return Math.max(96, 58 + Math.min(longest * 5.4, LABEL_CAP_PX));
 }
 
 /**
@@ -147,25 +104,131 @@ function groupPlacedEvents(placed, trackWidthPx) {
     columns.push({ anchorHour: event.hour, events: [event] });
   }
 
-  return columns.map((column) => {
+  const placedColumns = columns.map((column) => {
     if (column.events.length === 1) {
       return { kind: 'single', id: column.events[0].id, event: column.events[0] };
     }
     const hour = column.events.reduce((sum, event) => sum + event.hour, 0) / column.events.length;
     const pos = (hour / 24) * 100;
-    const memberIds = new Set(column.events.map((event) => event.id));
-    const neighbors = placed.filter((event) => !memberIds.has(event.id));
     return {
       kind: 'cluster',
       id: `cluster-${column.events[0].id}`,
       pos,
       events: column.events,
-      nudge: clusterNudgePx(pos, estimateClusterWidthPx(column.events), trackWidthPx, neighbors),
     };
+  });
+
+  return preferFullLabels(assignColumnBands(placedColumns, trackWidthPx), trackWidthPx);
+}
+
+/** Nearby columns alternate above the line so their labels stay on their own dots. */
+function assignColumnBands(columns, trackWidthPx) {
+  const width = trackWidthPx > 0 ? trackWidthPx : FALLBACK_TRACK_PX;
+  const bandRight = [-Infinity, -Infinity];
+
+  return columns.map((column) => {
+    const card = column.kind === 'cluster'
+      ? estimateClusterWidthPx(column.events)
+      : estimateChipWidthPx(column.event, column.event.density || 'full');
+    const pos = column.kind === 'cluster' ? column.pos : column.event.pos;
+    const center = (pos / 100) * width;
+    const left = center - card / 2;
+    const right = center + card / 2;
+    let band = left >= bandRight[0] + MIN_GAP_PX ? 0 : 1;
+    if (band === 1 && left < bandRight[1] + MIN_GAP_PX) {
+      band = bandRight[0] <= bandRight[1] ? 0 : 1;
+    }
+    bandRight[band] = Math.max(bandRight[band], right);
+    return { ...column, band };
   });
 }
 
+/** True when the chip can slide sideways and still keep its dot underneath. */
+function chipClearsNeighbors(center, card, obstacles) {
+  const half = card / 2;
+  const maxShift = Math.max(0, half - ANCHOR_INSET_PX);
+  let nudge = 0;
+
+  for (let pass = 0; pass < obstacles.length + 1; pass += 1) {
+    let moved = false;
+    for (const other of obstacles) {
+      const left = center - half + nudge;
+      const right = center + half + nudge;
+      if (right <= other.left - MIN_GAP_PX || left >= other.right + MIN_GAP_PX) continue;
+      const pushRight = other.right + MIN_GAP_PX - left;
+      const pushLeft = other.left - MIN_GAP_PX - right;
+      const preferRight = Math.abs(pushRight) <= Math.abs(pushLeft);
+      let next = nudge + (preferRight ? pushRight : pushLeft);
+      if (Math.abs(next) > maxShift) {
+        next = nudge + (preferRight ? pushLeft : pushRight);
+        if (Math.abs(next) > maxShift) return false;
+      }
+      nudge = next;
+      moved = true;
+    }
+    if (!moved) return true;
+  }
+
+  return false;
+}
+
+/** A lone chip shows its activity name when that label can sit on its own dot. */
+function preferFullLabels(columns, trackWidthPx) {
+  const width = trackWidthPx > 0 ? trackWidthPx : FALLBACK_TRACK_PX;
+  const resolved = columns.map((column) => ({ ...column }));
+
+  const boxOf = (column) => {
+    const pos = column.kind === 'cluster' ? column.pos : column.event.pos;
+    const card = column.kind === 'cluster'
+      ? estimateClusterWidthPx(column.events)
+      : estimateChipWidthPx(column.event, column.event.density || 'time');
+    const center = (pos / 100) * width;
+    return { left: center - card / 2, right: center + card / 2, band: column.band };
+  };
+
+  resolved.forEach((column, index) => {
+    if (column.kind !== 'single' || column.event.density === 'full') return;
+    const fullEvent = { ...column.event, density: 'full' };
+    const card = estimateChipWidthPx(fullEvent, 'full');
+    const center = (column.event.pos / 100) * width;
+    const obstacles = resolved
+      .filter((other, otherIndex) => otherIndex !== index && other.band === column.band)
+      .map(boxOf);
+    if (!chipClearsNeighbors(center, card, obstacles)) return;
+    resolved[index] = { ...column, event: fullEvent };
+  });
+
+  return resolved;
+}
+
+function eventsBandHeightRem(items) {
+  const stackRem = (count) => {
+    if (count <= 0) return 0;
+    return count * 1.02 + Math.max(0, count - 1) * 0.14 + 0.4;
+  };
+  let low = 0;
+  let high = 0;
+  items.forEach((item) => {
+    const count = item.kind === 'cluster' ? item.events.length : 1;
+    if (item.band === 1) high = Math.max(high, count);
+    else low = Math.max(low, count);
+  });
+  const need = stackRem(low) + stackRem(high) + (high ? 0.45 : 0.15);
+  return Math.max(5.15, need);
+}
+
 const CHIP_CLEAR_GAP = 8;
+const ANCHOR_INSET_PX = 14;
+
+/** Keep the timeline dot under the chip. A sideways shove that leaves the dot looks detached. */
+function clampNudgeToAnchor(item, nudge) {
+  const width = item.right - item.left;
+  const centered = item.anchor - (item.left + item.right) / 2;
+  if (width <= ANCHOR_INSET_PX * 2) return centered;
+  const minNudge = item.anchor + ANCHOR_INSET_PX - item.right;
+  const maxNudge = item.anchor - ANCHOR_INSET_PX - item.left;
+  return Math.max(minNudge, Math.min(maxNudge, nudge));
+}
 
 function rangesOverlap(a0, a1, b0, b1) {
   return Math.min(a1, b1) - Math.max(a0, b0) > 0;
@@ -220,7 +283,9 @@ function resolveChipNudges(items) {
       if (!rangesOverlap(box.left, box.right, otherBox.left - CHIP_CLEAR_GAP, otherBox.right + CHIP_CLEAR_GAP)) continue;
       const shift = otherBox.right + CHIP_CLEAR_GAP - box.left;
       if (shift <= 0) continue;
-      nudges[item.id] += shift;
+      const next = clampNudgeToAnchor(item, nudges[item.id] + shift);
+      if (Math.abs(next - nudges[item.id]) < 0.5) continue;
+      nudges[item.id] = next;
       box = boxOf(item);
     }
   }
@@ -237,7 +302,9 @@ function resolveChipNudges(items) {
       if (!rangesOverlap(box.left, box.right, zoneLeft, zoneRight)) continue;
       const shift = shiftOutOfZone(box, zoneLeft, zoneRight, item.anchor);
       if (!shift) continue;
-      nudges[item.id] += shift;
+      const next = clampNudgeToAnchor(item, nudges[item.id] + shift);
+      if (Math.abs(next - nudges[item.id]) < 0.5) continue;
+      nudges[item.id] = next;
       box = boxOf(item);
     }
   }
@@ -291,7 +358,7 @@ function eventTitle(event) {
 function TimelineCluster({ group, eventNotes, onOpenEvent, nudge = 0 }) {
   return (
     <span
-      className="self-day-progress__event self-day-progress__event--cluster"
+      className={`self-day-progress__event self-day-progress__event--cluster${group.band === 1 ? ' self-day-progress__event--band1' : ''}`}
       data-layout-id={group.id}
       style={{
         left: `${group.pos}%`,
@@ -356,16 +423,16 @@ export function SelfDayProgress({
     () => groupPlacedEvents(layoutTimelineEvents(events, trackWidth), trackWidth),
     [events, trackWidth]
   );
-  const clusterLift = timelineItems.reduce(
-    (max, item) => (item.kind === 'cluster' ? Math.max(max, clusterLiftRem(item.events.length)) : max),
-    0,
-  );
+  const eventsHeightRem = eventsBandHeightRem(timelineItems);
   useLayoutEffect(() => {
     const root = trackRef.current;
     if (!root) return;
     const nodes = [...root.querySelectorAll('.self-day-progress__events > .self-day-progress__event')];
     const previous = nodes.map((node) => node.style.getPropertyValue('--chip-nudge'));
+    const shifted = [...root.querySelectorAll('.self-day-progress__event-chip, .self-day-progress__cluster-shift')];
+    shifted.forEach((node) => node.style.setProperty('transition', 'none'));
     nodes.forEach((node) => node.style.setProperty('--chip-nudge', '0px'));
+    void root.offsetWidth;
     const items = nodes.map((node) => {
       const chips = [...node.querySelectorAll('.self-day-progress__event-chip')];
       const rects = chips.map((chip) => chip.getBoundingClientRect());
@@ -380,6 +447,7 @@ export function SelfDayProgress({
         bottom: Math.max(...rects.map((rect) => rect.bottom)),
       };
     }).filter(Boolean);
+    shifted.forEach((node) => node.style.removeProperty('transition'));
     nodes.forEach((node, index) => {
       if (previous[index]) node.style.setProperty('--chip-nudge', previous[index]);
       else node.style.removeProperty('--chip-nudge');
@@ -408,7 +476,7 @@ export function SelfDayProgress({
   return (
     <section
       className={`self-day-progress${embedded ? ' self-day-progress--embedded' : ''}`}
-      style={clusterLift ? { marginTop: `${clusterLift}rem` } : undefined}
+      style={{ '--day-events-height': `${eventsHeightRem}rem` }}
       aria-label="Day progress"
     >
       <div className="self-day-progress__row">
@@ -439,7 +507,7 @@ export function SelfDayProgress({
                       key={item.event.id}
                       type="button"
                       data-layout-id={item.event.id}
-                      className={`self-day-progress__event self-day-progress__event--${item.event.tone} self-day-progress__event--lane${item.event.lane} self-day-progress__event--density-${item.event.density}${eventHasNote(eventNotes, item.event.id) ? ' self-day-progress__event--noted' : ''}`}
+                      className={`self-day-progress__event self-day-progress__event--${item.event.tone} self-day-progress__event--lane${item.band === 1 ? 2 : 0} self-day-progress__event--density-${item.event.density}${item.band === 1 ? ' self-day-progress__event--band1' : ''}${eventHasNote(eventNotes, item.event.id) ? ' self-day-progress__event--noted' : ''}`}
                       style={{
                         left: `${item.event.pos}%`,
                         '--chip-nudge': `${chipNudges[item.event.id] || 0}px`,
