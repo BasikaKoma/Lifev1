@@ -10,6 +10,7 @@ import { platform } from '../platform';
 import { ShareProjectPanel } from './ShareProjectPanel';
 import { VaultSettings } from './VaultSettings';
 import { AssistantConnections } from './AssistantConnections';
+import { NotificationSettings } from './NotificationSettings';
 
 export function SettingsView({
   focusMode,
@@ -213,6 +214,10 @@ export function SettingsView({
                 </button>
               )}
             </div>
+          )}
+
+          {isSupabaseConfigured() && (
+            <NotificationSettings user={user} ouraConnected={Boolean(ouraStatus?.connected)} />
           )}
 
           <div className="settings-block">

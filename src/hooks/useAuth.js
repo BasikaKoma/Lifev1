@@ -12,6 +12,8 @@ import {
   hasElectronAuthStore,
   markStaySignedOut,
 } from '../lib/electronAuth';
+import { disablePushOnThisDevice } from '../lib/push/device';
+import { clearPushSettingsCache } from '../lib/push/settings';
 
 export function useAuth() {
   const isConfigured = isSupabaseConfigured();
@@ -88,6 +90,9 @@ export function useAuth() {
   }, []);
 
   const signOut = useCallback(async () => {
+    // Needs the session to delete this device's row, so it runs before sign-out.
+    await disablePushOnThisDevice().catch(() => {});
+    clearPushSettingsCache();
     await authSignOut();
     await markStaySignedOut();
     setUser(null);

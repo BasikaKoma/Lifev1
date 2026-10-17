@@ -30,7 +30,8 @@
     "landing:login": "npx wrangler login",
     "landing:publish": "node scripts/publish-landing.cjs",
     "landing:deploy": "npx wrangler pages deploy landing --project-name=lifev1 --commit-dirty=true",
-    "brand:assets": "node scripts/generate-brand-assets.cjs"
+    "brand:assets": "node scripts/generate-brand-assets.cjs",
+    "push:vapid": "node scripts/generate-vapid-keys.cjs"
   },
   "dependencies": {
     "@capacitor-community/bluetooth-le": "^7.1.1",
@@ -40,6 +41,7 @@
     "@capacitor/core": "^7.2.0",
     "@capacitor/ios": "^7.6.9",
     "@capacitor/preferences": "^7.0.1",
+    "@capacitor/push-notifications": "^7.0.7",
     "@capacitor/splash-screen": "^7.0.1",
     "@react-three/drei": "^9.117.3",
     "@react-three/fiber": "^8.17.10",

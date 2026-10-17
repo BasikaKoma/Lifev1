@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, Tray, nativeImage, session, shell, ipcMain } = require('electron');
+const { app, BrowserWindow, Menu, Notification, Tray, nativeImage, session, shell, ipcMain } = require('electron');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -32,6 +32,7 @@ let mainWindow = null;
 let staticServer = null;
 let allowWindowClose = false;
 let scaleBackgroundEnabled = false;
+let notificationsBackgroundEnabled = false;
 let tray = null;
 let updateDownloaded = false;
 let quittingForUpdate = false;
@@ -115,6 +116,16 @@ function setupPermissions() {
   });
 }
 
+/** Closing the window hides to the tray while the scale or reminders need the app running. */
+function keepsRunningInBackground() {
+  return scaleBackgroundEnabled || notificationsBackgroundEnabled;
+}
+
+function stopBackgroundModes() {
+  scaleBackgroundEnabled = false;
+  notificationsBackgroundEnabled = false;
+}
+
 function getPreloadPath() {
   return path.join(__dirname, 'preload.cjs');
 }
@@ -137,7 +148,7 @@ function setupCloseGuard(win) {
   win.on('close', (event) => {
     if (allowWindowClose || quittingForUpdate) return;
     // A pending update must actually quit — hiding to tray would skip the installer.
-    if (scaleBackgroundEnabled && !updateDownloaded) {
+    if (keepsRunningInBackground() && !updateDownloaded) {
       event.preventDefault();
       win.hide();
       ensureTray();
@@ -164,7 +175,7 @@ function setupCloseGuard(win) {
 
 function prepareQuitForUpdate() {
   quittingForUpdate = true;
-  scaleBackgroundEnabled = false;
+  stopBackgroundModes();
   allowWindowClose = true;
   if (tray && !tray.isDestroyed()) {
     tray.destroy();
@@ -227,7 +238,7 @@ function ensureTray() {
   if (tray && !tray.isDestroyed()) return tray;
   const icon = getAppIcon();
   tray = new Tray(icon || nativeImage.createEmpty());
-  tray.setToolTip('lifev1 · ζυγαριά σε αναμονή');
+  tray.setToolTip(trayTooltip());
   tray.setContextMenu(
     Menu.buildFromTemplate([
       {
@@ -237,7 +248,7 @@ function ensureTray() {
       {
         label: 'Έξοδος',
         click: () => {
-          scaleBackgroundEnabled = false;
+          stopBackgroundModes();
           allowWindowClose = true;
           if (tray && !tray.isDestroyed()) {
             tray.destroy();
@@ -252,16 +263,65 @@ function ensureTray() {
   return tray;
 }
 
+function trayTooltip() {
+  if (scaleBackgroundEnabled && notificationsBackgroundEnabled) return 'lifev1 · ζυγαριά και ειδοποιήσεις';
+  if (scaleBackgroundEnabled) return 'lifev1 · ζυγαριά σε αναμονή';
+  return 'lifev1 · ειδοποιήσεις ενεργές';
+}
+
+function syncBackgroundTray() {
+  if (keepsRunningInBackground()) {
+    ensureTray().setToolTip(trayTooltip());
+  } else if (tray && !tray.isDestroyed() && (!mainWindow || mainWindow.isVisible())) {
+    tray.destroy();
+    tray = null;
+  }
+  // A hidden window is throttled by Chromium; reminders need the Realtime socket alive.
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.setBackgroundThrottling(!notificationsBackgroundEnabled);
+  }
+}
+
 function setupScaleBackgroundIpc() {
   ipcMain.removeAllListeners('scale-background-enabled');
   ipcMain.on('scale-background-enabled', (_event, enabled) => {
     scaleBackgroundEnabled = Boolean(enabled);
-    if (scaleBackgroundEnabled) {
-      ensureTray();
-    } else if (tray && !tray.isDestroyed() && (!mainWindow || mainWindow.isVisible())) {
-      tray.destroy();
-      tray = null;
-    }
+    syncBackgroundTray();
+  });
+}
+
+const shownNotifications = new Map();
+
+function setupNotificationsIpc() {
+  ipcMain.removeAllListeners('notifications-background-enabled');
+  ipcMain.on('notifications-background-enabled', (_event, enabled) => {
+    notificationsBackgroundEnabled = Boolean(enabled);
+    syncBackgroundTray();
+  });
+
+  ipcMain.removeHandler('notifications:show');
+  ipcMain.handle('notifications:show', (_event, payload) => {
+    if (!Notification.isSupported()) return { ok: false };
+    const title = String(payload?.title || 'lifev1').slice(0, 160);
+    const body = String(payload?.body || '').slice(0, 400);
+    const url = typeof payload?.url === 'string' ? payload.url : '/';
+    const tag = String(payload?.tag || `n-${Date.now()}`);
+
+    shownNotifications.get(tag)?.close();
+    const notification = new Notification({ title, body, icon: getAppIcon() });
+    // Keep a reference: a garbage-collected Notification loses its click handler.
+    shownNotifications.set(tag, notification);
+    notification.on('click', () => {
+      focusMainWindow();
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('notifications:open', url);
+      }
+    });
+    notification.on('close', () => {
+      if (shownNotifications.get(tag) === notification) shownNotifications.delete(tag);
+    });
+    notification.show();
+    return { ok: true };
   });
 }
 
@@ -286,9 +346,13 @@ if (!gotSingleInstanceLock) {
     app.whenReady().then(() => focusMainWindow());
   });
 
+  // Windows toasts are attributed by AppUserModelID; it must match the installer's appId.
+  if (process.platform === 'win32') app.setAppUserModelId('com.lifev1.app');
+
   app.whenReady().then(async () => {
     setupPermissions();
     setupScaleBackgroundIpc();
+    setupNotificationsIpc();
     setupAuthStoreIpc();
     setupBrainIpc();
     setupCamerasIpc();
@@ -326,7 +390,7 @@ if (!gotSingleInstanceLock) {
 
   app.on('before-quit', () => {
     allowWindowClose = true;
-    scaleBackgroundEnabled = false;
+    stopBackgroundModes();
     if (tray && !tray.isDestroyed()) {
       tray.destroy();
       tray = null;

@@ -18,3 +18,12 @@ verify_jwt = false
 
 [functions.scale-ingest]
 verify_jwt = false
+
+[functions.push-dispatch]
+verify_jwt = false
+
+[functions.oura-webhook]
+verify_jwt = false
+
+[functions.oura-webhook-subscriptions]
+verify_jwt = false

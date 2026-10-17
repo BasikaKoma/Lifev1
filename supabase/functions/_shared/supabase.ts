@@ -69,5 +69,8 @@ export async function assertServiceOrCronAuth(req: Request): Promise<void> {
   const assistant = await getServiceClient().rpc('internal_get_assistant_cron_secret');
   if (!assistant.error && typeof assistant.data === 'string' && assistant.data && token === assistant.data) return;
 
+  const push = await getServiceClient().rpc('internal_get_push_cron_secret');
+  if (!push.error && typeof push.data === 'string' && push.data && token === push.data) return;
+
   throw new Error('Missing authorization');
 }

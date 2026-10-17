@@ -25,8 +25,8 @@ function pickActivityField(
   return asNumber(row?.[key]);
 }
 
-async function upsertSyncedMetrics(userId: string, accessToken: string) {
-  const startDate = isoDateDaysAgo(OURA_SYNC_DAYS);
+async function upsertSyncedMetrics(userId: string, accessToken: string, lookbackDays = OURA_SYNC_DAYS) {
+  const startDate = isoDateDaysAgo(lookbackDays);
   const endDate = syncEndIsoDate();
   const data = await fetchOuraAllData(accessToken, startDate, endDate);
   const { grouped, summarizeHeartRate, personalInfo, ringConfiguration } = data;
@@ -161,7 +161,8 @@ async function upsertSyncedMetrics(userId: string, accessToken: string) {
   return rows.length;
 }
 
-export async function syncOuraForUser(userId: string) {
+/** days: how far back to re-read (a webhook event only needs yesterday and today). */
+export async function syncOuraForUser(userId: string, { days = OURA_SYNC_DAYS }: { days?: number } = {}) {
   const admin = getServiceClient();
   const { data: connection, error } = await admin
     .from('oura_connections')
@@ -196,7 +197,7 @@ export async function syncOuraForUser(userId: string) {
     if (updateError) throw updateError;
   }
 
-  const syncedDays = await upsertSyncedMetrics(userId, accessToken);
+  const syncedDays = await upsertSyncedMetrics(userId, accessToken, days);
 
   const { error: syncMetaError } = await admin
     .from('oura_connections')

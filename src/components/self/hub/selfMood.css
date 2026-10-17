@@ -1,0 +1,211 @@
+/* Morning mood pill: under the Sleep orb, same look as the metric pills, no organ link. */
+.self-mood-card {
+  position: absolute;
+  z-index: 4;
+  /* Under the Sleep orb (.self-float-metric--orb.self-float-metric--tl). */
+  top: calc(-1% + clamp(92px, 26vw, 114px) + 6px);
+  /* Centred under the ring: the orb box reaches the stage edge, the ring itself does not. */
+  left: calc(-2% + clamp(92px, 26vw, 114px) / 2);
+  transform: translateX(-50%);
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  min-width: 58px;
+  padding: 4px 9px 5px;
+  border-radius: 10px;
+  background: rgba(10, 14, 12, 0.78);
+  border: 1px solid rgba(52, 211, 153, 0.16);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.3);
+  color: #fff;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.self-mood-card:hover:not(:disabled) {
+  border-color: rgba(52, 211, 153, 0.34);
+}
+
+.self-mood-card:focus-visible {
+  outline: 2px solid rgba(52, 211, 153, 0.6);
+  outline-offset: 2px;
+}
+
+.self-mood-card--locked {
+  cursor: default;
+  border-color: rgba(255, 255, 255, 0.08);
+  opacity: 0.7;
+}
+
+.self-mood-card__label {
+  font-size: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(248, 250, 252, 0.48);
+  line-height: 1.2;
+}
+
+.self-mood-card__value {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.self-mood-card__max {
+  margin-left: 1px;
+  font-size: 0.7em;
+  font-weight: 600;
+  color: rgba(248, 250, 252, 0.48);
+}
+
+.self-mood-card__ask {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgba(110, 231, 183, 0.95);
+}
+
+.self-mood-card__lock {
+  width: 10px;
+  height: 10px;
+  color: rgba(248, 250, 252, 0.5);
+}
+
+@media (min-width: 768px) {
+  .self-mood-card {
+    top: calc(8% + 132px + 8px);
+    left: 66px;
+  }
+}
+
+@media (min-width: 1200px) {
+  .self-mood-card {
+    top: calc(8% + 138px + 8px);
+    left: 69px;
+  }
+}
+
+/* Phone grid (src/mobile.css): same cell as the 72px Sleep ring, pushed below it. */
+@media (max-width: 767px) {
+  .app--mobile .self-hub__stage > .self-mood-card {
+    position: relative;
+    inset: auto;
+    grid-area: 1 / 1;
+    align-self: start;
+    justify-self: start;
+    transform: none;
+    margin-top: calc(72px + 6px);
+    min-width: 0;
+    padding: 3px 8px 4px;
+    background: rgba(8, 12, 10, 0.62);
+  }
+}
+
+/* Dialog: centred on desktop, bottom sheet on phones. */
+.self-mood-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.self-mood-dialog__panel {
+  width: min(420px, 100%);
+  padding: 20px;
+  border-radius: var(--radius, 14px);
+  background: var(--color-surface, #111);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.1));
+  box-shadow: var(--shadow-lg, 0 20px 60px rgba(0, 0, 0, 0.5));
+  color: var(--color-text, #fff);
+}
+
+.self-mood-dialog__title {
+  margin: 0 0 4px;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.self-mood-dialog__hint {
+  margin: 0 0 14px;
+  font-size: 0.75rem;
+  color: var(--color-text-muted, rgba(255, 255, 255, 0.6));
+}
+
+.self-mood-dialog__scores {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.self-mood-dialog__score {
+  min-height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.12));
+  background: var(--color-muted-bg, rgba(255, 255, 255, 0.04));
+  color: var(--color-text, #fff);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.self-mood-dialog__score:hover {
+  border-color: var(--color-accent, #10b981);
+}
+
+.self-mood-dialog__score--active {
+  background: var(--color-accent, #10b981);
+  border-color: var(--color-accent, #10b981);
+  color: #fff;
+}
+
+.self-mood-dialog__label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-muted, rgba(255, 255, 255, 0.6));
+}
+
+.self-mood-dialog__note {
+  width: 100%;
+  resize: vertical;
+  min-height: 72px;
+}
+
+.self-mood-dialog__error {
+  margin: 8px 0 0;
+  font-size: 0.8125rem;
+  color: var(--color-danger, #f87171);
+}
+
+.self-mood-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+@media (max-width: 767px) {
+  .self-mood-dialog {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .self-mood-dialog__panel {
+    width: 100%;
+    border-radius: 18px 18px 0 0;
+    padding: 20px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+}

@@ -902,6 +902,79 @@ html:has(.app--projects) body {
   gap: 10px;
 }
 
+.settings-block .notification-settings__select {
+  display: block;
+  width: 180px;
+  max-width: calc(100% - 26px);
+  margin: 8px 0 0 26px;
+}
+
+.notification-settings__inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 0 26px;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+.settings-block .notification-settings__number {
+  width: 84px;
+  margin: 0;
+}
+
+.settings-block .notification-settings__sub {
+  margin-left: 26px;
+  word-break: normal;
+}
+
+.push-toast {
+  position: fixed;
+  left: 50%;
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  transform: translateX(-50%);
+  z-index: 2000;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: min(420px, calc(100vw - 32px));
+  padding: 12px 14px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.push-toast__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.push-toast__title {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.push-toast__body {
+  margin: 2px 0 0;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+.push-toast__close {
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 1.125rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
 .settings-mail-project {
   display: flex;
   flex-wrap: wrap;

@@ -50,6 +50,20 @@ contextBridge.exposeInMainWorld('electronScale', {
   },
 });
 
+contextBridge.exposeInMainWorld('electronNotifications', {
+  show(payload) {
+    return ipcRenderer.invoke('notifications:show', payload);
+  },
+  setBackgroundEnabled(enabled) {
+    ipcRenderer.send('notifications-background-enabled', Boolean(enabled));
+  },
+  onOpen(callback) {
+    const handler = (_event, url) => callback(url);
+    ipcRenderer.on('notifications:open', handler);
+    return () => ipcRenderer.removeListener('notifications:open', handler);
+  },
+});
+
 contextBridge.exposeInMainWorld('electronCameras', {
   snapshot(camera) {
     return ipcRenderer.invoke('cameras:snapshot', camera);

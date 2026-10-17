@@ -37,12 +37,30 @@ function normalizeSamples(rawSamples) {
     .filter((sample) => sample.timestamp && Number.isFinite(sample.bpm));
 }
 
+/**
+ * Average sorted samples into equal time slots. Picking by index let dense workout
+ * samples (every few seconds) take most points and dropped the latest readings.
+ */
 function downsampleSamples(samples, maxPoints = 96) {
   if (samples.length <= maxPoints) return samples;
-  const step = samples.length / maxPoints;
-  return Array.from({ length: maxPoints }, (_, index) =>
-    samples[Math.min(Math.floor(index * step), samples.length - 1)],
-  );
+  const startMs = new Date(samples[0].timestamp).getTime();
+  const endMs = new Date(samples[samples.length - 1].timestamp).getTime();
+  const slotMs = Math.max(1, (endMs - startMs) / maxPoints);
+  const slots = new Map();
+  for (const sample of samples) {
+    const index = Math.min(maxPoints - 1, Math.floor((new Date(sample.timestamp).getTime() - startMs) / slotMs));
+    const slot = slots.get(index) || { sum: 0, count: 0, timestamp: sample.timestamp };
+    slot.sum += sample.bpm;
+    slot.count += 1;
+    slot.timestamp = sample.timestamp;
+    slots.set(index, slot);
+  }
+  return [...slots.keys()]
+    .sort((a, b) => a - b)
+    .map((index) => {
+      const slot = slots.get(index);
+      return { timestamp: slot.timestamp, bpm: Math.round(slot.sum / slot.count) };
+    });
 }
 
 function itemsToHeartRateSamples({ items, timestamp, interval = 300, source = 'sleep' }) {
@@ -130,8 +148,8 @@ export function buildHeartRateChartFromSamples(samples) {
       timestamp: sample.timestamp,
       bpm: sample.bpm,
     })),
-    startLabel: formatTimeLabel(reduced[0].timestamp),
-    endLabel: formatTimeLabel(reduced[reduced.length - 1].timestamp),
+    startLabel: formatTimeLabel(sorted[0].timestamp),
+    endLabel: formatTimeLabel(sorted[sorted.length - 1].timestamp),
     minBpm: Math.min(...bpms),
     maxBpm: Math.max(...bpms),
     sampleCount: sorted.length,

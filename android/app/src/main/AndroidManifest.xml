@@ -42,6 +42,17 @@
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
 
+        <!-- Push notifications (FCM): small icon, tint and channel used when the app is in the background. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_lifev1" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/lifev1_notification" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="lifev1_reminders" />
+
         <service
             android:name=".ScaleForegroundService"
             android:exported="false"

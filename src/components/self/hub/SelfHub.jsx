@@ -1,5 +1,6 @@
 import { SelfHumanFigure } from '../SelfHumanFigure';
 import { SelfFloatingMetric } from './SelfFloatingMetric';
+import { SelfMoodCard } from './SelfMoodCard';
 import { SelfCapacityBanner } from './SelfCapacityBanner';
 import { platform } from '../../../platform';
 
@@ -14,6 +15,7 @@ export function SelfHub({ floatingMetrics, capacity }) {
         <div className="self-hub__ambient" aria-hidden />
         <div className="self-hub__stage">
           <SelfFloatingMetric metric={floatingMetrics.sleep} position="tl" variant="orb" />
+          <SelfMoodCard />
           <SelfFloatingMetric metric={floatingMetrics.heartRate} position="tr" desktopDetailed="hr" />
           <SelfFloatingMetric metric={floatingMetrics.hrv} position="ml" />
           <SelfFloatingMetric metric={floatingMetrics.stress} position="mr" />

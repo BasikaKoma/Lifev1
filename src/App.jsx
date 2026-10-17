@@ -18,6 +18,7 @@ import { OuraConnectModal } from './components/OuraConnectModal';
 import { MetaConnectModal } from './components/brand/MetaConnectModal';
 import { AssistantOrb } from './components/AssistantOrb';
 import { WorkTimer } from './components/WorkTimer';
+import { PushToast } from './components/PushToast';
 import { QuickNoteOrb } from './components/QuickNoteOrb';
 import { AuthView } from './components/AuthView';
 import { ConfigErrorView } from './components/ConfigErrorView';
@@ -39,11 +40,13 @@ import { PersonalBrandView } from './components/brand/PersonalBrandView';
 import { NutritionView } from './components/nutrition/NutritionView';
 import { PathView } from './components/path/PathView';
 import { loadPathBundle, readPathBundleLocal, subscribePathBundle } from './lib/path/store';
-import { pathTabFromPathname } from './utils/appNavigation';
+import { normalizeActiveView, pathTabFromPathname } from './utils/appNavigation';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { platform } from './platform';
 import { useMobilePinchZoom } from './hooks/useMobilePinchZoom';
 import { useCameras } from './hooks/useCameras';
+import { usePushNotifications } from './hooks/usePushNotifications';
+import { requestMoodPrompt } from './lib/mood/store';
 import * as deepLink from './platform/deepLink';
 import { installOfflineFlush } from './lib/sync/offlineQueue';
 import { upsertMetricsBatch } from './lib/health/healthMetrics';
@@ -437,6 +440,33 @@ function MainApp({ user, onSignOut }) {
     setPathTab(tab);
     handleNavigate('path');
   };
+
+  const openFromNotification = (url) => {
+    let pathname = '/';
+    try {
+      const target = new URL(url || '/', window.location.origin);
+      pathname = target.pathname;
+      if (target.searchParams.has('mood')) requestMoodPrompt();
+    } catch {
+      return;
+    }
+    const tab = pathTabFromPathname(pathname);
+    if (tab) {
+      openPath(tab);
+      return;
+    }
+    const [view] = pathname.split('/').filter(Boolean);
+    if (view) handleNavigate(normalizeActiveView(view));
+  };
+
+  const { foregroundNotice, dismissForegroundNotice } = usePushNotifications({
+    userId: user?.id || null,
+    pathBundle,
+    routineTemplates: lifelineRoutineTemplates,
+    lifelineDays,
+    currentProject: projectId && !isLifeline ? { id: projectId, recurring: projectRhythm } : null,
+    onOpen: openFromNotification,
+  });
 
   useEffect(() => {
     return installOfflineFlush(async (item) => {
@@ -980,6 +1010,12 @@ function MainApp({ user, onSignOut }) {
       </div>
 
       <WorkTimer />
+
+      <PushToast
+        notice={foregroundNotice}
+        onOpen={openFromNotification}
+        onDismiss={dismissForegroundNotice}
+      />
 
       <MobileBottomNav
         activeView={activeView}

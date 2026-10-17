@@ -71,6 +71,33 @@ When a new version is published, installed apps download it in the background an
 
 On a new PC, open **Settings** once and paste your OpenAI key for voice. Cloud sync uses the built-in Supabase connection — sign in with your account to access your projects.
 
+## Push notifications
+
+Reminders for Path blocks, the end of a block timer, the day plan, routines and project rhythm, plus an alert when Oura heart-rate samples above your limit (default 100 bpm) arrive: a trigger on `oura_daily_metrics` queues the push and sends it right away. Oura webhooks (`oura-webhook`) re-read the last two days ~30 s after the ring syncs through the Oura app, so new samples land without polling. Each app writes the upcoming reminders (next 36 h) into `push_schedule`; a per-minute cron calls the `push-dispatch` Edge Function, which sends the due ones:
+
+- **iPhone** — Web Push to the home-screen app (Safari → Share → Add to Home Screen, iOS 16.4+)
+- **Android app** — Firebase Cloud Messaging
+- **Desktop (Electron)** — Realtime + native Windows toasts; closing the window keeps lifev1 in the tray
+- **Browsers** — Web Push (Chrome, Edge, Firefox)
+
+Turn them on per device in **Settings → Ειδοποιήσεις**.
+
+### Setup
+
+1. Run `supabase/047_push_notifications.sql`, `048_heart_rate_alerts.sql` and `049_oura_webhooks.sql`, in that order, in the Supabase SQL Editor.
+2. VAPID keys: `npm run push:vapid`. Put the public key in `.env` as `VITE_VAPID_PUBLIC_KEY`, and `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` in `supabase/functions/.env` (gitignored).
+3. Android: create a Firebase project, add an Android app with package `com.lifev1.app`, and save `google-services.json` to `android/app/`. The build turns Android push on when that file exists. Then in Firebase → Project settings → Service accounts, generate a private key and add its JSON (one line) as `FCM_SERVICE_ACCOUNT` in `supabase/functions/.env`.
+4. Upload the secrets and deploy:
+
+```bash
+npx supabase secrets set --env-file supabase/functions/.env
+npx supabase functions deploy push-dispatch oura-webhook oura-webhook-subscriptions
+```
+
+   `OURA_WEBHOOK_VERIFICATION_TOKEN` (any random string) goes in `supabase/functions/.env` too. Then call `oura-webhook-subscriptions` once to register the Oura webhooks (it runs daily afterwards to renew them); events land in `oura_webhook_events`.
+
+5. Ship the clients: `npm run web:deploy` (iPhone/browsers), `npm run cap:build:apk` (Android), `npm run electron:release` (desktop).
+
 ## Features
 
 - **Projects** — Visual planning for milestones, goals, and workstreams
