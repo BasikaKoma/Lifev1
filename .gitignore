@@ -7,3 +7,6 @@ release-android
 *.local
 .env
 supabase/.temp
+
+# Android Studio local IDE state
+android/.idea/
