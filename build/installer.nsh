@@ -1,33 +1,28 @@
-; Close a running instance so files can be overwritten.
-; Do not wipe $INSTDIR or the uninstall registry — recursive delete of the
-; Electron tree is extremely slow on HDD + Defender and makes updates look hung
-; before the copy step even starts. NSIS overwrites in place instead.
+; Auto-update passes --updated. Drop the uninstall command so the previous
+; uninstaller never runs. That uninstaller renames every file in the Electron
+; folder one by one before the copy, which is extremely slow with Defender
+; and looks like a hung update. NSIS then overwrites the install in place.
+; Do not taskkill /T: the installer is a child of lifev1.exe, so /T kills it.
 
 !macro customInit
-  nsExec::ExecToLog 'taskkill /F /IM "${APP_EXECUTABLE_FILENAME}" /T'
-  Pop $0
-  Sleep 1500
-
-  ; Auto-update passes --updated. Skip the old uninstaller: it also recursively
-  ; deletes the install dir (same hang as RMDir /r). Install location stays in
-  ; the registry so files are replaced in place.
   ${GetParameters} $R8
-  ClearErrors
-  ${GetOptions} $R8 "--updated" $R9
-  IfErrors customInit_done
+  StrCpy $R7 $R8
+  customInit_scan:
+    StrCpy $R6 $R7 9
+    StrCmp $R6 "--updated" customInit_skip_uninstall
+    StrCmp $R7 "" customInit_done
+    StrCpy $R7 $R7 "" 1
+    Goto customInit_scan
+
+  customInit_skip_uninstall:
     DeleteRegValue HKCU "${UNINSTALL_REGISTRY_KEY}" "UninstallString"
+    DeleteRegValue HKCU "${UNINSTALL_REGISTRY_KEY}" "QuietUninstallString"
     DeleteRegValue HKLM "${UNINSTALL_REGISTRY_KEY}" "UninstallString"
+    DeleteRegValue HKLM "${UNINSTALL_REGISTRY_KEY}" "QuietUninstallString"
   customInit_done:
 !macroend
 
-!macro customCheckAppRunning
-  DetailPrint "Closing ${PRODUCT_NAME}..."
-  nsExec::ExecToLog 'taskkill /F /IM "${APP_EXECUTABLE_FILENAME}" /T'
-  Pop $0
-  Sleep 1500
-!macroend
-
 !macro customUnInstallCheck
-  ; Previous uninstaller can report a false "app still running" after taskkill.
+  ; Previous uninstaller can report a false "app still running" after it exits.
   ; Continue with in-place overwrite instead of aborting.
 !macroend

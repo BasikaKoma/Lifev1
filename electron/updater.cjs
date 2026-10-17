@@ -116,8 +116,9 @@ function installUpdateNow() {
     if (ran) return;
     ran = true;
     autoUpdater.quitAndInstall(true, true);
-    // If the close-guard blocks app.quit(), force-exit so the installer can replace files.
-    setTimeout(() => app.exit(0), 4000);
+    // Spawn already happened. Leave immediately so the exe and asar are not locked
+    // while NSIS copies files. A long exit keeps the old version on disk.
+    setImmediate(() => app.exit(0));
   };
 
   if (mainWindowRef && !mainWindowRef.isDestroyed() && !mainWindowRef.webContents.isDestroyed()) {
@@ -187,7 +188,7 @@ function setupAutoUpdater(mainWindow, hooks = {}) {
         type: 'info',
         title: 'lifev1',
         message: 'Νέα έκδοση έτοιμη',
-        detail: `Έκδοση ${info.version}. Η εφαρμογή θα κλείσει, θα εγκατασταθεί στο παρασκήνιο και θα ανοίξει ξανά.`,
+        detail: `Έκδοση ${info.version}. Θα κλείσει για να εγκατασταθεί και θα ανοίξει μόνη της όταν τελειώσει. Μέχρι τότε μην την ξανανοίξεις.`,
         buttons: ['Επανεκκίνηση τώρα', 'Αργότερα'],
         defaultId: 0,
       })
