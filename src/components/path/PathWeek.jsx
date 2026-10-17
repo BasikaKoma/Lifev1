@@ -15,6 +15,8 @@ import { formatClock } from '../../lib/workTimer';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { BlockFields, PathModal, TemplateFields } from './PathFields';
 import { PathBlockWorkspace } from './PathBlockWorkspace';
+import { PathWeekMobile } from './PathWeekMobile';
+import { platform } from '../../platform';
 
 const STATUS_CLASS = {
   Done: 'path-pill--done',
@@ -271,6 +273,27 @@ export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteL
     setPendingDelete(null);
   };
 
+  const templatesPanel = path.templates.length ? (
+    <section className="path-panel" style={{ marginTop: 18 }}>
+      <p className="path-card__meta">Weekly templates</p>
+      <ul className="path-side-list">
+        {path.templates.map((template) => {
+          const templateGoal = path.goals.find((goal) => goal.id === template.goalId);
+          return (
+          <li key={template.id}>
+            <button type="button" className="path-day__add" onClick={() => setTemplateEditor(template)}>
+              {templateGoal?.color ? <span className="path-color-dot" style={{ background: templateGoal.color }} /> : null}
+              {WEEKDAYS.find((day) => day.id === template.weekday)?.label} · {template.title}
+            </button>
+            {' '}
+            <button type="button" className="path-day__add" onClick={() => path.removeTemplate(template.id)}>Remove</button>
+          </li>
+          );
+        })}
+      </ul>
+    </section>
+  ) : null;
+
   return (
     <div>
       {workspaceBlock ? (
@@ -292,6 +315,28 @@ export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteL
             if (at) path.setBlockDoneAt(workspaceBlock.id, at);
           }}
         />
+      ) : platform.isMobile ? (
+        <>
+        <PathWeekMobile
+          path={path}
+          dates={dates}
+          today={today}
+          weekStart={weekStart}
+          timer={timer}
+          onWeekStart={onWeekStart}
+          onStatus={requestStatus}
+          onDoneAt={(item, value) => {
+            const at = fromDatetimeLocalValue(value);
+            if (at) path.setBlockDoneAt(item.id, at);
+          }}
+          onOpenBlock={(item) => setWorkspaceId(item.id)}
+          onEditBlock={setEditor}
+          onDeleteBlock={setPendingDelete}
+          onNewBlock={openNew}
+          onNewTemplate={() => setTemplateEditor(createEmptyTemplate({ title: '' }))}
+        />
+        {templatesPanel}
+        </>
       ) : (
       <>
       <div className="path-week-nav">
@@ -371,26 +416,7 @@ export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteL
         })}
       </div>
 
-      {path.templates.length ? (
-        <section className="path-panel" style={{ marginTop: 18 }}>
-          <p className="path-card__meta">Weekly templates</p>
-          <ul className="path-side-list">
-            {path.templates.map((template) => {
-              const templateGoal = path.goals.find((goal) => goal.id === template.goalId);
-              return (
-              <li key={template.id}>
-                <button type="button" className="path-day__add" onClick={() => setTemplateEditor(template)}>
-                  {templateGoal?.color ? <span className="path-color-dot" style={{ background: templateGoal.color }} /> : null}
-                  {WEEKDAYS.find((day) => day.id === template.weekday)?.label} · {template.title}
-                </button>
-                {' '}
-                <button type="button" className="path-day__add" onClick={() => path.removeTemplate(template.id)}>Remove</button>
-              </li>
-              );
-            })}
-          </ul>
-        </section>
-      ) : null}
+      {templatesPanel}
       </>
       )}
 

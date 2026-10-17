@@ -603,81 +603,13 @@ html.is-mobile .quick-note-orb__chip {
   white-space: nowrap;
 }
 
-/* Week toolbar: date range on its own line, Prev / This week / Next and the add button below. */
-.app--mobile .path-week-nav {
-  flex-wrap: wrap;
-  justify-content: flex-start;
-  gap: 8px;
-}
-
-.app--mobile .path-week-nav h2 {
-  order: -1;
-  flex-basis: 100%;
-}
-
-.app--mobile .path-week-nav .path-view__actions {
-  flex: 1 1 auto;
-  min-width: 0;
-  flex-wrap: nowrap;
-  justify-content: flex-start;
-  gap: 6px;
-}
-
-.app--mobile .path-week-nav .path-view__actions .btn {
-  flex: 1 1 0;
-  padding: 8px 10px;
-}
-
-.app--mobile .path-week-nav > .btn--primary {
-  flex: 1 0 100%;
-}
-
 .app--mobile .path-card__top {
   flex-wrap: wrap;
-}
-
-/* Days stack on phones; empty days don't need 220px each. */
-.app--mobile .path-day {
-  min-height: 0;
 }
 
 .app--mobile .path-day__add {
   min-height: 40px;
   padding: 8px 12px;
-}
-
-/* Block card: edit / delete / move as a 2×2 grid of real buttons instead of four 17px glyphs. */
-.app--mobile .path-block__reorder {
-  display: grid;
-  grid-template-columns: repeat(2, 36px);
-  gap: 4px;
-}
-
-.app--mobile .path-block__reorder button {
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border-radius: 10px;
-  font-size: 15px;
-}
-
-.app--mobile .path-block__title {
-  font-size: 0.95rem;
-}
-
-.app--mobile .path-block__time {
-  font-size: 0.8rem;
-}
-
-.app--mobile .path-block__actions {
-  gap: 6px;
-}
-
-.app--mobile .path-block__actions button {
-  min-height: 36px;
-  padding: 8px 12px;
-  border-radius: 10px;
-  font-size: 0.8125rem;
 }
 
 .app--mobile .path-routines__item {
@@ -699,6 +631,499 @@ html.is-mobile .quick-note-orb__chip {
 
 .app--mobile .path-wheel__chart {
   position: static;
+}
+
+/* ── Path week on phones (PathWeekMobile) ──────────────────────── */
+
+.path-mweek {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.path-mweek svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.path-mweek__head {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 8px;
+}
+
+.path-mweek__arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-text);
+}
+
+.path-mweek__range {
+  text-align: center;
+  min-width: 0;
+}
+
+.path-mweek__range h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.path-mweek__range p {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--path-muted, #8b9399);
+}
+
+.path-mweek__strip {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.path-mweek__day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-height: 64px;
+  padding: 8px 0 7px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--path-muted, #8b9399);
+}
+
+.path-mweek__dow {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.path-mweek__num {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--color-text);
+}
+
+.path-mweek__day.is-past .path-mweek__num {
+  color: rgba(245, 245, 245, 0.55);
+}
+
+.path-mweek__day.is-today .path-mweek__dow {
+  color: #93c5fd;
+}
+
+.path-mweek__day.is-selected {
+  border-color: rgba(96, 165, 250, 0.55);
+  background: rgba(59, 130, 246, 0.18);
+  color: #bfdbfe;
+}
+
+.path-mweek__day.is-selected .path-mweek__num {
+  color: #fff;
+}
+
+.path-mweek__dots {
+  display: flex;
+  gap: 2px;
+  min-height: 4px;
+}
+
+.path-mweek__dots i {
+  display: block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(148, 163, 184, 0.55);
+}
+
+.path-mweek__dots i.is-done {
+  background: #34d399;
+}
+
+.path-mweek__dots i.is-skipped {
+  background: rgba(148, 163, 184, 0.25);
+}
+
+.path-mweek__dayhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.path-mweek__dayhead h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.path-mweek__today {
+  min-height: 36px;
+  padding: 6px 14px;
+  border: 1px solid rgba(96, 165, 250, 0.4);
+  border-radius: 999px;
+  background: transparent;
+  color: #93c5fd;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.path-mweek__today-tag {
+  font-size: 12px;
+  font-weight: 600;
+  color: #93c5fd;
+}
+
+.path-mweek__list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.025);
+  overflow: hidden;
+}
+
+.path-mweek__empty {
+  margin: 0;
+  padding: 24px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--path-muted, #8b9399);
+}
+
+.path-mrow {
+  display: grid;
+  grid-template-columns: 42px 3px minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 10px;
+  min-height: 64px;
+  padding: 10px 12px 10px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+}
+
+.path-mrow:last-child {
+  border-bottom: 0;
+}
+
+.path-mrow:active {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.path-mrow__time {
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: rgba(245, 245, 245, 0.7);
+}
+
+.path-mrow__stripe {
+  align-self: stretch;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--path-mrow-stripe);
+}
+
+.path-mrow__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.path-mrow__title {
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.3;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.path-mrow__sub {
+  font-size: 12px;
+  color: var(--path-muted, #8b9399);
+}
+
+.path-mrow__status {
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.path-mrow__status--done { color: #34d399; }
+.path-mrow__status--moved { color: #93c5fd; }
+.path-mrow__status--skipped { color: rgba(148, 163, 184, 0.8); }
+
+.path-mrow--skipped .path-mrow__title,
+.path-mrow--moved .path-mrow__title {
+  color: rgba(245, 245, 245, 0.6);
+}
+
+.path-mrow--timing {
+  background: rgba(245, 193, 108, 0.07);
+}
+
+.path-mrow__action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--color-text);
+}
+
+.path-mrow__action--done {
+  border-color: rgba(52, 211, 153, 0.45);
+  background: rgba(52, 211, 153, 0.14);
+  color: #34d399;
+}
+
+.path-mrow__action--skipped,
+.path-mrow__action--moved {
+  color: rgba(148, 163, 184, 0.8);
+}
+
+.path-mrow__clock {
+  justify-self: end;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #f5c16c;
+}
+
+.path-mweek__add {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.path-mweek__add .btn {
+  gap: 6px;
+  min-height: 44px;
+}
+
+/* Block action sheet (portaled to <body>, so not scoped under .app--mobile). */
+.path-msheet {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(0, 0, 0, 0.55);
+  animation: mobile-more-fade 0.16s ease;
+}
+
+.path-msheet__panel {
+  width: 100%;
+  max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 12px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 10px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  border-radius: 20px 20px 0 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  background: #0c0c12;
+  color: var(--color-text);
+  animation: mobile-more-rise 0.2s ease;
+}
+
+.path-msheet svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.path-msheet__handle {
+  display: block;
+  width: 36px;
+  height: 4px;
+  margin: 0 auto 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.path-msheet__title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.path-msheet__meta {
+  margin: 4px 0 14px;
+  font-size: 13px;
+  color: rgba(148, 163, 184, 0.9);
+}
+
+.path-msheet__primary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 48px;
+  margin-bottom: 14px;
+  border: none;
+  border-radius: 14px;
+  background: var(--color-accent, #1e3a8a);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.path-msheet__live {
+  margin: 0 0 14px;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(245, 193, 108, 0.12);
+  color: #f5c16c;
+  font-size: 14px;
+  font-weight: 650;
+  text-align: center;
+}
+
+.path-msheet__label {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.8);
+}
+
+.path-msheet__segmented {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.path-msheet__segmented button {
+  min-height: 40px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: rgba(226, 232, 240, 0.8);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.path-msheet__segmented button.is-active {
+  background: rgba(59, 130, 246, 0.28);
+  color: #fff;
+}
+
+.path-msheet__done-at {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: -4px 0 14px;
+  font-size: 12px;
+  color: rgba(148, 163, 184, 0.9);
+}
+
+.path-msheet__done-at input {
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--color-text);
+}
+
+.path-msheet__days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+  margin-bottom: 14px;
+}
+
+.path-msheet__days button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-height: 48px;
+  padding: 6px 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(148, 163, 184, 0.9);
+  font-size: 11px;
+}
+
+.path-msheet__days button b {
+  font-size: 15px;
+  color: var(--color-text);
+}
+
+.path-msheet__days button.is-active {
+  border-color: rgba(96, 165, 250, 0.55);
+  background: rgba(59, 130, 246, 0.18);
+}
+
+.path-msheet__list {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.path-msheet__list button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 4px;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: transparent;
+  color: var(--color-text);
+  font-size: 15px;
+  text-align: left;
+}
+
+.path-msheet__list button:disabled {
+  opacity: 0.35;
+}
+
+.path-msheet__list button svg {
+  color: rgba(148, 163, 184, 0.9);
+}
+
+.path-msheet__pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.path-msheet__pair button + button {
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
+  padding-left: 14px;
+}
+
+.path-msheet__list .path-msheet__danger,
+.path-msheet__list .path-msheet__danger svg {
+  color: #f87171;
+}
+
+.path-msheet__list .path-msheet__danger {
+  border-bottom: 0;
 }
 
 /* ── Canvases (Lifeline, Projects) ─────────────────────────────── */
