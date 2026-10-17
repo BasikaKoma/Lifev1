@@ -300,6 +300,45 @@ export function ensureInkGroups(strokes) {
   return migrateStrokeGroups(list);
 }
 
+/**
+ * Every connected chunk at once (same linking rule as findConnectedInkCluster), each with
+ * its merged bounds — e.g. one 3D sign per handwritten word or phrase.
+ */
+export function groupInkChunks(strokes) {
+  const list = (strokes || []).filter((stroke) => stroke?.points?.length);
+  const bounds = list.map((stroke) => getStrokeBounds(stroke));
+  const parent = list.map((_, i) => i);
+  const find = (i) => {
+    let root = i;
+    while (parent[root] !== root) {
+      parent[root] = parent[parent[root]];
+      root = parent[root];
+    }
+    return root;
+  };
+
+  for (let i = 0; i < list.length; i += 1) {
+    if (!bounds[i]) continue;
+    for (let j = i + 1; j < list.length; j += 1) {
+      if (bounds[j] && canLinkInkBounds(bounds[i], bounds[j])) parent[find(j)] = find(i);
+    }
+  }
+
+  const chunks = new Map();
+  list.forEach((stroke, i) => {
+    if (!bounds[i]) return;
+    const root = find(i);
+    const chunk = chunks.get(root);
+    if (chunk) {
+      chunk.strokes.push(stroke);
+      chunk.bounds = unionBounds(chunk.bounds, bounds[i]);
+    } else {
+      chunks.set(root, { id: stroke.id, strokes: [stroke], bounds: bounds[i] });
+    }
+  });
+  return [...chunks.values()];
+}
+
 /** Bounds of a set of strokes (for selection highlight). */
 export function getChunkBounds(strokes, ids) {
   let merged = null;

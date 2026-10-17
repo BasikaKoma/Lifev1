@@ -74,6 +74,8 @@ export const ZoomCanvas = forwardRef(function ZoomCanvas({
   panAxis = 'xy',
   /** Canvas X to keep at the viewport's horizontal center. */
   lockCenterX = null,
+  /** Multiplies vertical drag/wheel pan — a tilted (3D) board foreshortens Y on screen. */
+  panGainY = 1,
 }, ref) {
   const [scale, setScale] = useState(defaultScale);
   const [pan, setPan] = useState(defaultPan);
@@ -116,7 +118,9 @@ export const ZoomCanvas = forwardRef(function ZoomCanvas({
   const paintContentTransform = useCallback((nextScale, nextPan) => {
     const el = contentRef.current;
     if (el) {
-      el.style.transform = `translate3d(${nextPan.x}px, ${nextPan.y}px, 0) scale(${nextScale})`;
+      // scale3d, not scale: a flat board looks the same, but cards standing up in a 3D
+      // tilt keep their angle (a 2D scale squashes Y but not Z, over-rotating them).
+      el.style.transform = `translate3d(${nextPan.x}px, ${nextPan.y}px, 0) scale3d(${nextScale}, ${nextScale}, ${nextScale})`;
     }
     transformRef.current = { scale: nextScale, pan: nextPan };
   }, []);
@@ -379,7 +383,7 @@ export const ZoomCanvas = forwardRef(function ZoomCanvas({
     e.preventDefault();
     setDragging(true);
     const currentPan = transformRef.current.pan;
-    dragStart.current = { x: e.clientX - currentPan.x, y: e.clientY - currentPan.y };
+    dragStart.current = { x: e.clientX, y: e.clientY, pan: currentPan };
     e.currentTarget.setPointerCapture(e.pointerId);
   }, [panExcludeSelector, interactionMode, onInkPointerDown, onSelectPointerDown, onInkDragPointerDown, panAxis]);
 
@@ -392,12 +396,13 @@ export const ZoomCanvas = forwardRef(function ZoomCanvas({
       return;
     }
     const current = transformRef.current;
+    const start = dragStart.current;
     const next = {
-      x: panAxis === 'y' ? current.pan.x : e.clientX - dragStart.current.x,
-      y: e.clientY - dragStart.current.y,
+      x: panAxis === 'y' ? current.pan.x : start.pan.x + (e.clientX - start.x),
+      y: start.pan.y + (e.clientY - start.y) * panGainY,
     };
     commitTransform(current.scale, next, 'idle');
-  }, [panAxis, commitTransform, scheduleReactTransform]);
+  }, [panAxis, panGainY, commitTransform, scheduleReactTransform]);
 
   const stopDrag = useCallback(() => {
     setDragging(false);
@@ -461,13 +466,13 @@ export const ZoomCanvas = forwardRef(function ZoomCanvas({
       }
       setLockedPan({
         x: panAxis === 'y' ? transformRef.current.pan.x : transformRef.current.pan.x - e.deltaX,
-        y: transformRef.current.pan.y - e.deltaY,
+        y: transformRef.current.pan.y - e.deltaY * panGainY,
       }, 'idle');
     };
 
     viewport.addEventListener('wheel', handleWheel, { passive: false });
     return () => viewport.removeEventListener('wheel', handleWheel);
-  }, [minScale, maxScale, panAxis, commitTransform]);
+  }, [minScale, maxScale, panAxis, panGainY, commitTransform]);
 
   useEffect(() => {
     const viewport = viewportRef.current;
@@ -687,8 +692,11 @@ export const ZoomCanvas = forwardRef(function ZoomCanvas({
           onPointerUp={stopDrag}
           onPointerCancel={stopDrag}
         >
-          <div ref={contentRef} className="zoom-canvas__content">
-            {children}
+          {/* Screen-sized plane so a 3D tilt pivots in viewport space, not canvas space. */}
+          <div className="zoom-canvas__space">
+            <div ref={contentRef} className="zoom-canvas__content">
+              {children}
+            </div>
           </div>
         </div>
       </div>

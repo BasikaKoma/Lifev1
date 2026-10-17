@@ -1,6 +1,6 @@
 import { memo, useMemo } from 'react';
 import getStroke from 'perfect-freehand';
-import { getChunkBounds } from '../utils/inkGroups';
+import { getChunkBounds, groupInkChunks } from '../utils/inkGroups';
 
 function strokeToSvgPath(stroke) {
   const points = stroke?.points;
@@ -65,6 +65,32 @@ function LiveStrokePath({ stroke }) {
     />
   );
 }
+
+/**
+ * Ink for the Projects 3D flyover: one absolutely placed box per handwritten chunk, so
+ * each word can stand up from its own baseline (a single board-sized SVG can only lie
+ * flat). Render-only — 3D mode is navigation, so there is no live stroke or selection.
+ */
+export const InkBillboards = memo(function InkBillboards({ strokes = [] }) {
+  const chunks = useMemo(() => groupInkChunks(strokes), [strokes]);
+  return chunks.map(({ id, strokes: members, bounds }) => {
+    // Room for the stroke outline (points are centre-line) and the neon glow.
+    const pad = Math.max(14, ...members.map((stroke) => stroke.size || 3));
+    const x = bounds.minX - pad;
+    const y = bounds.minY - pad;
+    const w = bounds.width + pad * 2;
+    const h = bounds.height + pad * 2;
+    return (
+      <div key={id} className="ink-billboard" style={{ left: x, top: y, width: w, height: h }} aria-hidden="true">
+        <svg width={w} height={h} viewBox={`${x} ${y} ${w} ${h}`}>
+          {members.map((stroke) => (
+            <InkStrokePath key={stroke.id} stroke={stroke} />
+          ))}
+        </svg>
+      </div>
+    );
+  });
+});
 
 /** Render-only ink layer. Pointer capture lives on the zoom viewport via InkGestureHost. */
 export function InkLayer({

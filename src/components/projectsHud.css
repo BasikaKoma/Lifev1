@@ -1,0 +1,438 @@
+/* ── Projects HUD: hologram look for the Projects canvas ──────────────
+   Scoped to .projects-canvas-view--hud (Projects only — Lifeline shares the
+   canvas but never gets the class). Flyover 3D lives under .zoom-canvas--3d. */
+
+@property --hud-scan {
+  syntax: '<percentage>';
+  inherits: false;
+  initial-value: -40%;
+}
+
+/* Deep-space backdrop. The grid moved onto the board plane (below), so it pans,
+   zooms and tilts with the cards instead of sitting still behind them. */
+.projects-canvas-view--hud .zoom-canvas__viewport {
+  position: relative;
+  background-image:
+    radial-gradient(ellipse 90% 55% at 50% -5%, rgba(37, 99, 235, 0.2), transparent 70%),
+    radial-gradient(ellipse 70% 45% at 50% 105%, rgba(14, 165, 233, 0.1), transparent 70%),
+    radial-gradient(1px 1px at 23px 41px, rgba(191, 219, 254, 0.55), transparent 60%),
+    radial-gradient(1px 1px at 151px 97px, rgba(191, 219, 254, 0.35), transparent 60%),
+    radial-gradient(1.5px 1.5px at 211px 183px, rgba(224, 242, 254, 0.45), transparent 60%),
+    radial-gradient(1px 1px at 87px 219px, rgba(191, 219, 254, 0.3), transparent 60%);
+  background-size: auto, auto, 240px 240px, 240px 240px, 240px 240px, 240px 240px;
+}
+
+.projects-canvas-view--hud .projects-canvas-surface::before {
+  content: '';
+  position: absolute;
+  /* Multiple of both grid steps, so lines stay on round canvas coordinates. Kept modest:
+     in 3D the far floor still has to be rasterised even though the fog hides it. */
+  inset: -1440px;
+  pointer-events: none;
+  /* Canvas px — the board opens at ~55% zoom, so lines are drawn thicker than they look. */
+  background-image:
+    linear-gradient(rgba(96, 165, 250, 0.2) 2px, transparent 2px),
+    linear-gradient(90deg, rgba(96, 165, 250, 0.2) 2px, transparent 2px),
+    linear-gradient(rgba(59, 130, 246, 0.1) 1.5px, transparent 1.5px),
+    linear-gradient(90deg, rgba(59, 130, 246, 0.1) 1.5px, transparent 1.5px);
+  background-size: 240px 240px, 240px 240px, 48px 48px, 48px 48px;
+  -webkit-mask-image: radial-gradient(closest-side, #000 60%, transparent);
+  mask-image: radial-gradient(closest-side, #000 60%, transparent);
+}
+
+/* ── Spine: energy beam with light pulses travelling toward the future ── */
+
+.projects-center-line__pulses {
+  display: none;
+}
+
+.projects-canvas-view--hud .projects-center-line:not(.projects-center-line--plan-active) .projects-center-line__stroke {
+  box-shadow:
+    0 0 6px rgba(191, 219, 254, 0.9),
+    0 0 18px rgba(59, 130, 246, 0.8),
+    0 0 48px rgba(37, 99, 235, 0.45),
+    0 0 110px rgba(29, 78, 216, 0.25);
+}
+
+.projects-canvas-view--hud .projects-center-line__stroke::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 4%;
+  bottom: 4%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: linear-gradient(180deg, transparent, rgba(240, 249, 255, 0.85) 12%, rgba(240, 249, 255, 0.85) 88%, transparent);
+  pointer-events: none;
+}
+
+.projects-canvas-view--hud .projects-center-line__pulses {
+  display: block;
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 0;
+  height: 100%;
+  pointer-events: none;
+}
+
+.projects-canvas-view--hud .projects-center-line__pulse {
+  position: absolute;
+  left: -2px;
+  top: 0;
+  width: 4px;
+  height: 160px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, transparent, rgba(240, 249, 255, 0.95) 45%, rgba(147, 197, 253, 0.9) 60%, transparent);
+  box-shadow: 0 0 14px rgba(147, 197, 253, 0.9), 0 0 32px rgba(59, 130, 246, 0.6);
+  opacity: 0;
+  animation: hud-spine-pulse var(--pulse-dur, 6s) linear infinite;
+}
+
+.projects-canvas-view--hud .projects-center-line__pulse:nth-child(2) {
+  animation-delay: calc(var(--pulse-dur, 6s) * -0.34);
+}
+
+.projects-canvas-view--hud .projects-center-line__pulse:nth-child(3) {
+  animation-delay: calc(var(--pulse-dur, 6s) * -0.67);
+}
+
+@keyframes hud-spine-pulse {
+  0% {
+    transform: translateY(var(--line-h, 1000px));
+    opacity: 0;
+  }
+  8%,
+  92% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-160px);
+    opacity: 0;
+  }
+}
+
+.projects-canvas-view--hud .projects-center-line__dot--current::after {
+  content: '';
+  position: absolute;
+  inset: -7px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(191, 219, 254, 0.85);
+  pointer-events: none;
+  animation: hud-ping 2.4s cubic-bezier(0.2, 0.7, 0.3, 1) infinite;
+}
+
+@keyframes hud-ping {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(2.1);
+    opacity: 0;
+  }
+}
+
+/* ── Connection lines carry a travelling spark ── */
+
+.canvas-connection__pulse {
+  display: none;
+}
+
+.projects-canvas-view--hud .canvas-connection__pulse {
+  display: inline;
+  fill: none;
+  stroke: rgba(224, 242, 254, 0.95);
+  stroke-linecap: round;
+  stroke-dasharray: 3 97;
+  pointer-events: none;
+  animation: hud-connection-pulse 3.2s linear infinite;
+}
+
+@keyframes hud-connection-pulse {
+  from {
+    stroke-dashoffset: 100;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* ── Cards: glass panels with a moving highlight and viewfinder corners ── */
+
+.projects-canvas-view--hud .projects-canvas-board .canvas-node {
+  --hud-c: color-mix(in srgb, var(--node-accent-border, var(--node-accent, #93c5fd)) 80%, transparent);
+  --hud-glass:
+    radial-gradient(
+      130% 90% at var(--hud-mx, calc(28% + var(--hud-gx, 0) * 45%)) var(--hud-my, calc(-10% + var(--hud-gy, 0) * 35%)),
+      rgba(255, 255, 255, 0.12),
+      transparent 55%
+    ),
+    linear-gradient(
+      180deg,
+      transparent var(--hud-scan),
+      rgba(147, 197, 253, 0.2) calc(var(--hud-scan) + 6%),
+      transparent calc(var(--hud-scan) + 12%)
+    ),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 38%);
+  --hud-corners: linear-gradient(transparent, transparent);
+  background: var(--hud-glass), var(--hud-corners), var(--node-fill, var(--color-surface)) !important;
+  transition: transform 0.25s ease-out, rotate 0.75s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.2s ease;
+}
+
+.projects-canvas-view--hud .projects-canvas-board .canvas-node:not(.canvas-node--shape-pill):not(.sticky-note-card--chip):not(.sticky-note-card--image) {
+  --hud-corners:
+    linear-gradient(var(--hud-c), var(--hud-c)) left 7px top 7px / 12px 1.5px no-repeat,
+    linear-gradient(var(--hud-c), var(--hud-c)) left 7px top 7px / 1.5px 12px no-repeat,
+    linear-gradient(var(--hud-c), var(--hud-c)) right 7px top 7px / 12px 1.5px no-repeat,
+    linear-gradient(var(--hud-c), var(--hud-c)) right 7px top 7px / 1.5px 12px no-repeat,
+    linear-gradient(var(--hud-c), var(--hud-c)) left 7px bottom 7px / 12px 1.5px no-repeat,
+    linear-gradient(var(--hud-c), var(--hud-c)) left 7px bottom 7px / 1.5px 12px no-repeat,
+    linear-gradient(var(--hud-c), var(--hud-c)) right 7px bottom 7px / 12px 1.5px no-repeat,
+    linear-gradient(var(--hud-c), var(--hud-c)) right 7px bottom 7px / 1.5px 12px no-repeat;
+}
+
+.projects-canvas-view--hud .projects-canvas-board .canvas-node[data-hud-tilt='1'] {
+  z-index: 15;
+  transform: perspective(900px) rotateX(var(--hud-rx, 0deg)) rotateY(var(--hud-ry, 0deg));
+  transition: transform 0.08s linear, rotate 0.75s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.2s ease;
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.5),
+    0 0 28px color-mix(in srgb, var(--hud-c) 40%, transparent);
+}
+
+.projects-canvas-view--hud [data-hud-gyro='1'] .projects-canvas-board .canvas-node:not([data-hud-tilt]) {
+  transform: perspective(900px) rotateX(calc(var(--hud-gy, 0) * -4deg)) rotateY(calc(var(--hud-gx, 0) * 5deg));
+  transition: rotate 0.75s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.projects-canvas-view--hud .projects-canvas-board .canvas-node--selected {
+  outline-color: color-mix(in srgb, var(--hud-c) 70%, #fff);
+  animation: hud-scan 0.9s ease-out 1;
+}
+
+@keyframes hud-scan {
+  from {
+    --hud-scan: -15%;
+  }
+  to {
+    --hud-scan: 110%;
+  }
+}
+
+/* Checkpoints get the same glass + viewfinder corners as the cards, sized for a pill.
+   Only background-image is set, so the done / plan variants keep their own fill colour. */
+.projects-canvas-view--hud .projects-canvas-board .checkpoint-projects-item {
+  --hud-c: rgba(134, 239, 172, 0.75);
+  background-image:
+    radial-gradient(140% 120% at 18% -30%, rgba(255, 255, 255, 0.11), transparent 55%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 45%),
+    linear-gradient(var(--hud-c), var(--hud-c)),
+    linear-gradient(var(--hud-c), var(--hud-c)),
+    linear-gradient(var(--hud-c), var(--hud-c)),
+    linear-gradient(var(--hud-c), var(--hud-c)),
+    linear-gradient(var(--hud-c), var(--hud-c)),
+    linear-gradient(var(--hud-c), var(--hud-c)),
+    linear-gradient(var(--hud-c), var(--hud-c)),
+    linear-gradient(var(--hud-c), var(--hud-c));
+  background-size: 100% 100%, 100% 100%, 8px 1.5px, 1.5px 8px, 8px 1.5px, 1.5px 8px, 8px 1.5px, 1.5px 8px, 8px 1.5px, 1.5px 8px;
+  background-position: 0 0, 0 0, left 4px top 4px, left 4px top 4px, right 4px top 4px, right 4px top 4px, left 4px bottom 4px, left 4px bottom 4px, right 4px bottom 4px, right 4px bottom 4px;
+  background-repeat: no-repeat;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 0 16px rgba(34, 197, 94, 0.16),
+    0 6px 18px rgba(0, 0, 0, 0.45);
+}
+
+/* ── Screen-space overlays: depth-of-field vignette and flyover fog ── */
+
+/* No z-index: they paint right after the canvas in DOM order, so the rhythm panel,
+   FAB dock and orbs rendered later stay on top and sharp. */
+.projects-hud__vignette,
+.projects-hud__dof,
+.projects-hud__fog {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.projects-hud__vignette {
+  background: radial-gradient(ellipse 80% 75% at 50% 48%, transparent 58%, rgba(0, 2, 8, 0.6) 100%);
+}
+
+/* Desktop only (phones skip it — a full-screen backdrop blur costs too much while panning). */
+.projects-hud__dof {
+  -webkit-backdrop-filter: blur(2.5px);
+  backdrop-filter: blur(2.5px);
+  -webkit-mask-image: radial-gradient(ellipse 75% 70% at 50% 48%, transparent 62%, #000 100%);
+  mask-image: radial-gradient(ellipse 75% 70% at 50% 48%, transparent 62%, #000 100%);
+}
+
+/* Distance haze over the far floor, lit from beyond the horizon. Light enough that the
+   far milestones still read as shapes. */
+.projects-hud__fog {
+  bottom: auto;
+  height: 36%;
+  opacity: 0;
+  background:
+    radial-gradient(ellipse 70% 45% at 50% 0%, rgba(37, 99, 235, 0.26), transparent 75%),
+    linear-gradient(180deg, rgba(2, 4, 10, 0.82) 0%, rgba(2, 4, 10, 0.55) 30%, rgba(2, 4, 10, 0.2) 65%, transparent 100%);
+  transition: opacity 0.75s ease;
+}
+
+.projects-canvas-view--flyover .projects-hud__fog {
+  opacity: 1;
+}
+
+.projects-canvas-view--flyover .projects-hud__dof {
+  -webkit-backdrop-filter: blur(1.5px);
+  backdrop-filter: blur(1.5px);
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, transparent 28%);
+  mask-image: linear-gradient(180deg, #000 0%, transparent 28%);
+}
+
+/* ── Flyover 3D: the board tilts back like a road, cards stand up like signs ── */
+
+/* --fly-persp is 1.35 × the viewport height (set from JS), so the camera sits at the same
+   height on a phone and a desktop. The true horizon (35% − 135% × cot 55°) stays above the
+   screen; the fog fades the far floor out before the grid ends. */
+.zoom-canvas--flyover {
+  --fly-tilt: 55deg;
+}
+
+.zoom-canvas--3d .zoom-canvas__viewport {
+  position: relative;
+  perspective: var(--fly-persp, 1100px);
+  perspective-origin: 50% 35%;
+}
+
+.zoom-canvas--3d .zoom-canvas__space {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transform-origin: 50% 80%;
+  transform: rotateX(var(--fly-tilt, 0deg));
+  transition: transform 0.75s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.zoom-canvas--3d .zoom-canvas__content,
+.zoom-canvas--3d .projects-canvas-surface,
+.zoom-canvas--3d .projects-canvas-board {
+  transform-style: preserve-3d;
+}
+
+.zoom-canvas--3d .projects-canvas-board .canvas-node,
+.zoom-canvas--3d .projects-canvas-board .checkpoint-projects-item {
+  transform-origin: 50% 100%;
+  rotate: x calc(var(--fly-tilt, 0deg) * -1);
+}
+
+/* Cards and checkpoints mirror faintly in the glossy floor (the reflection hangs below
+   the floor line). */
+.zoom-canvas--flyover .projects-canvas-board .canvas-node:not(.sticky-note-card--chip) {
+  -webkit-box-reflect: below 3px linear-gradient(transparent 50%, rgba(255, 255, 255, 0.32));
+}
+
+.zoom-canvas--flyover .projects-canvas-board .checkpoint-projects-item {
+  -webkit-box-reflect: below 2px linear-gradient(transparent 45%, rgba(255, 255, 255, 0.26));
+}
+
+.zoom-canvas--3d .projects-canvas-board .checkpoint-projects-item {
+  transition: rotate 0.75s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* The spine becomes a lit runway: a soft light band with edge lights every 64px. */
+.zoom-canvas--3d .projects-center-line__glow {
+  width: 132px;
+  opacity: 1;
+  background:
+    radial-gradient(circle at 50% 32px, rgba(191, 219, 254, 0.95) 0 2px, rgba(96, 165, 250, 0.45) 3px, transparent 6px) 0 0 / 14px 64px repeat-y,
+    radial-gradient(circle at 50% 32px, rgba(191, 219, 254, 0.95) 0 2px, rgba(96, 165, 250, 0.45) 3px, transparent 6px) 100% 0 / 14px 64px repeat-y,
+    linear-gradient(90deg, transparent, rgba(37, 99, 235, 0.1) 22%, rgba(96, 165, 250, 0.2) 50%, rgba(37, 99, 235, 0.1) 78%, transparent);
+}
+
+/* Handwriting stands up too: InkBillboards renders one box per word/phrase while the
+   flat ink layer hides. Leaving 3D, the signs fold flat again before the swap back. */
+.zoom-canvas--3d .ink-layer {
+  visibility: hidden;
+}
+
+.ink-billboard {
+  position: absolute;
+  pointer-events: none;
+  transform-origin: 50% 100%;
+  rotate: x calc(var(--fly-tilt, 0deg) * -1);
+  filter: drop-shadow(0 0 0 rgba(191, 219, 254, 0)) drop-shadow(0 0 0 rgba(59, 130, 246, 0));
+  transition: rotate 0.75s cubic-bezier(0.2, 0.8, 0.2, 1), filter 0.75s ease;
+}
+
+.ink-billboard svg {
+  display: block;
+}
+
+.zoom-canvas--flyover .ink-billboard {
+  filter: drop-shadow(0 0 2px rgba(191, 219, 254, 0.9)) drop-shadow(0 0 9px rgba(59, 130, 246, 0.55));
+  -webkit-box-reflect: below 2px linear-gradient(transparent 45%, rgba(255, 255, 255, 0.28));
+  animation: hud-stand-up 0.75s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Signs mount already tilted; this lets them rise with the board instead of popping up. */
+@keyframes hud-stand-up {
+  from {
+    rotate: x 0deg;
+  }
+}
+
+/* Standing cards would leave their spine stubs floating mid-air; the dots carry the link. */
+.zoom-canvas--3d .projects-canvas-board .canvas-node::before,
+.zoom-canvas--3d .projects-canvas-board .canvas-node::after {
+  opacity: 0;
+}
+
+/* Navigation only — editing chrome would sit on the tilted floor. */
+.zoom-canvas--3d .canvas-floating-toolbar,
+.zoom-canvas--3d .projects-center-line__handle,
+.zoom-canvas--3d .projects-center-line__arm-bridge {
+  display: none;
+}
+
+/* Not --sm: on phones the dock strips the backdrop from --sm buttons (meant for − / +). */
+.projects-canvas__view-toggle {
+  width: 40px;
+  height: 40px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.projects-canvas__view-toggle[aria-pressed='true'] {
+  color: #fff;
+  border-color: rgba(147, 197, 253, 0.85);
+  background: linear-gradient(145deg, #2563eb, #1e3a8a);
+  box-shadow: 0 0 0 1px rgba(147, 197, 253, 0.35), 0 0 22px rgba(59, 130, 246, 0.6);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .projects-canvas-view--hud .projects-center-line__pulse,
+  .projects-canvas-view--hud .projects-center-line__dot--current::after,
+  .projects-canvas-view--hud .canvas-connection__pulse,
+  .projects-canvas-view--hud .projects-canvas-board .canvas-node--selected {
+    animation: none;
+  }
+
+  .projects-canvas-view--hud .projects-center-line__pulse {
+    display: none;
+  }
+
+  .zoom-canvas--3d .zoom-canvas__space,
+  .projects-canvas-view--hud .projects-canvas-board .canvas-node,
+  .zoom-canvas--3d .projects-canvas-board .checkpoint-projects-item,
+  .ink-billboard,
+  .projects-hud__fog {
+    transition: none;
+  }
+
+  .zoom-canvas--flyover .ink-billboard {
+    animation: none;
+  }
+}

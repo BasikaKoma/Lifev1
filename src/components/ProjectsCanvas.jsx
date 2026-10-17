@@ -11,6 +11,7 @@ import { CanvasConnections, frontConnectionColor } from './CanvasConnections';
 import { CanvasFloatingToolbar } from './CanvasFloatingToolbar';
 import { CanvasTopBar } from './CanvasTopBar';
 import { CanvasInkSurface } from './CanvasInkSurface';
+import { InkBillboards } from './InkLayer';
 import { InkSelectionHost } from './InkSelectionHost';
 import { InkDragHost } from './InkDragHost';
 import { InkConvertModal } from './InkConvertModal';
@@ -72,6 +73,8 @@ import {
   connectionAnchor,
 } from '../utils/canvasNodes';
 import { CanvasGroupDragContext, CanvasMultiSelectContext } from '../hooks/useCanvasMultiSelect';
+import { useHudGyroParallax, useHudPointerTilt } from '../hooks/useProjectsHud';
+import './projectsHud.css';
 import {
   getChildRefs,
   getConnectedRefs,
@@ -129,6 +132,33 @@ import {
 const PROJECTS_OPEN_SCALE = 0.55;
 const canvasViewCache = new Map();
 const appliedProjectsFocusTokens = new Set();
+
+const FLYOVER_STORAGE_KEY = 'lifev1.projects.flyover';
+/** Matches the 0.75s tilt transition in projectsHud.css, plus a frame. */
+const FLYOVER_LEAVE_MS = 780;
+/** The tilted board foreshortens Y; this keeps drags roughly under the finger. */
+const FLYOVER_PAN_GAIN_Y = 1.6;
+/** Screen height (fraction) where the camera sets "now" down — just above the pivot. */
+const FLYOVER_NOW_Y = 0.7;
+/** Minimum zoom in 3D: the 2D open scale reads as a toy model once tilted. */
+const FLYOVER_SCALE = 0.85;
+const FLYOVER_SCALE_MOBILE = 0.72;
+
+function readFlyoverPreference() {
+  try {
+    return window.localStorage.getItem(FLYOVER_STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeFlyoverPreference(on) {
+  try {
+    window.localStorage.setItem(FLYOVER_STORAGE_KEY, on ? '1' : '0');
+  } catch {
+    /* Storage blocked — the toggle still works for this session. */
+  }
+}
 
 function canvasViewCacheKey(projectId, isLifeline) {
   return `${isLifeline ? 'lifeline' : 'projects'}:${projectId || ''}`;
@@ -448,6 +478,9 @@ function ProjectsCenterLine({
         left: lineMetrics.centerX,
         top: lineMetrics.top,
         height: lineMetrics.height,
+        '--line-h': `${lineMetrics.height}px`,
+        // Constant pulse speed (~260px/s) whatever the spine length.
+        '--pulse-dur': `${Math.max(4, Math.min(14, lineMetrics.height / 260)).toFixed(2)}s`,
         ...(lifelineDaySpacing != null ? { '--ll-day-spacing': `${lifelineDaySpacing}px` } : {}),
       }}
       onPointerDown={locked ? undefined : startMove}
@@ -463,6 +496,13 @@ function ProjectsCenterLine({
     >
       <div className="projects-center-line__glow" aria-hidden="true" />
       <div className="projects-center-line__stroke" />
+      {!lifelineDayTicks ? (
+        <div className="projects-center-line__pulses" aria-hidden="true">
+          <span className="projects-center-line__pulse" />
+          <span className="projects-center-line__pulse" />
+          <span className="projects-center-line__pulse" />
+        </div>
+      ) : null}
       {(planWindows || []).map((win) => (
         <div
           key={win.stageId}
@@ -786,6 +826,7 @@ const CanvasBoard = memo(function CanvasBoard({
   planCheckpoints = [],
   onOpenPlanPanel,
   canvasInk = [],
+  inkBillboards = false,
   selectedStrokeIds = [],
   inkSurfaceSize,
   inkTool = 'pan',
@@ -850,6 +891,8 @@ const CanvasBoard = memo(function CanvasBoard({
             width={inkSurfaceSize.width}
             height={inkSurfaceSize.height}
           />
+          {/* 3D flyover: handwriting stands up word by word (the flat layer hides). */}
+          {inkBillboards ? <InkBillboards strokes={canvasInk} /> : null}
 
           <InkSelectionHost
             strokes={canvasInk}
@@ -3574,12 +3617,143 @@ export function ProjectsCanvas({
     onRemoveCanvasInkStrokes,
   ]);
 
+  // ── Hologram HUD (always on for Projects) and the 2D/3D flyover toggle ──
+  const isHud = !isLifeline;
+  // 'leaving' keeps the 3D context alive while the board tilts back flat.
+  const [flyoverPhase, setFlyoverPhase] = useState(() => (readFlyoverPreference() ? 'on' : 'off'));
+  const flyover = isHud && flyoverPhase === 'on';
+  const flyover3d = isHud && flyoverPhase !== 'off';
+  const hudHostRef = useRef(null);
+  const flyoverPanRef = useRef(null);
+  const flyoverReturnScaleRef = useRef(null);
+
+  useHudPointerTilt(hudHostRef, isHud && !flyover3d && !platform.isMobile);
+  useHudGyroParallax(hudHostRef, isHud && !flyover3d && platform.isMobile);
+
+  useEffect(() => {
+    if (flyoverPhase === 'leaving') {
+      const timer = window.setTimeout(() => setFlyoverPhase('off'), FLYOVER_LEAVE_MS);
+      return () => window.clearTimeout(timer);
+    }
+    writeFlyoverPreference(flyoverPhase === 'on');
+    return undefined;
+  }, [flyoverPhase]);
+
+  // 3D is for looking around: drop any selection so no editing chrome lies on the tilted floor.
+  useEffect(() => {
+    if (!flyover) return;
+    setSelectedNodeRef(null);
+    setSpineSelected(false);
+    setOriginSelected(false);
+    setSelectedStrokeIds([]);
+    cancelConnectMode();
+  }, [flyover, setSelectedNodeRef, cancelConnectMode]);
+
+  useEffect(() => () => flyoverPanRef.current?.stop(), []);
+
+  // Perspective tracks the viewport height so the horizon sits at the same fraction of
+  // the screen on a phone and on a desktop (see projectsHud.css).
+  useEffect(() => {
+    const host = hudHostRef.current;
+    if (!flyover3d || !host) return undefined;
+    const apply = () => host.style.setProperty('--fly-persp', `${Math.round(Math.max(480, host.clientHeight) * 1.35)}px`);
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(host);
+    return () => {
+      observer.disconnect();
+      host.style.removeProperty('--fly-persp');
+    };
+  }, [flyover3d]);
+
+  // Entering 3D flies the camera to the next open checkpoint ("now"), set down near the
+  // bottom of the screen so the future runs ahead toward the horizon. Leaving zooms back
+  // to the 2D scale about that same spot, so wherever you flew to stays in view.
+  const toggleFlyover = useCallback(() => {
+    const entering = flyoverPhase !== 'on';
+    setFlyoverPhase(entering ? 'on' : 'leaving');
+    const zoom = zoomCanvasRef.current;
+    const viewport = transformRef.current?.viewportRef?.current;
+    if (!zoom || !viewport) return;
+    const w = viewport.clientWidth;
+    const h = viewport.clientHeight;
+    const anchorX = w / 2;
+    const anchorY = h * FLYOVER_NOW_Y;
+    const { scale, pan } = zoom.getTransform();
+    if (entering) {
+      flyoverReturnScaleRef.current = scale;
+      const focus = getProjectsOpenFocusPoint(projectsCheckpoints, stages, projectsLayout)
+        || (typeof lineMetrics?.bottomY === 'number' ? { x: lineMetrics.centerX, y: lineMetrics.bottomY } : null);
+      if (!focus) return;
+      const s = Math.max(scale, platform.isMobile ? FLYOVER_SCALE_MOBILE : FLYOVER_SCALE);
+      zoom.animateTo(s, { x: anchorX - focus.x * s, y: anchorY - focus.y * s }, FLYOVER_LEAVE_MS);
+      return;
+    }
+    const back = flyoverReturnScaleRef.current;
+    if (typeof back !== 'number' || Math.abs(back - scale) < 0.001) return;
+    const k = back / scale;
+    zoom.animateTo(back, {
+      x: anchorX - (anchorX - pan.x) * k,
+      y: anchorY - (anchorY - pan.y) * k,
+    }, FLYOVER_LEAVE_MS);
+  }, [flyoverPhase, projectsCheckpoints, stages, projectsLayout, lineMetrics]);
+
+  // Card, spine and timeline-dot drags assume a flat board, so in 3D a press on any of
+  // them pans the view instead. Buttons and form controls inside cards still work.
+  const handleFlyoverPointerDownCapture = useCallback((e) => {
+    if (flyoverPanRef.current) {
+      // A second finger: let ZoomCanvas take over the pinch.
+      flyoverPanRef.current.stop();
+      return;
+    }
+    const target = e.target;
+    if (!(target instanceof Element)) return;
+    const board = target.closest('.projects-canvas-board');
+    if (!board || target === board) return;
+    if (target.closest('button, a, input, textarea, select, label, [contenteditable="true"]')) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    const zoom = zoomCanvasRef.current;
+    if (!zoom) return;
+    e.stopPropagation();
+
+    const { pointerId, clientX: startX, clientY: startY } = e;
+    const startPan = zoom.getPan();
+    function onMove(ev) {
+      if (ev.pointerId !== pointerId) return;
+      zoom.paintPan({
+        x: startPan.x + (ev.clientX - startX),
+        y: startPan.y + (ev.clientY - startY) * FLYOVER_PAN_GAIN_Y,
+      });
+    }
+    function onUp(ev) {
+      if (ev.pointerId === pointerId) stop();
+    }
+    function stop() {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      flyoverPanRef.current = null;
+      zoom.setPan(zoom.getPan());
+    }
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+    flyoverPanRef.current = { stop };
+  }, []);
+
+  // The HUD draws its grid on the board plane; drop the theme's static dot grid
+  // unless the user picked a background image.
+  const zoomViewportStyle = useMemo(() => {
+    if (!isHud || activeTheme?.canvas?.backgroundImage) return viewportThemeStyle;
+    return { backgroundColor: viewportThemeStyle.backgroundColor };
+  }, [isHud, activeTheme, viewportThemeStyle]);
+
   return (
     <CanvasMultiSelectContext.Provider value={selectedNodeKeys}>
     <CanvasGroupDragContext.Provider value={groupDragApi}>
     <section
       ref={containerRef}
-      className={`projects-canvas-view${isFullscreen ? ' projects-canvas-view--fullscreen' : ''}${dayView.isActive ? ' projects-canvas-view--day-view' : ''}`}
+      className={`projects-canvas-view${isFullscreen ? ' projects-canvas-view--fullscreen' : ''}${dayView.isActive ? ' projects-canvas-view--day-view' : ''}${isHud ? ' projects-canvas-view--hud' : ''}${flyover ? ' projects-canvas-view--flyover' : ''}`}
       data-day-view-phase={dayView.phase}
     >
       <input
@@ -3647,7 +3821,9 @@ export function ProjectsCanvas({
         />
 
       <div
+        ref={hudHostRef}
         className="projects-canvas__stage"
+        onPointerDownCapture={flyover3d ? handleFlyoverPointerDownCapture : undefined}
         onPointerMove={(e) => trackPointerClient(e.clientX, e.clientY)}
         onPointerLeave={handleCanvasPointerLeave}
         onDragOver={handleCanvasDragOver}
@@ -3680,7 +3856,7 @@ export function ProjectsCanvas({
           <ZoomCanvas
             ref={zoomCanvasRef}
             key={isLifeline ? 'lifeline-v8' : 'projects'}
-            className="projects-canvas zoom-canvas--no-toolbar"
+            className={`projects-canvas zoom-canvas--no-toolbar${flyover3d ? ' zoom-canvas--3d' : ''}${flyover ? ' zoom-canvas--flyover' : ''}`}
             defaultScale={cachedCanvasView?.scale ?? (isLifeline ? 0.9 : PROJECTS_OPEN_SCALE)}
             defaultPan={isLifeline ? lifelineDefaultPan : (cachedCanvasView?.pan ?? projectsDefaultPan)}
             minScale={isLifeline ? LIFELINE_ZOOM.minScale : 0.25}
@@ -3688,14 +3864,15 @@ export function ProjectsCanvas({
             interceptWheel={isLifeline ? handleLifelineWheel : undefined}
             interceptPinch={isLifeline ? handleLifelinePinch : undefined}
             panAxis={isLifeline ? 'y' : 'xy'}
+            panGainY={flyover ? FLYOVER_PAN_GAIN_Y : 1}
             lockCenterX={isLifeline ? (projectsLayout.centerX ?? 480) : null}
             showToolbar={false}
-            viewportStyle={viewportThemeStyle}
+            viewportStyle={zoomViewportStyle}
             onTransformChange={handleTransformChange}
-            interactionMode={inkInteractionMode}
-            onInkPointerDown={isLifeline ? undefined : (e) => inkDownRef.current?.(e)}
-            onSelectPointerDown={isLifeline ? undefined : (e) => selectDownRef.current?.(e)}
-            onInkDragPointerDown={isLifeline ? undefined : (e) => inkDragDownRef.current?.(e)}
+            interactionMode={flyover3d ? 'pan' : inkInteractionMode}
+            onInkPointerDown={isLifeline || flyover3d ? undefined : (e) => inkDownRef.current?.(e)}
+            onSelectPointerDown={isLifeline || flyover3d ? undefined : (e) => selectDownRef.current?.(e)}
+            onInkDragPointerDown={isLifeline || flyover3d ? undefined : (e) => inkDragDownRef.current?.(e)}
             scrollToCanvasPoint={
               isLifeline
                 ? lifelineScrollTarget
@@ -3812,8 +3989,9 @@ export function ProjectsCanvas({
             planCheckpoints={planCheckpoints}
             onOpenPlanPanel={handleOpenPlanPanel}
             canvasInk={isLifeline ? [] : canvasInk}
+            inkBillboards={flyover3d}
             inkSurfaceSize={inkSurfaceSize}
-            inkTool={isLifeline || platform.isMobile ? 'pan' : drawTool}
+            inkTool={isLifeline || platform.isMobile || flyover3d ? 'pan' : drawTool}
             inkColor={drawColor}
             inkSize={drawSize}
             onAddInkStroke={isLifeline ? undefined : onAddCanvasInkStroke}
@@ -3846,6 +4024,14 @@ export function ProjectsCanvas({
             dayViewPhase={DAY_VIEW_PHASE.timeline}
           />
           </ZoomCanvas>
+
+          {isHud ? (
+            <>
+              <div className="projects-hud__vignette" aria-hidden="true" />
+              {!platform.isMobile ? <div className="projects-hud__dof" aria-hidden="true" /> : null}
+              <div className="projects-hud__fog" aria-hidden="true" />
+            </>
+          ) : null}
 
           {!isLifeline && rhythmOpen ? (
             <ProjectRhythmPanel
@@ -3915,6 +4101,18 @@ export function ProjectsCanvas({
                 </svg>
               </button>
             </div>
+            {isHud ? (
+              <button
+                type="button"
+                className="projects-canvas__fab-btn projects-canvas__view-toggle"
+                onClick={toggleFlyover}
+                aria-pressed={flyover}
+                title={flyover ? 'Επιστροφή σε 2D' : 'Προβολή 3D'}
+                aria-label={flyover ? 'Επιστροφή σε 2D' : 'Προβολή 3D'}
+              >
+                3D
+              </button>
+            ) : null}
             {!platform.isMobile && (
               <>
             <button

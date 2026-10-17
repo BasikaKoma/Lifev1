@@ -65,6 +65,13 @@ export function CanvasConnections({
               stroke={color}
               strokeWidth={lineTheme.strokeWidth}
             />
+            {/* Travelling spark; hidden unless the Projects HUD is on. */}
+            <path
+              d={d}
+              className="canvas-connection__pulse"
+              strokeWidth={lineTheme.strokeWidth + 1.5}
+              pathLength="100"
+            />
           </g>
         );
       })}
