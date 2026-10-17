@@ -372,6 +372,230 @@
   pointer-events: none;
 }
 
+/* Leader lines from metric cards to their organs: above the figure, below the cards.
+ * Coordinates are written every frame by OrganLinkProjector (stage CSS px). */
+.self-hub__links {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 3;
+  overflow: visible;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+
+.self-hub__links.is-ready {
+  opacity: 1;
+}
+
+.self-organ-link {
+  color: var(--organ-color, #34d399);
+  transition: opacity 0.3s ease;
+}
+
+.self-organ-link > * {
+  transition: opacity 0.3s ease, stroke-width 0.3s ease;
+}
+
+.self-organ-link line {
+  stroke: currentColor;
+  stroke-width: 1;
+  stroke-linecap: round;
+  opacity: 0.55;
+}
+
+.self-organ-link__stub {
+  opacity: 0.8;
+}
+
+.self-organ-link__start,
+.self-organ-link__dot {
+  fill: currentColor;
+}
+
+.self-organ-link__start {
+  opacity: 0.7;
+}
+
+.self-organ-link__halo {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1;
+  opacity: 0.35;
+}
+
+.self-organ-link[data-empty] line {
+  stroke-dasharray: 3 4;
+  opacity: 0.28;
+}
+
+.self-organ-link[data-empty] .self-organ-link__dot {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1;
+  opacity: 0.5;
+}
+
+.self-organ-link[data-empty] .self-organ-link__halo,
+.self-organ-link[data-empty] .self-organ-link__start {
+  opacity: 0.2;
+}
+
+.self-hub__links.has-active .self-organ-link:not(.is-active) > * {
+  opacity: 0.12;
+}
+
+.self-organ-link.is-active line {
+  stroke-width: 1.5;
+  opacity: 0.95;
+}
+
+.self-organ-link.is-active .self-organ-link__halo {
+  opacity: 0.8;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .self-hub__links,
+  .self-organ-link,
+  .self-organ-link > * {
+    transition: none;
+  }
+}
+
+/* Body circumferences beside the figure (positioned every frame by OrganLinkProjector).
+ * Hidden until first placed so they never flash at the stage's top-left corner. */
+.self-body-measure {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 0.04rem;
+  visibility: hidden;
+  white-space: nowrap;
+  will-change: transform;
+}
+
+.self-body-measure--left {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.self-body-measure--right {
+  align-items: flex-start;
+}
+
+.self-body-measure__label {
+  font-size: clamp(0.5rem, 1.5vw, 0.625rem);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #6ee7b7;
+  opacity: 0.85;
+}
+
+.self-body-measure__value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: clamp(0.8rem, 2.4vw, 1rem);
+  font-weight: 600;
+  color: rgba(248, 250, 252, 0.94);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 10px rgba(0, 0, 0, 0.85);
+}
+
+.self-body-measure__unit {
+  margin-left: 0.18rem;
+  font-size: 0.62rem;
+  font-weight: 500;
+  color: rgba(248, 250, 252, 0.5);
+}
+
+.self-body-measure--log .waist-log {
+  margin-top: 0.08rem;
+}
+
+.self-body-measure--log .waist-log__row {
+  gap: 0.2rem;
+}
+
+.self-body-measure--log .waist-log__input {
+  width: 3.2rem;
+  flex: 0 0 3.2rem;
+  min-height: 1.35rem;
+  padding: 0.02rem 0.28rem;
+  font-size: 0.7rem;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.self-body-measure--log .waist-log__input::-webkit-outer-spin-button,
+.self-body-measure--log .waist-log__input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.self-body-measure--log .waist-log__input::placeholder {
+  color: rgba(248, 250, 252, 0.32);
+}
+
+.self-body-measure--log .waist-log__unit {
+  font-size: 0.62rem;
+}
+
+.self-body-measure--log .waist-log__submit {
+  min-height: 1.35rem;
+  padding: 0.05rem 0.32rem;
+  font-size: 0.62rem;
+  line-height: 1.2;
+}
+
+.self-body-measure--log .waist-log__error {
+  max-width: 9rem;
+  font-size: 0.58rem;
+  line-height: 1.25;
+  white-space: normal;
+}
+
+.self-organ-link--measure line {
+  opacity: 0.6;
+}
+
+/* Phones: the figure is small, so the circumference readouts step down a size. */
+@media (max-width: 767px) {
+  .app--mobile .self-body-measure__label {
+    font-size: 7px;
+    letter-spacing: 0.06em;
+  }
+
+  .app--mobile .self-body-measure__value {
+    font-size: 10.5px;
+  }
+
+  .app--mobile .self-body-measure__unit {
+    margin-left: 0.12rem;
+    font-size: 7.5px;
+  }
+
+  .app--mobile .self-body-measure--log .waist-log__input {
+    width: 2.6rem;
+    flex-basis: 2.6rem;
+    min-height: 1.15rem;
+    font-size: 0.62rem;
+  }
+
+  .app--mobile .self-body-measure--log .waist-log__unit {
+    font-size: 0.56rem;
+  }
+
+  .app--mobile .self-body-measure--log .waist-log__submit {
+    min-height: 1.15rem;
+    padding: 0.02rem 0.26rem;
+    font-size: 0.56rem;
+  }
+}
+
 /* Floating metric pills */
 .self-float-metric {
   position: absolute;
@@ -672,87 +896,6 @@
 .self-float-metric__calories-sep {
   font-size: 0.5rem;
   color: rgba(248, 250, 252, 0.25);
-}
-
-.self-float-metric__waist {
-  display: block;
-  margin-top: 0.18rem;
-  font-size: clamp(0.5625rem, 1.7vw, 0.6875rem);
-  font-weight: 600;
-  color: rgba(248, 250, 252, 0.72);
-  font-variant-numeric: tabular-nums;
-}
-
-.self-float-metric__waist--empty {
-  font-weight: 500;
-  color: rgba(248, 250, 252, 0.4);
-}
-
-.self-float-metric__waist--log {
-  display: flex;
-  align-items: center;
-  gap: 0.28rem;
-}
-
-.self-float-metric__waist-label {
-  flex-shrink: 0;
-}
-
-.self-float-metric__waist--log .waist-log {
-  flex: 1;
-  min-width: 0;
-  margin-top: 0;
-}
-
-.self-float-metric__waist--log .waist-log__row {
-  gap: 0.2rem;
-}
-
-.self-float-metric__waist--log .waist-log__input {
-  width: 3.15rem;
-  flex: 1 1 3.15rem;
-  min-width: 0;
-  min-height: 1.35rem;
-  padding: 0.02rem 0.28rem;
-  font-size: 0.7rem;
-  -moz-appearance: textfield;
-  appearance: textfield;
-}
-
-.self-float-metric__waist--log .waist-log__input::-webkit-outer-spin-button,
-.self-float-metric__waist--log .waist-log__input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
-.self-float-metric__waist--log .waist-log__input::placeholder {
-  color: rgba(248, 250, 252, 0.32);
-}
-
-.self-float-metric__waist--log .waist-log__unit {
-  font-size: 0.62rem;
-}
-
-.self-float-metric__waist--log .waist-log__submit {
-  min-height: 1.35rem;
-  padding: 0.05rem 0.32rem;
-  font-size: 0.62rem;
-  line-height: 1.2;
-}
-
-.self-float-metric__waist--log .waist-log__error {
-  font-size: 0.58rem;
-  line-height: 1.25;
-}
-
-.self-float-metric:has(.self-float-metric__waist--log),
-.self-float-metric__pill--weight:has(.self-float-metric__waist--log) {
-  max-width: min(240px, 72vw);
-  z-index: 6;
-}
-
-.self-float-metric__waist .self-float-metric__detailed-unit {
-  margin-left: 0.2rem;
 }
 
 .waist-log {
@@ -2690,19 +2833,6 @@ button.self-day-progress__event.self-day-progress__event--lane2 > .self-day-prog
     font-variant-numeric: tabular-nums;
   }
 
-  .self-float-metric--detailed .self-float-metric__waist {
-    margin-top: 0.35rem;
-    padding-top: 0.3rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
-    font-size: 0.7rem;
-    color: rgba(248, 250, 252, 0.78);
-  }
-
-  .self-float-metric--detailed .self-float-metric__waist--log {
-    display: flex;
-    align-items: center;
-  }
-
   .self-float-metric__icon--hr {
     background: rgba(251, 113, 133, 0.12);
     color: #fb7185;
@@ -2979,5 +3109,210 @@ button.self-day-progress__event.self-day-progress__event--lane2 > .self-day-prog
   .self-hub-card__curve {
     width: 100%;
     height: 48px;
+  }
+}
+
+/* ── KPI HUD skin ──
+ * Futuristic glass for the KPIs around the figure. Each card takes its organ's colour
+ * (--kpi-accent) so it reads as one system with its leader line. Visual only: sizes,
+ * padding and positions stay with the rules above and in mobile.css. The long prefix
+ * outranks mobile.css, which loads after this file. */
+.self-hub .self-hub__stage .self-float-metric {
+  --kpi-accent: #34d399;
+  --kpi-accent-rgb: 52, 211, 153;
+}
+
+.self-hub .self-hub__stage .self-float-metric[data-organ-key="heartRate"] {
+  --kpi-accent: #ff4d5e;
+  --kpi-accent-rgb: 255, 77, 94;
+}
+
+.self-hub .self-hub__stage .self-float-metric[data-organ-key="hrv"] {
+  --kpi-accent: #facc15;
+  --kpi-accent-rgb: 250, 204, 21;
+}
+
+.self-hub .self-hub__stage .self-float-metric[data-organ-key="stress"] {
+  --kpi-accent: #38bdf8;
+  --kpi-accent-rgb: 56, 189, 248;
+}
+
+.self-hub .self-hub__stage .self-float-metric[data-organ-key="weight"] {
+  --kpi-accent: #fb923c;
+  --kpi-accent-rgb: 251, 146, 60;
+}
+
+.self-hub .self-hub__stage .self-float-metric--sleep {
+  --kpi-accent: #a78bfa;
+  --kpi-accent-rgb: 167, 139, 250;
+}
+
+/* Glass panel: accent wash at the top, faint scanlines, hairline accent border. */
+.self-hub .self-hub__stage .self-float-metric .self-float-metric__pill,
+.self-hub .self-hub__stage .self-float-metric .self-float-metric__detailed-card {
+  position: relative;
+  border-radius: 7px;
+  border: 1px solid rgba(var(--kpi-accent-rgb), 0.24);
+  background:
+    linear-gradient(180deg, rgba(var(--kpi-accent-rgb), 0.09), rgba(var(--kpi-accent-rgb), 0) 48%),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.022) 0 1px, transparent 1px 3px),
+    rgba(4, 9, 8, 0.6);
+  backdrop-filter: blur(16px) saturate(140%);
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 0 20px rgba(var(--kpi-accent-rgb), 0.05),
+    0 0 24px rgba(var(--kpi-accent-rgb), 0.08);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* HUD corner brackets (top-left, bottom-right). */
+.self-hub .self-hub__stage .self-float-metric .self-float-metric__pill::before,
+.self-hub .self-hub__stage .self-float-metric .self-float-metric__detailed-card::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--kpi-accent), var(--kpi-accent)) left top / 10px 1.5px no-repeat,
+    linear-gradient(var(--kpi-accent), var(--kpi-accent)) left top / 1.5px 10px no-repeat,
+    linear-gradient(var(--kpi-accent), var(--kpi-accent)) right bottom / 10px 1.5px no-repeat,
+    linear-gradient(var(--kpi-accent), var(--kpi-accent)) right bottom / 1.5px 10px no-repeat;
+  opacity: 0.9;
+}
+
+/* Light catching the top edge. */
+.self-hub .self-hub__stage .self-float-metric .self-float-metric__pill::after,
+.self-hub .self-hub__stage .self-float-metric .self-float-metric__detailed-card::after {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 16px;
+  right: 16px;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(var(--kpi-accent-rgb), 0.95), transparent);
+  opacity: 0.75;
+}
+
+.self-hub .self-hub__stage .self-float-metric:hover .self-float-metric__pill,
+.self-hub .self-hub__stage .self-float-metric:hover .self-float-metric__detailed-card,
+.self-hub .self-hub__stage .self-float-metric:focus-within .self-float-metric__pill,
+.self-hub .self-hub__stage .self-float-metric:focus-within .self-float-metric__detailed-card {
+  border-color: rgba(var(--kpi-accent-rgb), 0.5);
+  box-shadow:
+    0 12px 34px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    inset 0 0 24px rgba(var(--kpi-accent-rgb), 0.09),
+    0 0 30px rgba(var(--kpi-accent-rgb), 0.2);
+}
+
+/* Icon tile as a small instrument window. */
+.self-hub .self-hub__stage .self-float-metric .self-float-metric__icon {
+  border-radius: 5px;
+  border: 1px solid rgba(var(--kpi-accent-rgb), 0.28);
+  background: radial-gradient(circle at 50% 30%, rgba(var(--kpi-accent-rgb), 0.22), rgba(var(--kpi-accent-rgb), 0.05));
+  color: var(--kpi-accent);
+  box-shadow: inset 0 0 8px rgba(var(--kpi-accent-rgb), 0.18);
+}
+
+/* Type: spaced caps labels in the accent, instrument-style monospace numerals with glow. */
+.self-hub .self-hub__stage .self-float-metric .self-float-metric__label,
+.self-hub .self-hub__stage .self-float-metric .self-float-metric__orb-label {
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: rgba(var(--kpi-accent-rgb), 0.82);
+}
+
+.self-hub .self-hub__stage .self-float-metric .self-float-metric__detailed-label {
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: rgba(var(--kpi-accent-rgb), 0.9);
+}
+
+.self-hub .self-hub__stage .self-float-metric .self-float-metric__value,
+.self-hub .self-hub__stage .self-float-metric .self-float-metric__orb-value,
+.self-hub .self-hub__stage .self-float-metric .self-float-metric__detailed-value,
+.self-hub .self-hub__stage .self-float-metric .self-float-metric__detailed-calories-value {
+  font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: #f8fafc;
+  text-shadow: 0 0 14px rgba(var(--kpi-accent-rgb), 0.4);
+}
+
+.self-hub .self-hub__stage .self-float-metric .self-float-metric__unit,
+.self-hub .self-hub__stage .self-float-metric .self-float-metric__detailed-unit,
+.self-hub .self-hub__stage .self-float-metric .self-float-metric__orb-suffix,
+.self-hub .self-hub__stage .self-float-metric .self-float-metric__pair-tag,
+.self-hub .self-hub__stage .self-float-metric .self-float-metric__detailed-calories-tag {
+  color: rgba(226, 232, 240, 0.45);
+  letter-spacing: 0.06em;
+}
+
+.self-hub .self-hub__stage .self-float-metric .self-float-metric__secondary,
+.self-hub .self-hub__stage .self-float-metric .self-float-metric__status,
+.self-hub .self-hub__stage .self-float-metric .self-float-metric__detailed-status,
+.self-hub .self-hub__stage .self-float-metric .self-float-metric__orb-empty {
+  color: var(--kpi-accent);
+  letter-spacing: 0.04em;
+}
+
+.self-hub .self-hub__stage .self-float-metric .self-float-metric__detailed-calories-divider {
+  background: rgba(var(--kpi-accent-rgb), 0.3);
+}
+
+/* Orbs: lit glass core, accent progress ring and a slowly turning tick bezel. */
+.self-hub .self-hub__stage .self-float-metric .self-float-metric__orb {
+  border: 1px solid rgba(var(--kpi-accent-rgb), 0.24);
+  background: radial-gradient(circle at 50% 32%, rgba(var(--kpi-accent-rgb), 0.14), rgba(4, 9, 8, 0.72) 64%);
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, 0.45),
+    inset 0 0 24px rgba(var(--kpi-accent-rgb), 0.12),
+    0 0 28px rgba(var(--kpi-accent-rgb), 0.16);
+}
+
+.self-hub .self-hub__stage .self-float-metric .self-float-metric__orb::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: repeating-conic-gradient(rgba(var(--kpi-accent-rgb), 0.55) 0 1.2deg, transparent 1.2deg 7.5deg);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
+  opacity: 0.5;
+  animation: selfKpiBezel 48s linear infinite;
+}
+
+.self-hub .self-hub__stage .self-float-metric .self-float-metric__orb-ring-bg {
+  stroke: rgba(var(--kpi-accent-rgb), 0.13);
+}
+
+.self-hub .self-hub__stage .self-float-metric .self-float-metric__orb-ring-fill {
+  stroke: var(--kpi-accent);
+  filter: drop-shadow(0 0 6px rgba(var(--kpi-accent-rgb), 0.7));
+}
+
+.self-hub .self-hub__stage .self-float-metric .self-float-metric__orb-icon {
+  color: var(--kpi-accent);
+}
+
+@keyframes selfKpiBezel {
+  to { transform: rotate(360deg); }
+}
+
+/* Capacity readout under the figure, in the same instrument type. */
+.self-hub .self-capacity__value {
+  font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  text-shadow: 0 0 28px rgba(52, 211, 153, 0.4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .self-hub .self-hub__stage .self-float-metric .self-float-metric__orb::before {
+    animation: none;
   }
 }

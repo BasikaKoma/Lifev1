@@ -11,7 +11,12 @@ const TARGET_HEIGHT = 2.05;
 const BODY_COLOR = '#178258';
 const EMERALD = '#34d399';
 
-function createBodyMaterial(opacity = 0.30, sourceMaterial, geometry) {
+/** Shared uniforms for a soft scan band drawn on the body shell itself (strength 0 = off). */
+function createBodyScanUniforms() {
+  return { y: { value: -1e4 }, width: { value: 0.05 }, strength: { value: 0 } };
+}
+
+function createBodyMaterial(opacity = 0.30, sourceMaterial, geometry, bodyScan) {
   const material = new THREE.MeshPhysicalMaterial({
     color: BODY_COLOR,
     transparent: true,
@@ -36,11 +41,17 @@ function createBodyMaterial(opacity = 0.30, sourceMaterial, geometry) {
     material.onBeforeCompile = (shader) => {
       shader.uniforms.bodyHeightAxis = { value: direction };
       shader.uniforms.bodyHeightRange = { value: new THREE.Vector2(box?.min[axis] || 0, Math.max(extent[axis], 0.001)) };
-      shader.vertexShader = 'uniform vec3 bodyHeightAxis;\n uniform vec2 bodyHeightRange;\n varying float vBodyHeadMask;\n' + shader.vertexShader;
+      const scan = bodyScan || createBodyScanUniforms();
+      shader.uniforms.bodyScanY = scan.y;
+      shader.uniforms.bodyScanWidth = scan.width;
+      shader.uniforms.bodyScanStrength = scan.strength;
+      shader.vertexShader = 'uniform vec3 bodyHeightAxis;\n uniform vec2 bodyHeightRange;\n varying float vBodyHeadMask;\n varying float vBodyScanY;\n' + shader.vertexShader;
       shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
         float bodyHeight = (dot(position, bodyHeightAxis) - bodyHeightRange.x) / bodyHeightRange.y;
         vBodyHeadMask = smoothstep(0.80, 0.89, bodyHeight);`);
-      shader.fragmentShader = 'varying float vBodyHeadMask;\n' + shader.fragmentShader;
+      shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
+        vBodyScanY = (modelMatrix * vec4(transformed, 1.0)).y;`);
+      shader.fragmentShader = 'varying float vBodyHeadMask;\n varying float vBodyScanY;\n uniform float bodyScanY;\n uniform float bodyScanWidth;\n uniform float bodyScanStrength;\n' + shader.fragmentShader;
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <map_fragment>',
         `float bodyDetailShade = 1.0;
@@ -66,10 +77,16 @@ function createBodyMaterial(opacity = 0.30, sourceMaterial, geometry) {
         diffuseColor.rgb *= reliefShade;
         totalEmissiveRadiance *= bodyDetailShade * reliefShade * mix(1.0, 0.78, vBodyHeadMask);
         float bodyRim = pow(1.0 - clamp(abs(dot(normal, normalize(vViewPosition))), 0.0, 1.0), 3.6);
-        totalEmissiveRadiance += vec3(0.025, 0.24, 0.12) * bodyRim * mix(1.0, 0.55, vBodyHeadMask);`,
+        totalEmissiveRadiance += vec3(0.025, 0.24, 0.12) * bodyRim * mix(1.0, 0.55, vBodyHeadMask);
+        // Scan band lives on the shell, so it never extends past the silhouette.
+        float scanOffset = (vBodyScanY - bodyScanY) / bodyScanWidth;
+        float scanBand = bodyScanStrength * (0.65 * exp(-scanOffset * scanOffset) + 0.35 * exp(-scanOffset * scanOffset * 8.0));
+        totalEmissiveRadiance += vec3(0.22, 0.95, 0.62) * 1.8 * scanBand * (0.6 + 0.4 * bodyRim);
+        // The shell is mostly transparent, so lift its alpha a little inside the band to let it read.
+        diffuseColor.a = min(1.0, diffuseColor.a + 0.24 * scanBand);`,
       );
     };
-    material.customProgramCacheKey = () => 'self-human-face-relief-rim-v2';
+    material.customProgramCacheKey = () => 'self-human-face-relief-rim-scan-v4';
   }
   // Preserve real relief maps if a future GLB supplies them. Never add displacement.
   if (sourceMaterial?.normalMap) {
@@ -159,6 +176,130 @@ function fitAndCenterModel(root) {
   return new THREE.Box3().setFromObject(root);
 }
 
+// Height bands (fractions from the feet) and how far from the midline to sample, as a share of height.
+const ANATOMY_BANDS = {
+  head: [0.925, 0.965, 0.05],
+  neck: [0.85, 0.875, 0.04],
+  chest: [0.73, 0.78, 0.06],
+  belly: [0.6, 0.65, 0.06],
+};
+
+/**
+ * Landmarks for placing internals, measured once from the fitted mesh in the
+ * rotating group's space: body midline, which way the model faces, and the
+ * front/back depth of the head, neck, chest and belly.
+ */
+function measureAnatomy(root) {
+  const parent = root.parent;
+  if (!parent) return null;
+  root.updateMatrixWorld(true);
+  const toParent = new THREE.Matrix4().copy(parent.matrixWorld).invert();
+  const meshes = [];
+  let total = 0;
+  root.traverse((child) => {
+    if (!child.isMesh || !child.geometry?.attributes.position) return;
+    meshes.push(child);
+    total += child.geometry.attributes.position.count;
+  });
+  if (!total) return null;
+
+  const points = new Float32Array(total * 3);
+  const matrix = new THREE.Matrix4();
+  const v = new THREE.Vector3();
+  let offset = 0;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  meshes.forEach((mesh) => {
+    matrix.multiplyMatrices(toParent, mesh.matrixWorld);
+    const position = mesh.geometry.attributes.position;
+    for (let i = 0; i < position.count; i += 1) {
+      v.fromBufferAttribute(position, i).applyMatrix4(matrix);
+      points[offset] = v.x;
+      points[offset + 1] = v.y;
+      points[offset + 2] = v.z;
+      offset += 3;
+      if (v.y < minY) minY = v.y;
+      if (v.y > maxY) maxY = v.y;
+    }
+  });
+  const height = maxY - minY;
+  if (!(height > 0)) return null;
+
+  const band = (from, to, midX = null, spread = 0) => {
+    const y0 = minY + from * height;
+    const y1 = minY + to * height;
+    const limit = spread * height;
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minZ = Infinity;
+    let maxZ = -Infinity;
+    let sumZ = 0;
+    let count = 0;
+    for (let i = 0; i < points.length; i += 3) {
+      const y = points[i + 1];
+      if (y < y0 || y > y1) continue;
+      const x = points[i];
+      if (midX != null && Math.abs(x - midX) > limit) continue;
+      const z = points[i + 2];
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (z < minZ) minZ = z;
+      if (z > maxZ) maxZ = z;
+      sumZ += z;
+      count += 1;
+    }
+    return count >= 12 ? { minX, maxX, minZ, maxZ, meanZ: sumZ / count } : null;
+  };
+  const depthOf = (sample) => (sample ? { mid: (sample.minZ + sample.maxZ) / 2, depth: sample.maxZ - sample.minZ } : undefined);
+
+  const neckAll = band(ANATOMY_BANDS.neck[0], ANATOMY_BANDS.neck[1]);
+  if (!neckAll) return null;
+  const midX = (neckAll.minX + neckAll.maxX) / 2;
+  // Toes reach forward of the shins, which tells us which way the body faces.
+  const feet = band(0, 0.03);
+  const shins = band(0.1, 0.16);
+  const front = feet && shins && feet.meanZ < shins.meanZ ? -1 : 1;
+  const anatomy = { midX, front };
+  Object.entries(ANATOMY_BANDS).forEach(([name, [from, to, spread]]) => {
+    anatomy[name] = depthOf(band(from, to, midX, spread));
+  });
+
+  // Outermost surface point on one side within a height band (spread caps how far out to look,
+  // so hanging hands/arms are not mistaken for the waist or thighs).
+  const lateralPoint = (from, to, side, spread) => {
+    const y0 = minY + from * height;
+    const y1 = minY + to * height;
+    const limit = spread * height;
+    let edge = -Infinity;
+    for (let i = 0; i < points.length; i += 3) {
+      const y = points[i + 1];
+      if (y < y0 || y > y1) continue;
+      const out = (points[i] - midX) * side;
+      if (out >= 0 && out <= limit && out > edge) edge = out;
+    }
+    if (!Number.isFinite(edge)) return null;
+    let sumZ = 0;
+    let count = 0;
+    for (let i = 0; i < points.length; i += 3) {
+      const y = points[i + 1];
+      if (y < y0 || y > y1) continue;
+      const out = (points[i] - midX) * side;
+      if (out > limit || out < edge - 0.015 * height) continue;
+      sumZ += points[i + 2];
+      count += 1;
+    }
+    return [midX + side * edge, (y0 + y1) / 2, count ? sumZ / count : 0];
+  };
+  const pair = (from, to, spread) => [lateralPoint(from, to, 1, spread), lateralPoint(from, to, -1, spread)].filter(Boolean);
+  // Where each body circumference is taken: upper arm, waist, mid thigh.
+  anatomy.landmarks = {
+    arm: pair(0.7, 0.73, 0.2),
+    waist: pair(0.585, 0.615, 0.105),
+    thigh: pair(0.37, 0.4, 0.12),
+  };
+  return anatomy;
+}
+
 function boundsToSnapshot(box) {
   const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
@@ -170,10 +311,10 @@ function boundsToSnapshot(box) {
   };
 }
 
-function applyPremiumLook(root, opacity) {
+function applyPremiumLook(root, opacity, bodyScan) {
   const materialCopies = new Map();
   const getMaterial = (original, geometry) => {
-    if (!materialCopies.has(original)) materialCopies.set(original, createBodyMaterial(opacity, original, geometry));
+    if (!materialCopies.has(original)) materialCopies.set(original, createBodyMaterial(opacity, original, geometry, bodyScan));
     return materialCopies.get(original);
   };
   const decorations = [];
@@ -264,7 +405,7 @@ class CanvasErrorBoundary extends Component {
   }
 }
 
-function HumanModel({ onBoundsChange, onReady, bodyOpacity }) {
+function HumanModel({ onBoundsChange, onReady, bodyOpacity, bodyScan }) {
   const groupRef = useRef();
   const modelRef = useRef(null);
   const { scene } = useGLTF(MODEL_URL);
@@ -278,7 +419,7 @@ function HumanModel({ onBoundsChange, onReady, bodyOpacity }) {
     root.scale.setScalar(1);
 
     const model = clone(scene);
-    applyPremiumLook(model, 0.30);
+    applyPremiumLook(model, 0.30, bodyScan);
     modelRef.current = model;
     root.add(model);
     const cleanup = () => {
@@ -288,14 +429,14 @@ function HumanModel({ onBoundsChange, onReady, bodyOpacity }) {
     };
     try {
       const bounds = fitAndCenterModel(root);
-      onBoundsChange(boundsToSnapshot(bounds));
+      onBoundsChange({ ...boundsToSnapshot(bounds), anatomy: measureAnatomy(root) });
       onReady?.();
     } catch (error) {
       cleanup();
       throw error;
     }
     return cleanup;
-  }, [scene, onBoundsChange, onReady]);
+  }, [scene, onBoundsChange, onReady, bodyScan]);
 
   useLayoutEffect(() => {
     // Update opacity in place: slider changes must not rebuild/refit the rotating model.
@@ -411,7 +552,7 @@ function RotatingFigure({ reducedMotion, children }) {
   return <group ref={group}>{children}</group>;
 }
 
-function SceneContent({ reducedMotion, onReady, onBoundsChange, onZoomScaleChange, platformRef, baseGap, bodyOpacity, renderInternals, figureScale }) {
+function SceneContent({ reducedMotion, onReady, onBoundsChange, onZoomScaleChange, platformRef, baseGap, bodyOpacity, bodyScan, renderInternals, renderOverlay, figureScale }) {
   const [bounds, setBounds] = useState(null);
   const [fitDistance, setFitDistance] = useState(null);
   const controlsRef = useRef();
@@ -435,9 +576,11 @@ function SceneContent({ reducedMotion, onReady, onBoundsChange, onZoomScaleChang
       <directionalLight position={[-2, 1, -2]} intensity={1.8} color="#10b981" />
 
       <RotatingFigure reducedMotion={reducedMotion}>
-        <HumanModel onBoundsChange={handleBoundsChange} onReady={onReady} bodyOpacity={bodyOpacity} />
-        {bounds && renderInternals?.({ bounds })}
+        <HumanModel onBoundsChange={handleBoundsChange} onReady={onReady} bodyOpacity={bodyOpacity} bodyScan={bodyScan} />
+        {bounds && renderInternals?.({ bounds, reducedMotion, bodyScan })}
       </RotatingFigure>
+      {/* Screen-aligned extras (scan line, projectors) that must not spin with the body. */}
+      {bounds && renderOverlay?.({ bounds, reducedMotion, bodyScan })}
 
       <OrbitControls
         ref={controlsRef}
@@ -472,7 +615,7 @@ function SceneContent({ reducedMotion, onReady, onBoundsChange, onZoomScaleChang
   );
 }
 
-function HumanFigureCanvas({ reducedMotion, onReady, onError, onZoomScaleChange, platformRef, baseGap, bodyOpacity, renderInternals, figureScale, interactive }) {
+function HumanFigureCanvas({ reducedMotion, onReady, onError, onZoomScaleChange, platformRef, baseGap, bodyOpacity, bodyScan, renderInternals, renderOverlay, figureScale, interactive }) {
   return (
     <Canvas
       className="self-figure__canvas"
@@ -500,6 +643,8 @@ function HumanFigureCanvas({ reducedMotion, onReady, onError, onZoomScaleChange,
             baseGap={baseGap}
             bodyOpacity={bodyOpacity}
             renderInternals={renderInternals}
+            renderOverlay={renderOverlay}
+            bodyScan={bodyScan}
             figureScale={figureScale}
           />
         </Suspense>
@@ -510,10 +655,11 @@ function HumanFigureCanvas({ reducedMotion, onReady, onError, onZoomScaleChange,
 
 useGLTF.preload(MODEL_URL);
 
-export function SelfHumanFigure({ bodyOpacity = 0.30, baseGap = 4, figureScale = 1.22, renderInternals, showOpacityControl = true } = {}) {
+export function SelfHumanFigure({ bodyOpacity = 0.30, baseGap = 4, figureScale = 1.22, renderInternals, renderOverlay, showOpacityControl = true } = {}) {
   const [opacity, setOpacity] = useState(() => THREE.MathUtils.clamp(bodyOpacity, 0, 1));
   useEffect(() => { setOpacity(THREE.MathUtils.clamp(bodyOpacity, 0, 1)); }, [bodyOpacity]);
   const reducedMotion = usePrefersReducedMotion();
+  const [bodyScan] = useState(createBodyScanUniforms);
   const [status, setStatus] = useState('loading');
   const [errorMessage, setErrorMessage] = useState('');
   const [mountCanvas, setMountCanvas] = useState(false);
@@ -581,6 +727,8 @@ export function SelfHumanFigure({ bodyOpacity = 0.30, baseGap = 4, figureScale =
                 baseGap={baseGap}
                 bodyOpacity={opacity}
                 renderInternals={renderInternals}
+                renderOverlay={renderOverlay}
+                bodyScan={bodyScan}
                 figureScale={figureScale}
                 interactive={status === 'ready'}
               />

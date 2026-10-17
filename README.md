@@ -109,3 +109,7 @@ npx supabase functions deploy push-dispatch oura-webhook oura-webhook-subscripti
 ## Philosophy
 
 lifev1 helps you organize your life with intention — see where you are, where you're going, and how you're doing along the way.
+
+## Credits
+
+The anatomical organs and blood vessels inside the Self figure (`public/models/organs/organs.glb`) come from the [HRA 3D Reference Object Library](https://humanatlas.io/3d-reference-library) (Human Reference Atlas, HuBMAP / NIH; Kristen Browne et al., Indiana University; Visible Human Male), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). They were simplified and merged for the app; details in `public/models/organs/CREDITS.txt`.

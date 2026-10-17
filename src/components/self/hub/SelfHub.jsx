@@ -1,7 +1,12 @@
+import { useCallback, useLayoutEffect, useState } from 'react';
 import { SelfHumanFigure } from '../SelfHumanFigure';
+import { SelfBodyMeasureAnchors, SelfBodyScan, SelfOrgans } from '../SelfOrgans';
+import { ORGAN_LINKS, hasMetricData, heartBpm } from '../selfOrganSpec';
 import { SelfFloatingMetric } from './SelfFloatingMetric';
 import { SelfMoodCard } from './SelfMoodCard';
 import { SelfCapacityBanner } from './SelfCapacityBanner';
+import { SelfBodyMeasures } from './SelfBodyMeasures';
+import { OrganLinkProjector, SelfOrganLinks, createOrganLinkRuntime, useOrganCardProps } from './SelfOrganLinks';
 import { platform } from '../../../platform';
 
 // On a phone the figure is the hero of the screen, so it reads more solid than on desktop.
@@ -9,6 +14,30 @@ const MOBILE_BODY_OPACITY = platform.isMobile ? 0.5 : undefined;
 
 /** @param {{ floatingMetrics: import('../../../utils/selfHubSchema').SelfHubFloatingMetrics, capacity: import('../../../utils/selfHubSchema').SelfHubCapacity }} props */
 export function SelfHub({ floatingMetrics, capacity }) {
+  const [organLinks] = useState(createOrganLinkRuntime);
+  const cardProps = useOrganCardProps(organLinks);
+
+  useLayoutEffect(() => {
+    ORGAN_LINKS.forEach((link) => {
+      organLinks.has[link.key] = hasMetricData(floatingMetrics[link.key]);
+    });
+    organLinks.bpm = heartBpm(floatingMetrics.heartRate);
+  }, [organLinks, floatingMetrics]);
+
+  const renderInternals = useCallback(({ bounds, reducedMotion }) => (
+    <>
+      <SelfOrgans bounds={bounds} links={organLinks} reducedMotion={reducedMotion} />
+      <SelfBodyMeasureAnchors bounds={bounds} links={organLinks} />
+    </>
+  ), [organLinks]);
+
+  const renderOverlay = useCallback(({ bounds, reducedMotion, bodyScan }) => (
+    <>
+      {reducedMotion ? null : <SelfBodyScan bounds={bounds} bodyScan={bodyScan} />}
+      <OrganLinkProjector links={organLinks} bounds={bounds} />
+    </>
+  ), [organLinks]);
+
   return (
     <section className="self-hub" aria-label="Health hub">
       <div className="self-body-cluster">
@@ -16,15 +45,22 @@ export function SelfHub({ floatingMetrics, capacity }) {
         <div className="self-hub__stage">
           <SelfFloatingMetric metric={floatingMetrics.sleep} position="tl" variant="orb" />
           <SelfMoodCard />
-          <SelfFloatingMetric metric={floatingMetrics.heartRate} position="tr" desktopDetailed="hr" />
-          <SelfFloatingMetric metric={floatingMetrics.hrv} position="ml" />
-          <SelfFloatingMetric metric={floatingMetrics.stress} position="mr" />
-          <SelfFloatingMetric metric={floatingMetrics.weight} position="bl" desktopDetailed="calories" />
+          <SelfFloatingMetric metric={floatingMetrics.heartRate} position="tr" desktopDetailed="hr" rootProps={cardProps('heartRate')} />
+          <SelfFloatingMetric metric={floatingMetrics.hrv} position="ml" rootProps={cardProps('hrv')} />
+          <SelfFloatingMetric metric={floatingMetrics.stress} position="mr" rootProps={cardProps('stress')} />
+          <SelfFloatingMetric metric={floatingMetrics.weight} position="bl" desktopDetailed="calories" rootProps={cardProps('weight')} />
           <SelfFloatingMetric metric={floatingMetrics.movement} position="br" variant="orb" orbKind="movement" />
 
           <div className="self-hub__figure">
-            <SelfHumanFigure bodyOpacity={MOBILE_BODY_OPACITY} />
+            <SelfHumanFigure
+              bodyOpacity={MOBILE_BODY_OPACITY}
+              renderInternals={renderInternals}
+              renderOverlay={renderOverlay}
+            />
           </div>
+
+          <SelfOrganLinks runtime={organLinks} metrics={floatingMetrics} />
+          <SelfBodyMeasures runtime={organLinks} metric={floatingMetrics.weight} />
 
           <div className="self-hub__capacity-wrap">
             <SelfCapacityBanner capacity={capacity} />

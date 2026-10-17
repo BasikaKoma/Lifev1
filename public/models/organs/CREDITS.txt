@@ -1,0 +1,17 @@
+organs.glb — anatomical organs and blood vessels shown inside the Self figure
+
+Source: HRA 3D Reference Object Library, Human Reference Atlas (HuBMAP / NIH),
+https://humanatlas.io/3d-reference-library
+Created by Kristen Browne, Heidi Schlehlein et al., Cyberinfrastructure for Network
+Science Center, Indiana University; built from the Visible Human Male (U.S. National
+Library of Medicine). Brain: Allen Institute based reference brain (brain-male v1.4).
+
+Models used (male): brain v1.4, heart v1.3, lung v1.4, spinal cord v1.1,
+small intestine v1.2, large intestine v1.3, blood vasculature v1.3.
+
+License: Creative Commons Attribution 4.0 International (CC BY 4.0),
+https://creativecommons.org/licenses/by/4.0/
+
+Changes made for lifev1: removed internal brain structures, bronchial cartilage and
+eye vessels, split the vasculature into arteries and veins, merged each part into a
+single mesh, simplified the geometry and applied meshopt compression.

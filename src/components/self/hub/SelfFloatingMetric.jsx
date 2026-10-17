@@ -1,9 +1,6 @@
 import { useEffect, useState } from 'react';
 import { SelfIcon } from '../SelfIcons';
 import { SelfChart } from '../SelfCharts';
-import { WaistLogForm } from '../WaistLogForm';
-import { appendCircumferenceReading } from '../../../lib/health/healthMetrics';
-import { CIRCUMFERENCE_KINDS, circumferenceSpec } from '../../../lib/health/circumferenceReadings';
 import { NO_DATA } from '../../../utils/selfHubSchema';
 
 const METRIC_ICONS = {
@@ -66,52 +63,8 @@ function getMovementValue(metric) {
   return String(metric.value);
 }
 
-function formatWaistCm(value) {
-  if (value == null || value === '—') return null;
-  return typeof value === 'number' ? value.toFixed(1) : String(value);
-}
-
 function formatKcal(value) {
   return new Intl.NumberFormat('en-US').format(value);
-}
-
-function BodyCmFoot({ kind, value }) {
-  const spec = circumferenceSpec(kind);
-  const [savedCm, setSavedCm] = useState(null);
-  const label = formatWaistCm(value ?? savedCm);
-  if (!spec) return null;
-
-  if (!label) {
-    return (
-      <div className="self-float-metric__waist self-float-metric__waist--log">
-        <span className="self-float-metric__waist-label">{spec.label}</span>
-        <WaistLogForm
-          kind={kind}
-          compact
-          inline
-          submitLabel="OK"
-          onSave={async (cm) => {
-            const saved = await appendCircumferenceReading({ kind, cm });
-            if (saved?.value != null) setSavedCm(saved.value);
-            return saved;
-          }}
-        />
-      </div>
-    );
-  }
-
-  return (
-    <span className="self-float-metric__waist">
-      {spec.label} {label}
-      <span className="self-float-metric__detailed-unit">cm</span>
-    </span>
-  );
-}
-
-function BodyMeasures({ metric }) {
-  return CIRCUMFERENCE_KINDS.map((kind) => (
-    <BodyCmFoot key={kind} kind={kind} value={metric[`${kind}Cm`]} />
-  ));
 }
 
 function WeightCalories({ caloriesIn, caloriesOut }) {
@@ -140,8 +93,8 @@ function WeightCalories({ caloriesIn, caloriesOut }) {
   );
 }
 
-/** @param {{ metric: import('../../../utils/selfHubSchema').SelfHubMetric, position: string }} props */
-function DetailedHeartRateCard({ metric, position }) {
+/** @param {{ metric: import('../../../utils/selfHubSchema').SelfHubMetric, position: string, rootProps?: object }} props */
+function DetailedHeartRateCard({ metric, position, rootProps }) {
   const hasValue = metric.value != null && metric.value !== '—';
   const chart =
     metric.chart?.type === 'heartRateTrend'
@@ -150,6 +103,7 @@ function DetailedHeartRateCard({ metric, position }) {
 
   return (
     <div
+      {...rootProps}
       className={`self-float-metric self-float-metric--detailed self-float-metric--detailed-hr self-float-metric--${position}`}
     >
       <div className="self-float-metric__detailed-card self-float-metric__detailed-card--hr">
@@ -184,8 +138,8 @@ function DetailedHeartRateCard({ metric, position }) {
   );
 }
 
-/** @param {{ metric: import('../../../utils/selfHubSchema').SelfHubMetric, position: string }} props */
-function DetailedCaloriesCard({ metric, position }) {
+/** @param {{ metric: import('../../../utils/selfHubSchema').SelfHubMetric, position: string, rootProps?: object }} props */
+function DetailedCaloriesCard({ metric, position, rootProps }) {
   const caloriesIn = metric.caloriesIn;
   const caloriesOut = metric.caloriesOut;
   const hasCalories = caloriesIn != null || caloriesOut != null;
@@ -201,6 +155,7 @@ function DetailedCaloriesCard({ metric, position }) {
 
   return (
     <div
+      {...rootProps}
       className={`self-float-metric self-float-metric--detailed self-float-metric--detailed-calories self-float-metric--${position}`}
     >
       <div className="self-float-metric__detailed-card self-float-metric__detailed-card--calories">
@@ -260,30 +215,30 @@ function DetailedCaloriesCard({ metric, position }) {
           </div>
         ) : null}
 
-        <BodyMeasures metric={metric} />
       </div>
     </div>
   );
 }
 
-/** @param {{ metric: import('../../../utils/selfHubSchema').SelfHubMetric, position: string, variant?: 'pill'|'orb', orbKind?: 'recovery'|'movement', desktopDetailed?: 'hr'|'calories' }} props */
+/** @param {{ metric: import('../../../utils/selfHubSchema').SelfHubMetric, position: string, variant?: 'pill'|'orb', orbKind?: 'recovery'|'movement', desktopDetailed?: 'hr'|'calories', rootProps?: object }} props — rootProps: data attribute + hover handlers that link the card to its organ */
 export function SelfFloatingMetric({
   metric,
   position,
   variant = 'pill',
   orbKind,
   desktopDetailed,
+  rootProps,
 }) {
   const isDesktop = useIsDesktopHub();
   const hasValue = metric.value != null && metric.value !== '—';
   const iconName = METRIC_ICONS[metric.label] || 'aura';
 
   if (isDesktop && desktopDetailed === 'hr') {
-    return <DetailedHeartRateCard metric={metric} position={position} />;
+    return <DetailedHeartRateCard metric={metric} position={position} rootProps={rootProps} />;
   }
 
   if (isDesktop && desktopDetailed === 'calories') {
-    return <DetailedCaloriesCard metric={metric} position={position} />;
+    return <DetailedCaloriesCard metric={metric} position={position} rootProps={rootProps} />;
   }
 
   if (variant === 'orb') {
@@ -293,6 +248,7 @@ export function SelfFloatingMetric({
 
     return (
       <div
+        {...rootProps}
         className={`self-float-metric self-float-metric--orb self-float-metric--${position}${
           metric.label === 'Sleep' ? ' self-float-metric--sleep' : ''
         }`}
@@ -352,7 +308,7 @@ export function SelfFloatingMetric({
   }
 
   return (
-    <div className={`self-float-metric self-float-metric--${position}`}>
+    <div {...rootProps} className={`self-float-metric self-float-metric--${position}`}>
       <div className={`self-float-metric__pill${metric.label === 'Weight' ? ' self-float-metric__pill--weight' : ''}`}>
         <span className="self-float-metric__icon" aria-hidden>
           <SelfIcon name={iconName} />
@@ -379,7 +335,6 @@ export function SelfFloatingMetric({
           {metric.label === 'Weight' ? (
             <>
               <WeightCalories caloriesIn={metric.caloriesIn} caloriesOut={metric.caloriesOut} />
-              <BodyMeasures metric={metric} />
             </>
           ) : Array.isArray(metric.pairs) && metric.pairs.length > 0 && metric.status ? (
             <span className="self-float-metric__secondary">{metric.status}</span>
