@@ -1,0 +1,1015 @@
+/*
+ * Phone layer. Loaded after App.css and the component sheets, and scoped to
+ * `.app--mobile` (Capacitor or a phone browser) so desktop and Electron are untouched.
+ * Targets follow the platform guides: 44pt (iOS) / 48dp (Material) touch targets,
+ * at most five bottom-bar destinations, 16px inputs so iOS Safari doesn't zoom on focus,
+ * and safe-area insets on every edge the app draws to (viewport-fit=cover).
+ */
+
+.app--mobile {
+  --m-nav-h: 60px;
+  --m-safe-top: env(safe-area-inset-top, 0px);
+  --m-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --m-safe-left: env(safe-area-inset-left, 0px);
+  --m-safe-right: env(safe-area-inset-right, 0px);
+  --m-fab-size: 52px;
+  --m-fab-bottom: calc(var(--m-nav-h) + var(--m-safe-bottom) + 16px);
+  min-height: 100dvh;
+  overflow-x: clip;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html:has(.app--mobile) {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  overscroll-behavior-x: none;
+}
+
+html:has(.app--mobile) body,
+html:has(.app--mobile) #root {
+  min-height: 100dvh;
+}
+
+/* Status-bar scrim: content scrolls under it instead of under the clock and notch. */
+.app--mobile::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--m-safe-top);
+  background: #000;
+  z-index: 960;
+  pointer-events: none;
+}
+
+.app--mobile .app__content {
+  min-height: 100dvh;
+  padding-top: var(--m-safe-top);
+  padding-left: var(--m-safe-left);
+  padding-right: var(--m-safe-right);
+  padding-bottom: calc(var(--m-nav-h) + var(--m-safe-bottom));
+}
+
+.app--mobile.app--self .app__content {
+  min-height: 100dvh;
+}
+
+/* Canvas views fill the visible viewport, not the one behind the browser bars. */
+.app--mobile.app--projects,
+.app--mobile.app--detail {
+  height: 100dvh;
+  max-height: 100dvh;
+}
+
+.app--mobile.app--projects .main {
+  padding: 0;
+}
+
+/* Scrolling pages: 16px gutters, and room at the end for the floating note button. */
+.app--mobile.app--path .main,
+.app--mobile.app--brand .main,
+.app--mobile.app--nutrition .main,
+.app--mobile.app--settings .main,
+.app--mobile.app--devices .main,
+.app--mobile.app--detail .main {
+  padding: 16px 16px calc(var(--m-fab-size) + 32px);
+}
+
+/* iOS zooms the page when a focused field is under 16px. Canvas editors keep their own scale. */
+.app--mobile input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']):not(.zoom-canvas__viewport *),
+.app--mobile select:not(.zoom-canvas__viewport *),
+.app--mobile textarea:not(.zoom-canvas__viewport *) {
+  font-size: 16px;
+}
+
+/* Touch targets */
+.app--mobile .btn:not(.zoom-canvas__viewport *) {
+  min-height: 44px;
+}
+
+.app--mobile .btn--sm:not(.zoom-canvas__viewport *) {
+  min-height: 40px;
+  padding: 8px 14px;
+}
+
+/* ── Bottom navigation ─────────────────────────────────────────── */
+
+.app--mobile .mobile-bottom-nav {
+  height: calc(var(--m-nav-h) + var(--m-safe-bottom));
+  padding: 0 calc(4px + var(--m-safe-right)) var(--m-safe-bottom) calc(4px + var(--m-safe-left));
+  gap: 0;
+  justify-content: stretch;
+  overflow: visible;
+  background: rgba(8, 8, 12, 0.94);
+}
+
+.app--mobile .mobile-bottom-nav__item {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 48px;
+  padding: 6px 2px 4px;
+  gap: 2px;
+  border-radius: 0;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: rgba(148, 163, 184, 0.9);
+}
+
+.app--mobile .mobile-bottom-nav__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 30px;
+  border-radius: 999px;
+  transition: background 0.15s ease;
+}
+
+.app--mobile .mobile-bottom-nav__icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.app--mobile .mobile-bottom-nav__label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.app--mobile .mobile-bottom-nav__item--active {
+  color: #bfdbfe;
+  background: transparent;
+}
+
+.app--mobile .mobile-bottom-nav__item--active .mobile-bottom-nav__icon {
+  background: rgba(59, 130, 246, 0.22);
+}
+
+/* "More" bottom sheet */
+.mobile-more-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 945;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(0, 0, 0, 0.55);
+  animation: mobile-more-fade 0.16s ease;
+}
+
+.mobile-more-sheet__panel {
+  width: 100%;
+  padding: 10px calc(16px + var(--m-safe-right, 0px)) calc(var(--m-nav-h, 60px) + var(--m-safe-bottom, 0px) + 16px) calc(16px + var(--m-safe-left, 0px));
+  border-radius: 20px 20px 0 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  background: #0c0c12;
+  box-shadow: 0 -16px 48px rgba(0, 0, 0, 0.5);
+  animation: mobile-more-rise 0.2s ease;
+}
+
+.mobile-more-sheet__handle {
+  display: block;
+  width: 36px;
+  height: 4px;
+  margin: 0 auto 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.mobile-more-sheet__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mobile-more-sheet__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 76px;
+  padding: 10px 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(226, 232, 240, 0.92);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.mobile-more-sheet__item--active {
+  border-color: rgba(96, 165, 250, 0.5);
+  background: rgba(59, 130, 246, 0.18);
+  color: #bfdbfe;
+}
+
+.mobile-more-sheet__icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+@keyframes mobile-more-fade {
+  from { opacity: 0; }
+}
+
+@keyframes mobile-more-rise {
+  from { transform: translateY(24px); opacity: 0.6; }
+}
+
+/* ── Floating layers above the bar ─────────────────────────────── */
+
+.app--mobile .quick-note-orb--global {
+  right: calc(16px + var(--m-safe-right));
+  bottom: var(--m-fab-bottom);
+}
+
+/* A running work timer spans the width above the bar; lift the note button over it. */
+.app--mobile:has(.work-timer) .quick-note-orb--global {
+  bottom: calc(var(--m-fab-bottom) + 84px);
+}
+
+.app--mobile .work-timer {
+  left: calc(12px + var(--m-safe-left));
+  right: calc(12px + var(--m-safe-right));
+  bottom: calc(var(--m-nav-h) + var(--m-safe-bottom) + 10px);
+  width: auto;
+}
+
+/* ── Self ──────────────────────────────────────────────────────── */
+
+.app--mobile .self-view {
+  padding-bottom: calc(var(--m-fab-size) + 28px);
+}
+
+.app--mobile .self-hub-header__back,
+.app--mobile .self-hub-header__menu-btn {
+  width: 44px;
+  height: 44px;
+}
+
+.app--mobile .self-hub-header__month {
+  min-height: 44px;
+}
+
+/* Self hub on phones: the figure is the hero. Compact KPI chips sit in narrow side columns
+   (never clipped at the screen edge), the figure gets the middle and most of the height. */
+@media (max-width: 767px) {
+  .app--mobile .self-hub {
+    overflow: visible;
+  }
+
+  .app--mobile .self-hub__stage {
+    display: grid;
+    grid-template-columns: minmax(0, 100px) minmax(0, 1fr) minmax(0, 100px);
+    grid-template-rows: auto auto auto auto;
+    column-gap: 0;
+    row-gap: 8px;
+    align-items: center;
+    aspect-ratio: auto;
+    min-height: 0;
+  }
+
+  .app--mobile .self-hub__stage > .self-float-metric {
+    position: relative;
+    inset: auto;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .app--mobile .self-float-metric--tl { grid-area: 1 / 1; align-self: start; justify-self: start; }
+  .app--mobile .self-float-metric--ml { grid-area: 2 / 1; justify-self: start; }
+  .app--mobile .self-float-metric--bl { grid-area: 3 / 1; align-self: end; justify-self: start; }
+  .app--mobile .self-float-metric--tr { grid-area: 1 / 3; align-self: start; justify-self: end; }
+  .app--mobile .self-float-metric--mr { grid-area: 2 / 3; justify-self: end; }
+  .app--mobile .self-float-metric--br { grid-area: 3 / 3; align-self: end; justify-self: end; }
+
+  /* KPI chips: no icon tile, tighter padding, smaller type. */
+  .app--mobile .self-hub__stage .self-float-metric__pill {
+    gap: 0;
+    padding: 6px 9px;
+    border-radius: 12px;
+    background: rgba(8, 12, 10, 0.62);
+  }
+
+  .app--mobile .self-hub__stage .self-float-metric__pill .self-float-metric__icon {
+    display: none;
+  }
+
+  .app--mobile .self-hub__stage .self-float-metric__content {
+    min-width: 0;
+    gap: 1px;
+  }
+
+  .app--mobile .self-hub__stage .self-float-metric__label {
+    font-size: 9px;
+  }
+
+  .app--mobile .self-hub__stage .self-float-metric__value {
+    font-size: 14px;
+  }
+
+  .app--mobile .self-hub__stage .self-float-metric__pair .self-float-metric__value {
+    font-size: 12px;
+  }
+
+  .app--mobile .self-hub__stage .self-float-metric__pair-tag {
+    font-size: 8px;
+  }
+
+  .app--mobile .self-hub__stage .self-float-metric__secondary,
+  .app--mobile .self-hub__stage .self-float-metric__status {
+    font-size: 9px;
+  }
+
+  /* Weight chip: weight and calories only; circumferences are logged in the day view. */
+  .app--mobile .self-hub__stage .self-float-metric__pill--weight {
+    max-width: 100%;
+  }
+
+  .app--mobile .self-hub__stage .self-float-metric__waist {
+    display: none;
+  }
+
+  .app--mobile .self-hub__stage .self-float-metric__calories {
+    flex-wrap: nowrap;
+    white-space: nowrap;
+  }
+
+  .app--mobile .self-hub__stage .self-float-metric__calories-value {
+    font-size: 10px;
+  }
+
+  .app--mobile .self-hub__stage .self-float-metric__calories-tag {
+    font-size: 8px;
+  }
+
+  /* Rings: 72px instead of ~100px. */
+  .app--mobile .self-hub__stage .self-float-metric--orb {
+    width: 72px;
+  }
+
+  .app--mobile .self-hub__stage .self-float-metric__orb-body {
+    inset: 12%;
+  }
+
+  .app--mobile .self-hub__stage .self-float-metric__orb-icon {
+    display: none;
+  }
+
+  .app--mobile .self-hub__stage .self-float-metric__orb-label,
+  .app--mobile .self-hub__stage .self-float-metric__orb-suffix,
+  .app--mobile .self-hub__stage .self-float-metric__orb-empty {
+    font-size: 8px;
+    letter-spacing: 0.02em;
+  }
+
+  .app--mobile .self-hub__stage .self-float-metric__orb-value {
+    font-size: 16px;
+  }
+
+  /* The figure spans the three KPI rows and sets their height. Its height must not depend on
+     its content: the 3D canvas resizes to fill it, and an auto height grows every frame. */
+  .app--mobile .self-hub__stage > .self-hub__figure {
+    grid-area: 1 / 1 / 4 / 4;
+    position: relative;
+    inset: auto;
+    justify-self: center;
+    align-self: start;
+    width: 66%;
+    height: 380px;
+    min-height: 0;
+    contain: size layout;
+    z-index: 1;
+  }
+
+  .app--mobile .self-hub__figure .self-figure {
+    min-height: 0;
+    max-height: none;
+    height: 100%;
+  }
+
+  .app--mobile .self-hub__stage > .self-hub__capacity-wrap {
+    grid-area: 4 / 1 / 5 / 4;
+    position: relative;
+    left: auto;
+    bottom: auto;
+    transform: none;
+    margin-top: -18px;
+  }
+}
+
+/* A brighter, more saturated figure with a stronger glow behind it. */
+.app--mobile .self-hub__figure .self-figure__canvas canvas {
+  filter: brightness(1.3) saturate(1.35) contrast(1.05);
+}
+
+.app--mobile .self-hub__figure .self-figure__ambient--emerald {
+  width: 78%;
+  height: 72%;
+  bottom: 14%;
+  background: radial-gradient(ellipse at center, rgba(16, 185, 129, 0.34), rgba(16, 185, 129, 0) 70%) !important;
+  filter: blur(28px);
+}
+
+/* Vertical swipes over the 3D figure scroll the page; horizontal drags still spin it. */
+.app--mobile .self-figure__canvas,
+.app--mobile .self-figure__canvas canvas {
+  touch-action: pan-y !important;
+}
+
+.app--mobile .self-day-progress__play {
+  width: 36px;
+  height: 36px;
+}
+
+/* Open items: title gets the full width, actions sit underneath as two equal buttons. */
+.app--mobile .self-open__row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 12px;
+}
+
+.app--mobile .self-open__row > div:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.app--mobile .self-open__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.self-open__more {
+  align-self: stretch;
+  min-height: 44px;
+  border: 1px solid var(--hub-border, rgba(255, 255, 255, 0.1));
+  border-radius: 12px;
+  background: transparent;
+  color: inherit;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.app--mobile .self-thoughts__close {
+  flex-wrap: wrap;
+}
+
+.app--mobile .self-view__focus-toast {
+  bottom: calc(var(--m-fab-bottom) + var(--m-fab-size) + 12px);
+}
+
+/* ── Fields outside `.app` too (sign-in screen, portaled note panel) ─ */
+
+html.is-mobile input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']):not(.zoom-canvas__viewport *),
+html.is-mobile select:not(.zoom-canvas__viewport *),
+html.is-mobile textarea:not(.zoom-canvas__viewport *) {
+  font-size: 16px;
+}
+
+html.is-mobile .auth-screen {
+  min-height: 100dvh;
+  padding: calc(16px + env(safe-area-inset-top, 0px)) 16px calc(16px + env(safe-area-inset-bottom, 0px));
+}
+
+html.is-mobile .auth-card {
+  padding: 24px 20px;
+}
+
+/* Keyboard-shortcut hints mean nothing on a phone. */
+html.is-mobile .quick-note-orb__hint {
+  display: none;
+}
+
+/* Quick note panel: never taller than the space above the button, even with the keyboard open. */
+html.is-mobile .quick-note-orb-overlay--global .quick-note-orb__panel {
+  width: calc(100vw - 24px);
+  max-height: calc(100dvh - 180px - env(safe-area-inset-top, 0px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+html.is-mobile .quick-note-orb__chip {
+  min-height: 36px;
+  padding: 8px 12px;
+}
+
+/* ── Dialogs become bottom sheets ──────────────────────────────── */
+
+.app--mobile .oura-modal,
+.app--mobile .nutrition-modal,
+.app--mobile .path-modal {
+  align-items: flex-end;
+  padding: 0;
+  z-index: 1300;
+}
+
+.app--mobile .oura-modal__panel,
+.app--mobile .nutrition-modal__panel,
+.app--mobile .path-modal__panel {
+  width: 100%;
+  max-height: calc(100dvh - var(--m-safe-top) - 12px);
+  border-radius: 20px 20px 0 0;
+  padding: 18px 16px calc(16px + var(--m-safe-bottom));
+  overscroll-behavior: contain;
+}
+
+/* Close / Save stay reachable at the bottom of long sheets. */
+.app--mobile .oura-modal__actions,
+.app--mobile .path-modal__actions {
+  position: sticky;
+  bottom: calc(-16px - var(--m-safe-bottom));
+  z-index: 2;
+  margin: 8px -16px calc(-16px - var(--m-safe-bottom));
+  padding: 12px 16px calc(12px + var(--m-safe-bottom));
+  flex-wrap: wrap;
+  background: #0a0a0a;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.app--mobile .path-modal__actions {
+  background: var(--path-card, #0a0a0a);
+}
+
+.app--mobile .oura-modal__actions > *,
+.app--mobile .path-modal__actions > * {
+  flex: 1 1 auto;
+}
+
+.app--mobile .oura-modal__btn {
+  min-height: 44px;
+}
+
+.app--mobile .oura-modal__meta dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Nutrition's title row (with its Close button) stays pinned while the sheet scrolls. */
+.app--mobile .nutrition-modal__panel > .nutrition-card__head {
+  position: sticky;
+  top: -18px;
+  z-index: 2;
+  margin: -18px -16px 12px;
+  padding: 14px 16px 10px;
+  background: #0c0d0f;
+}
+
+.app--mobile .path-pdf-modal__panel {
+  max-height: calc(100dvh - var(--m-safe-top) - 12px);
+}
+
+.app--mobile .confirm-dialog__btn {
+  min-height: 44px;
+}
+
+/* ── Path ──────────────────────────────────────────────────────── */
+
+.app--mobile.app--path .main {
+  padding: 0;
+}
+
+.app--mobile .path-view {
+  padding: 16px 16px calc(var(--m-fab-size) + 32px);
+  gap: 16px;
+}
+
+.app--mobile .path-view__title {
+  font-size: 1.6rem;
+}
+
+/* Tabs scroll sideways in one row instead of wrapping "Review" onto a second line. */
+.app--mobile .path-tabs {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin: 0 -16px;
+  padding: 0 8px;
+}
+
+.app--mobile .path-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.app--mobile .path-tabs button {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 12px 14px;
+  white-space: nowrap;
+}
+
+/* Week toolbar: date range on its own line, Prev / This week / Next and the add button below. */
+.app--mobile .path-week-nav {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+.app--mobile .path-week-nav h2 {
+  order: -1;
+  flex-basis: 100%;
+}
+
+.app--mobile .path-week-nav .path-view__actions {
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  gap: 6px;
+}
+
+.app--mobile .path-week-nav .path-view__actions .btn {
+  flex: 1 1 0;
+  padding: 8px 10px;
+}
+
+.app--mobile .path-week-nav > .btn--primary {
+  flex: 1 0 100%;
+}
+
+.app--mobile .path-card__top {
+  flex-wrap: wrap;
+}
+
+/* Days stack on phones; empty days don't need 220px each. */
+.app--mobile .path-day {
+  min-height: 0;
+}
+
+.app--mobile .path-day__add {
+  min-height: 40px;
+  padding: 8px 12px;
+}
+
+/* Block card: edit / delete / move as a 2×2 grid of real buttons instead of four 17px glyphs. */
+.app--mobile .path-block__reorder {
+  display: grid;
+  grid-template-columns: repeat(2, 36px);
+  gap: 4px;
+}
+
+.app--mobile .path-block__reorder button {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 10px;
+  font-size: 15px;
+}
+
+.app--mobile .path-block__title {
+  font-size: 0.95rem;
+}
+
+.app--mobile .path-block__time {
+  font-size: 0.8rem;
+}
+
+.app--mobile .path-block__actions {
+  gap: 6px;
+}
+
+.app--mobile .path-block__actions button {
+  min-height: 36px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 0.8125rem;
+}
+
+.app--mobile .path-routines__item {
+  grid-template-columns: minmax(0, 1fr) auto 44px;
+}
+
+.app--mobile .path-workspace__action--done {
+  grid-template-columns: auto auto minmax(0, 1fr);
+}
+
+.app--mobile .path-workspace__action--done .path-workspace__action-time {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+.app--mobile .path-workspace__card--notes {
+  overflow: hidden;
+}
+
+.app--mobile .path-wheel__chart {
+  position: static;
+}
+
+/* ── Canvases (Lifeline, Projects) ─────────────────────────────── */
+
+.app--mobile .projects-canvas-panel {
+  border: 0;
+  border-radius: 0;
+}
+
+/* Top bar pills: 36px tall (the bar scrolls sideways, so there is room). */
+.app--mobile .canvas-top-bar--mobile .canvas-top-bar__btn {
+  min-height: 36px;
+  padding: 8px 12px;
+  font-size: 0.75rem;
+}
+
+.app--mobile .canvas-top-bar--mobile .canvas-top-bar__btn--icon {
+  min-width: 40px;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+}
+
+.app--mobile .canvas-top-bar--mobile .canvas-top-bar .save-status__btn {
+  min-height: 36px;
+  padding: 8px 12px;
+}
+
+.app--mobile .canvas-top-bar--mobile .canvas-top-bar__theme {
+  max-height: min(360px, 50dvh);
+}
+
+/* Zoom controls go bottom-left so the note button (bottom-right) no longer covers "+". */
+.app--mobile .projects-canvas__fab-dock--mobile {
+  left: calc(10px + var(--m-safe-left));
+  right: auto;
+}
+
+.app--mobile .projects-canvas__fab-dock--mobile .projects-canvas__fab-btn--sm {
+  width: 40px;
+  height: 40px;
+}
+
+.app--mobile .project-rhythm {
+  height: auto;
+  max-height: calc(100% - 70px);
+}
+
+/* Brain sheet: less chrome so the thread and composer fit above the keyboard. */
+.app--mobile .brain-panel__context {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.app--mobile .brain-panel__icon-btn {
+  width: 40px;
+  height: 40px;
+}
+
+.app--mobile .lifeline-workspace--docked .lifeline-workspace__panel {
+  height: min(92dvh, 100%);
+}
+
+/* ── Brand ─────────────────────────────────────────────────────── */
+
+.app--mobile.app--brand .main {
+  padding: 0;
+}
+
+.app--mobile .brand-view {
+  padding: 16px 16px calc(var(--m-fab-size) + 32px);
+}
+
+/* Title on its own row, actions in a full-width row underneath. */
+.app--mobile .brand-view__header {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.app--mobile .brand-view__actions {
+  width: 100%;
+}
+
+.app--mobile .brand-view__actions > :first-child {
+  flex: 1 1 auto;
+  max-width: none;
+}
+
+.app--mobile .brand-tabs {
+  scrollbar-width: none;
+}
+
+.app--mobile .brand-tabs button {
+  min-height: 44px;
+  padding: 12px;
+}
+
+.app--mobile .brand-capture__field {
+  flex-wrap: wrap;
+}
+
+.app--mobile .brand-capture__field textarea {
+  flex: 1 0 100%;
+}
+
+.app--mobile .brand-btn {
+  min-height: 44px;
+}
+
+.app--mobile .brand-btn--icon {
+  width: 44px;
+  height: 44px;
+}
+
+.app--mobile .brand-link {
+  min-height: 36px;
+  padding: 8px 0;
+}
+
+.app--mobile .brand-kinds button,
+.app--mobile .brand-platforms button {
+  min-height: 36px;
+}
+
+/* ── Nutrition ─────────────────────────────────────────────────── */
+
+.app--mobile.app--nutrition .main {
+  padding: 0;
+}
+
+.app--mobile .nutrition-view {
+  padding: 16px 16px calc(var(--m-fab-size) + 32px);
+}
+
+.app--mobile .nutrition-day__head {
+  flex-wrap: wrap;
+}
+
+.app--mobile .nutrition-meal__actions button {
+  min-height: 36px;
+  padding: 8px 10px;
+  font-size: 0.8125rem;
+}
+
+.app--mobile .nutrition-btn {
+  min-height: 44px;
+}
+
+.app--mobile .nutrition-btn--icon {
+  width: 44px;
+  height: 44px;
+}
+
+.app--mobile .nutrition-chip {
+  min-height: 36px;
+}
+
+/* Pantry row: name + amount on top, expiry + stock under it, remove button on the right. */
+.app--mobile .nutrition-pantry-row {
+  grid-template-columns: minmax(0, 1fr) auto 44px;
+  row-gap: 2px;
+}
+
+.app--mobile .nutrition-pantry-row > :nth-child(1) { grid-area: 1 / 1; }
+.app--mobile .nutrition-pantry-row > :nth-child(2) { grid-area: 1 / 2; }
+.app--mobile .nutrition-pantry-row > :nth-child(3) { grid-area: 2 / 1; }
+.app--mobile .nutrition-pantry-row > :nth-child(4) { grid-area: 2 / 2; }
+.app--mobile .nutrition-pantry-row > :nth-child(5) { grid-area: 1 / 3 / 3 / 4; }
+
+/* Ingredient row: name across the top, quantity / unit / cost / remove underneath. */
+.app--mobile .nutrition-ingredient-row {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) 44px;
+}
+
+.app--mobile .nutrition-ingredient-row > :first-child {
+  grid-column: 1 / -1;
+}
+
+.app--mobile .nutrition-library__filters .input {
+  flex: 1 1 calc(50% - 5px);
+  max-width: none;
+}
+
+/* The sticky "Groceries" button leaves room for the note button on the right. */
+.app--mobile .nutrition-sticky-groceries {
+  bottom: calc(var(--m-nav-h) + var(--m-safe-bottom) + 16px);
+  margin-right: calc(var(--m-fab-size) + 12px);
+}
+
+/* ── Devices & Settings ────────────────────────────────────────── */
+
+.app--mobile .cameras-view {
+  padding: 0 0 24px;
+}
+
+.app--mobile .cameras-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
+}
+
+.app--mobile.app--settings .main > .view-section:first-child {
+  margin-top: 0;
+}
+
+.app--mobile .settings-block {
+  padding: 16px;
+}
+
+.app--mobile .settings-block > .btn {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.app--mobile .settings-tabs__tab {
+  min-height: 44px;
+}
+
+/* ── Work timer ────────────────────────────────────────────────── */
+
+.app--mobile .work-timer__actions {
+  flex-direction: row;
+}
+
+.app--mobile .work-timer__actions button {
+  min-height: 40px;
+  padding: 8px 14px;
+}
+
+/* ── Things that only appeared on hover ────────────────────────── */
+
+.app--mobile .chapter-detail__title-hint,
+.app--mobile .stage-details__title-hint,
+.app--mobile .checkpoint-subtasks__remove {
+  opacity: 1;
+}
+
+/* ── Lifeline week / month summary ─────────────────────────────── */
+
+/* Two cards per row instead of one long column; the pair in each row shares its height. */
+.app--mobile .period-lab__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 8px;
+  padding: 8px 12px calc(5.25rem + var(--m-safe-bottom));
+}
+
+.app--mobile .period-lab__card {
+  height: auto;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 14px;
+}
+
+.app--mobile .period-lab__card-eyebrow {
+  font-size: 9px;
+  letter-spacing: 0.05em;
+}
+
+.app--mobile .period-lab__card-title {
+  font-size: 14px;
+}
+
+.app--mobile .period-lab__card-primary {
+  font-size: 22px;
+}
+
+.app--mobile .period-lab__card-primary span {
+  font-size: 11px;
+}
+
+.app--mobile .period-lab__delta {
+  margin-left: 4px;
+  font-size: 10px;
+}
+
+.app--mobile .period-lab__rows {
+  gap: 4px;
+}
+
+.app--mobile .period-lab__rows li,
+.app--mobile .period-lab__wakes li {
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+/* Label + value rows wrap rather than overflow the narrow card. */
+.app--mobile .period-lab__rows--tight li {
+  flex-wrap: wrap;
+  row-gap: 0;
+}
+
+.app--mobile .period-lab__wakes {
+  padding-left: 8px;
+  gap: 4px;
+}
+
+.app--mobile .period-lab__notes {
+  padding-left: 14px;
+  font-size: 11px;
+}
+
+/* The status pill under the week nav is always empty on phones. */
+.app--mobile .period-lab .day-lab__status {
+  display: none;
+}
+
+.app--mobile .period-lab__nav-btn {
+  min-height: 36px;
+  padding: 8px 14px;
+  font-size: 12px;
+}

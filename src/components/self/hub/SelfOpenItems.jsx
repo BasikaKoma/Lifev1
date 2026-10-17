@@ -9,7 +9,11 @@ import {
 import { getAssistantRun, pullAssistantNow } from '../../../lib/assistant/pull';
 import { localTodayIsoDate } from '../../../utils/selfDateUtils';
 import { getDayEntry } from '../../../utils/lifelineDays';
+import { platform } from '../../../platform';
 import './SelfOpenItems.css';
+
+// On a phone a long open list pushes the rest of Self thousands of pixels down.
+const MOBILE_VISIBLE_LIMIT = 5;
 
 export function SelfOpenItems({ lifelineDays = {}, onUpdateLifelineDay }) {
   const [items, setItems] = useState([]);
@@ -17,6 +21,7 @@ export function SelfOpenItems({ lifelineDays = {}, onUpdateLifelineDay }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const synced = useRef('');
   const touched = useRef(new Set());
 
@@ -93,6 +98,8 @@ export function SelfOpenItems({ lifelineDays = {}, onUpdateLifelineDay }) {
   };
 
   const open = items.filter((item) => item.status === 'open');
+  const collapsible = platform.isMobile && open.length > MOBILE_VISIBLE_LIMIT;
+  const shown = collapsible && !expanded ? open.slice(0, MOBILE_VISIBLE_LIMIT) : open;
 
   return (
     <section className="self-open" aria-label="Εκκρεμότητες">
@@ -117,7 +124,7 @@ export function SelfOpenItems({ lifelineDays = {}, onUpdateLifelineDay }) {
       {error ? <p className="self-open__error">{error}</p> : null}
 
       <ul className="self-open__list">
-        {open.map((item) => (
+        {shown.map((item) => (
           <li key={item.id} className="self-open__row">
             <div>
               <strong>{item.title}</strong>
@@ -140,6 +147,16 @@ export function SelfOpenItems({ lifelineDays = {}, onUpdateLifelineDay }) {
         ))}
         {!open.length ? <li className="self-open__empty">Τίποτα ανοιχτό σήμερα.</li> : null}
       </ul>
+      {collapsible ? (
+        <button
+          type="button"
+          className="self-open__more"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((value) => !value)}
+        >
+          {expanded ? 'Λιγότερες' : `Δείξε όλες (${open.length})`}
+        </button>
+      ) : null}
     </section>
   );
 }

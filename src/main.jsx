@@ -7,8 +7,14 @@ import { purgeLegacyLocalProjectStorage } from './utils/projectSession';
 import { captureInviteFromUrl } from './utils/inviteSession';
 import './index.css';
 import './App.css';
+import './mobile.css';
 
-import { detectPlatform } from './platform/capabilities';
+import { detectPlatform, isMobilePlatform } from './platform/capabilities';
+
+// Lets mobile.css reach UI rendered outside `.app` (sign-in screen, portaled overlays).
+if (isMobilePlatform()) {
+  document.documentElement.classList.add('is-mobile');
+}
 
 purgeLegacyLocalProjectStorage();
 captureInviteFromUrl();

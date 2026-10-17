@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { platform } from '../platform';
 
 const ITEMS = [
@@ -91,6 +92,20 @@ const ITEMS = [
   },
 ];
 
+// Phone tab bars hold at most five destinations (iOS HIG, Material 3);
+// the rest live behind "More" in a bottom sheet.
+const PRIMARY_IDS = ['self', 'path', 'lifeline', 'projects'];
+const PRIMARY_ITEMS = ITEMS.filter((item) => PRIMARY_IDS.includes(item.id));
+const MORE_ITEMS = ITEMS.filter((item) => !PRIMARY_IDS.includes(item.id));
+
+const MORE_ICON = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+    <circle cx="5" cy="12" r="1.6" />
+    <circle cx="12" cy="12" r="1.6" />
+    <circle cx="19" cy="12" r="1.6" />
+  </svg>
+);
+
 export function MobileBottomNav({
   activeView,
   isLifeline = false,
@@ -98,6 +113,21 @@ export function MobileBottomNav({
   onOpenLifeline,
   hidden = false,
 }) {
+  const [moreOpen, setMoreOpen] = useState(false);
+
+  useEffect(() => {
+    if (!moreOpen) return undefined;
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') setMoreOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [moreOpen]);
+
+  useEffect(() => {
+    if (hidden) setMoreOpen(false);
+  }, [hidden]);
+
   if (!platform.isMobile || hidden) return null;
 
   const isItemActive = (item) => {
@@ -106,7 +136,10 @@ export function MobileBottomNav({
     return item.id === activeView;
   };
 
+  const moreActive = MORE_ITEMS.some(isItemActive);
+
   const handleClick = (item) => {
+    setMoreOpen(false);
     if (item.id === 'lifeline') {
       onOpenLifeline?.();
       return;
@@ -114,23 +147,68 @@ export function MobileBottomNav({
     onNavigate?.(item.id);
   };
 
+  const renderItem = (item) => {
+    const isActive = isItemActive(item);
+    return (
+      <button
+        key={item.id}
+        type="button"
+        className={`mobile-bottom-nav__item${isActive ? ' mobile-bottom-nav__item--active' : ''}`}
+        onClick={() => handleClick(item)}
+        aria-current={isActive ? 'page' : undefined}
+      >
+        <span className="mobile-bottom-nav__icon">{item.icon}</span>
+        <span className="mobile-bottom-nav__label">{item.label}</span>
+      </button>
+    );
+  };
+
   return (
-    <nav className="mobile-bottom-nav" aria-label="Main navigation">
-      {ITEMS.map((item) => {
-        const isActive = isItemActive(item);
-        return (
-          <button
-            key={item.id}
-            type="button"
-            className={`mobile-bottom-nav__item${isActive ? ' mobile-bottom-nav__item--active' : ''}`}
-            onClick={() => handleClick(item)}
-            aria-current={isActive ? 'page' : undefined}
+    <>
+      {moreOpen && (
+        <div className="mobile-more-sheet" role="presentation" onClick={() => setMoreOpen(false)}>
+          <div
+            className="mobile-more-sheet__panel"
+            role="dialog"
+            aria-modal="true"
+            aria-label="More"
+            onClick={(event) => event.stopPropagation()}
           >
-            <span className="mobile-bottom-nav__icon">{item.icon}</span>
-            <span className="mobile-bottom-nav__label">{item.label}</span>
-          </button>
-        );
-      })}
-    </nav>
+            <span className="mobile-more-sheet__handle" aria-hidden="true" />
+            <div className="mobile-more-sheet__grid">
+              {MORE_ITEMS.map((item) => {
+                const isActive = isItemActive(item);
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={`mobile-more-sheet__item${isActive ? ' mobile-more-sheet__item--active' : ''}`}
+                    onClick={() => handleClick(item)}
+                    aria-current={isActive ? 'page' : undefined}
+                  >
+                    <span className="mobile-more-sheet__icon">{item.icon}</span>
+                    <span className="mobile-more-sheet__label">{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <nav className="mobile-bottom-nav" aria-label="Main navigation">
+        {PRIMARY_ITEMS.map(renderItem)}
+        <button
+          type="button"
+          className={`mobile-bottom-nav__item${moreActive || moreOpen ? ' mobile-bottom-nav__item--active' : ''}`}
+          onClick={() => setMoreOpen((open) => !open)}
+          aria-expanded={moreOpen}
+          aria-haspopup="dialog"
+        >
+          <span className="mobile-bottom-nav__icon">{MORE_ICON}</span>
+          <span className="mobile-bottom-nav__label">More</span>
+        </button>
+      </nav>
+    </>
   );
 }

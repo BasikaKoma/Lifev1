@@ -25,6 +25,13 @@ export function useMobilePinchZoom(enabled = true) {
 
     const applyScale = (scale) => {
       const clamped = Math.min(2.5, Math.max(0.85, scale));
+      // Back at ~1x, drop the transform: any leftover transform makes this element the
+      // containing block for position:fixed children, so modals inside it render off-screen.
+      if (Math.abs(clamped - 1) < 0.03) {
+        stateRef.current.scale = 1;
+        el.style.transform = '';
+        return;
+      }
       stateRef.current.scale = clamped;
       el.style.transform = `scale(${clamped})`;
       el.style.transformOrigin = 'top center';

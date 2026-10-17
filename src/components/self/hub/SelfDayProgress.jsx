@@ -573,8 +573,8 @@ export function SelfDayProgress({
               ) : null}
             </div>
             <div className="self-day-progress__markers">
-              {markers.map((marker) => (
-                <span key={marker} className="self-day-progress__marker">
+              {markers.map((marker, index) => (
+                <span key={`${marker}-${index}`} className="self-day-progress__marker">
                   {marker}
                 </span>
               ))}

@@ -1,6 +1,10 @@
 import { SelfHumanFigure } from '../SelfHumanFigure';
 import { SelfFloatingMetric } from './SelfFloatingMetric';
 import { SelfCapacityBanner } from './SelfCapacityBanner';
+import { platform } from '../../../platform';
+
+// On a phone the figure is the hero of the screen, so it reads more solid than on desktop.
+const MOBILE_BODY_OPACITY = platform.isMobile ? 0.5 : undefined;
 
 /** @param {{ floatingMetrics: import('../../../utils/selfHubSchema').SelfHubFloatingMetrics, capacity: import('../../../utils/selfHubSchema').SelfHubCapacity }} props */
 export function SelfHub({ floatingMetrics, capacity }) {
@@ -17,7 +21,7 @@ export function SelfHub({ floatingMetrics, capacity }) {
           <SelfFloatingMetric metric={floatingMetrics.movement} position="br" variant="orb" orbKind="movement" />
 
           <div className="self-hub__figure">
-            <SelfHumanFigure />
+            <SelfHumanFigure bodyOpacity={MOBILE_BODY_OPACITY} />
           </div>
 
           <div className="self-hub__capacity-wrap">
