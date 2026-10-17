@@ -11,6 +11,7 @@ import {
   summarizePeriod,
 } from '../utils/periodSummary';
 import { getDayEntry } from '../utils/lifelineDays';
+import { KpiChart, KpiMeter, StatusPill } from './PeriodCharts';
 import './DayLab.css';
 import './PeriodLab.css';
 
@@ -84,15 +85,19 @@ function WeekReview({ startDate, lifelineDays, onUpdateDay }) {
 
 function SummaryCard({ card }) {
   if (!card) return null;
+  const status = card.status || 'neutral';
   const nights = card.nights || [];
-  const split = nights.length > 0;
+  const split = card.hasData && nights.length > 0;
   return (
-    <article className={`period-lab__card${card.hasData ? '' : ' period-lab__card--empty'}${split ? ' period-lab__card--split' : ''}`}>
-      <p className="period-lab__card-eyebrow">{card.eyebrow}</p>
+    <article className={`period-lab__card period-lab__card--${status}${card.hasData ? '' : ' period-lab__card--empty'}${split ? ' period-lab__card--split' : ''}`}>
+      <div className="period-lab__card-top">
+        <p className="period-lab__card-eyebrow">{card.eyebrow}</p>
+        {card.hasData ? <StatusPill status={card.status} /> : null}
+      </div>
       <div className="period-lab__card-head">
         <h3 className="period-lab__card-title">{card.title}</h3>
         {card.hasData && card.primary != null ? (
-          <p className="period-lab__card-primary">
+          <p className={`period-lab__card-primary period-lab__card-primary--${status}`}>
             {card.primary}
             {card.primarySuffix ? <span>{card.primarySuffix}</span> : null}
             <Delta delta={card.delta} />
@@ -101,6 +106,9 @@ function SummaryCard({ card }) {
           <p className="period-lab__card-empty">No data</p>
         )}
       </div>
+      {card.hasData ? <KpiMeter meter={card.meter} status={card.status} /> : null}
+      {card.hasData ? <KpiChart chart={card.chart} /> : null}
+      {card.hasData ? <KpiChart chart={card.extraChart} /> : null}
       {split ? (
         <div className="period-lab__split">
           <SummaryRows rows={card.rows} tight />
@@ -118,10 +126,14 @@ function SummaryCard({ card }) {
       )}
       {!split && card.notes?.length ? (
         <ul className="period-lab__notes">
-          {card.notes.map((note) => (
-            <li key={note}>{note}</li>
+          {card.notes.map((note, index) => (
+            // Two skipped blocks can share a title, so the position keeps keys unique.
+            <li key={`${index}-${note}`}>{note}</li>
           ))}
         </ul>
+      ) : null}
+      {card.verdict ? (
+        <p className={`period-lab__verdict period-lab__verdict--${status}`}>{card.verdict}</p>
       ) : null}
     </article>
   );
@@ -259,7 +271,6 @@ function PeriodLabBody({
   range,
   lifelineDays,
   selfHubDays = {},
-  routineTemplates = [],
   projectActivity = [],
   stages = [],
   obstacles = [],
@@ -310,7 +321,6 @@ function PeriodLabBody({
         endDate: range?.endDate,
         lifelineDays,
         selfHubDays,
-        routineTemplates,
         pathBundle,
         projectActivity,
         stages,
@@ -328,7 +338,6 @@ function PeriodLabBody({
       kind,
       lifelineDays,
       selfHubDays,
-      routineTemplates,
       pathBundle,
       projectActivity,
       stages,

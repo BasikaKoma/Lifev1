@@ -1423,8 +1423,30 @@ html.is-mobile .quick-note-orb__chip {
   gap: 4px;
 }
 
+/* Two cards per row leave little width: shorter plots, narrower chart labels. */
+.app--mobile .kpi-plot {
+  height: 56px;
+}
+
+.app--mobile .kpi-bullets li {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.app--mobile .kpi-bullets__track {
+  grid-column: 1 / -1;
+  order: 3;
+}
+
+.app--mobile .kpi-grid__row {
+  grid-template-columns: minmax(0, 3.5rem) minmax(0, 1fr);
+}
+
 .app--mobile .period-lab__notes {
   padding-left: 14px;
+  font-size: 11px;
+}
+
+.app--mobile .period-lab__verdict {
   font-size: 11px;
 }
 
