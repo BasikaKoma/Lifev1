@@ -123,6 +123,15 @@ async function encryptPayload(subscription: WebPushSubscription, payload: Uint8A
   return concat(salt, recordSize, new Uint8Array([asPublic.length]), asPublic, ciphertext);
 }
 
+/**
+ * Topic header: always 32 base64url chars (a hash of the tag). Apple rejects a topic whose
+ * length isn't valid base64 (e.g. 17 chars) with BadWebPushTopic.
+ */
+async function pushTopic(value: string): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(value)));
+  return bytesToBase64Url(digest.slice(0, 24));
+}
+
 export function getVapidKeys(): VapidKeys | null {
   const publicKey = Deno.env.get('VAPID_PUBLIC_KEY')?.trim();
   const privateKey = Deno.env.get('VAPID_PRIVATE_KEY')?.trim();
@@ -146,8 +155,8 @@ export async function sendWebPush(
       TTL: String(options.ttlSeconds ?? 24 * 60 * 60),
       Urgency: options.urgency ?? 'high',
     };
-    // Topic replaces an undelivered message with the same topic (max 32 url-safe chars).
-    if (options.topic) headers.Topic = options.topic.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32);
+    // Topic replaces an undelivered message with the same topic.
+    if (options.topic) headers.Topic = await pushTopic(options.topic);
 
     const res = await fetch(subscription.endpoint, { method: 'POST', headers, body });
     const expired = res.status === 404 || res.status === 410;
