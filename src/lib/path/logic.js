@@ -354,6 +354,85 @@ export function formatBlockWindow(startTime, duration) {
   return `${pad(Number(match[1]))}:${match[2]}–${pad(Math.floor(endMin / 60) % 24)}:${pad(endMin % 60)}`;
 }
 
+export function blockStartMinutes(block) {
+  return clockMinutes(block?.startTime);
+}
+
+/** 570 → "09:30", clamped to the same day. */
+export function minutesToClock(total) {
+  const value = Math.max(0, Math.min(24 * 60 - 1, Math.round(Number(total) || 0)));
+  const pad = (part) => String(part).padStart(2, '0');
+  return `${pad(Math.floor(value / 60))}:${pad(value % 60)}`;
+}
+
+/** Planned minutes for a day; skipped blocks do not count. */
+export function plannedDayMinutes(blocks = []) {
+  return (blocks || []).reduce((sum, block) => {
+    if (block.status === 'Skipped') return sum;
+    const minutes = toNum(block.duration);
+    return minutes && minutes > 0 ? sum + minutes : sum;
+  }, 0);
+}
+
+/**
+ * Places timed blocks on an hour grid. Blocks that overlap share the width in
+ * lanes; `visualEnd` keeps very short blocks tall enough to read.
+ */
+export function layoutDayTimeline(blocks = [], { minMinutes = 30, defaultMinutes = 30 } = {}) {
+  const dayEnd = 24 * 60;
+  const items = [];
+  for (const block of blocks || []) {
+    const start = clockMinutes(block?.startTime);
+    if (start == null) continue;
+    const duration = toNum(block.duration);
+    const minutes = duration && duration > 0 ? duration : defaultMinutes;
+    items.push({
+      block,
+      start,
+      end: Math.min(dayEnd, start + minutes),
+      visualEnd: Math.min(dayEnd, start + Math.max(minutes, minMinutes)),
+      lane: 0,
+      lanes: 1,
+    });
+  }
+  items.sort((a, b) => a.start - b.start || b.visualEnd - a.visualEnd);
+
+  let cluster = [];
+  let laneEnds = [];
+  let clusterEnd = -1;
+  const flush = () => {
+    for (const item of cluster) item.lanes = laneEnds.length || 1;
+    cluster = [];
+    laneEnds = [];
+  };
+  for (const item of items) {
+    if (cluster.length && item.start >= clusterEnd) flush();
+    let lane = laneEnds.findIndex((end) => end <= item.start);
+    if (lane < 0) {
+      lane = laneEnds.length;
+      laneEnds.push(item.visualEnd);
+    } else {
+      laneEnds[lane] = item.visualEnd;
+    }
+    item.lane = lane;
+    cluster.push(item);
+    clusterEnd = Math.max(clusterEnd, item.visualEnd);
+  }
+  flush();
+  return items;
+}
+
+/** Hour range for the week grid: the defaults, widened to fit every block. */
+export function timelineHourBounds(items = [], { startHour = 6, endHour = 23 } = {}) {
+  let first = startHour;
+  let last = endHour;
+  for (const item of items || []) {
+    first = Math.min(first, Math.floor(item.start / 60));
+    last = Math.max(last, Math.ceil(item.visualEnd / 60));
+  }
+  return { startHour: Math.max(0, first), endHour: Math.min(24, last) };
+}
+
 export function blockStatusAt(block) {
   if (!block || block.status === 'Planned') return null;
   return block.statusAt
