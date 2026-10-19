@@ -14,7 +14,6 @@ import {
   SelfSummaryStrip,
   SelfProjectDayCard,
   SelfThoughtsCard,
-  SelfOpenItems,
   SelfRoutinesCard,
   SelfPathWeekCard,
   SelfHubMenu,
@@ -248,12 +247,6 @@ export function SelfView({
             eventNotes={todayEventNotes}
             onSaveEvent={onUpdateLifelineDay ? handleSaveTimelineEvent : undefined}
             onOpenDayDetails={handleOpenDayDetails}
-          />
-
-          <SelfOpenItems
-            lifelineDays={lifelineDays}
-            onUpdateLifelineDay={onUpdateLifelineDay}
-            pathBundle={pathBundle}
           />
 
           <SelfSummaryStrip
