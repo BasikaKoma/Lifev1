@@ -13,6 +13,28 @@
   border: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 16px 44px rgba(0, 0, 0, 0.45);
   color: var(--color-text);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.work-timer--dragging {
+  cursor: grabbing;
+}
+
+.work-timer__copy {
+  cursor: pointer;
+}
+
+.work-timer--dragging .work-timer__copy {
+  cursor: grabbing;
+}
+
+.work-timer__copy:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.5);
+  outline-offset: 4px;
+  border-radius: 8px;
 }
 
 .app--sidebar-collapsed .work-timer {

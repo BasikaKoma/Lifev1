@@ -15,7 +15,16 @@ import { PathWeekCalendar } from './PathWeekCalendar';
 import { PathWeekMobile } from './PathWeekMobile';
 import { platform } from '../../platform';
 
-export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteLinkedTask, onWorkspaceChange }) {
+export function PathWeek({
+  path,
+  tasks = [],
+  weekStart,
+  onWeekStart,
+  onCompleteLinkedTask,
+  onWorkspaceChange,
+  openBlockRequest,
+  onOpenBlockHandled,
+}) {
   const [editor, setEditor] = useState(null);
   const [workspaceId, setWorkspaceId] = useState(null);
   const [completePrompt, setCompletePrompt] = useState(null);
@@ -33,6 +42,15 @@ export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteL
       setWorkspaceId(null);
     }
   }, [workspaceId, path.blocks]);
+
+  useEffect(() => {
+    if (!openBlockRequest?.blockId) return;
+    if (path.blocks.some((block) => block.id === openBlockRequest.blockId)) {
+      setEditor(null);
+      setWorkspaceId(openBlockRequest.blockId);
+    }
+    onOpenBlockHandled?.();
+  }, [openBlockRequest, path.blocks, onOpenBlockHandled]);
 
   useEffect(() => {
     onWorkspaceChange?.(Boolean(workspaceId));

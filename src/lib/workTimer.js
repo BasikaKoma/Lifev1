@@ -5,6 +5,7 @@ const STORAGE_KEY = 'lifev1-work-timer';
 const LOG_KEY = 'lifev1-work-timer-log';
 const MIN_RECORD_MS = 15000;
 const LOG_LIMIT = 200;
+export const HALF_HOUR_MS = 30 * 60000;
 
 let session = null;
 const listeners = new Set();
@@ -44,6 +45,7 @@ function readStored() {
       accumulatedMs: Math.max(0, Number(raw.accumulatedMs) || 0),
       running: raw.running === true,
       targetChimed: raw.targetChimed === true,
+      halfHoursChimed: Math.max(0, Math.floor(Number(raw.halfHoursChimed) || 0)),
       runs: normalizeRuns(raw.runs),
     };
   } catch {
@@ -67,9 +69,19 @@ function commit(next) {
 }
 
 session = readStored();
-if (session && !session.targetChimed && targetMsOf(session) && sessionElapsedMs(session) >= targetMsOf(session)) {
-  session = { ...session, targetChimed: true };
-  writeStored(session);
+if (session) {
+  // Marks passed while the app was closed stay silent; only live ones chime.
+  const elapsed = sessionElapsedMs(session);
+  const halfHours = Math.floor(elapsed / HALF_HOUR_MS);
+  const targetPassed = Boolean(targetMsOf(session)) && elapsed >= targetMsOf(session);
+  if (halfHours > session.halfHoursChimed || (targetPassed && !session.targetChimed)) {
+    session = {
+      ...session,
+      targetChimed: session.targetChimed || targetPassed,
+      halfHoursChimed: Math.max(session.halfHoursChimed, halfHours),
+    };
+    writeStored(session);
+  }
 }
 
 export function subscribeWorkTimer(listener) {
@@ -205,6 +217,7 @@ export function startBlockTimer(block) {
     accumulatedMs: 0,
     running: true,
     targetChimed: false,
+    halfHoursChimed: 0,
     runs: [{ start: at, end: null }],
   });
 }
@@ -248,29 +261,54 @@ export function stopWorkTimer() {
   recordBlockWork(current.blockId, minutesFromElapsed(elapsed));
 }
 
-export function markWorkTimerChimed() {
-  if (!session || session.targetChimed) return;
-  commit({ ...session, targetChimed: true });
+export function markWorkTimerChimed({ target = false, halfHours = 0 } = {}) {
+  if (!session) return;
+  const targetChimed = session.targetChimed || target;
+  const halfHoursChimed = Math.max(session.halfHoursChimed || 0, halfHours);
+  if (targetChimed === session.targetChimed && halfHoursChimed === session.halfHoursChimed) return;
+  commit({ ...session, targetChimed, halfHoursChimed });
 }
 
-export function chimeWorkTimer() {
+function playNotes(notes) {
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtx) return;
     const ctx = new AudioCtx();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.value = 698;
-    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.045, ctx.currentTime + 0.03);
-    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.7);
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.72);
-    osc.onended = () => ctx.close();
+    if (ctx.state === 'suspended') ctx.resume?.().catch(() => {});
+    let last = null;
+    let lastEnd = 0;
+    for (const note of notes) {
+      const start = ctx.currentTime + (note.at || 0);
+      const end = start + note.duration;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = note.frequency;
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(note.peak, start + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.0001, end);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(start);
+      osc.stop(end + 0.02);
+      if (end >= lastEnd) {
+        last = osc;
+        lastEnd = end;
+      }
+    }
+    if (last) last.onended = () => ctx.close();
   } catch {
     /* a missing audio device should not stop the timer */
   }
+}
+
+export function chimeWorkTimer() {
+  playNotes([{ frequency: 698, duration: 0.7, peak: 0.045 }]);
+}
+
+export function chimeHalfHour() {
+  playNotes([
+    { frequency: 880, duration: 0.22, peak: 0.03 },
+    { frequency: 1175, at: 0.14, duration: 0.34, peak: 0.03 },
+  ]);
 }

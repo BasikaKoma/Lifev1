@@ -80,6 +80,7 @@ function MainApp({ user, onSignOut }) {
   const [brainMode, setBrainMode] = useState('closed');
   const [pathBundle, setPathBundle] = useState(() => readPathBundleLocal());
   const [pathTab, setPathTab] = useState(() => pathTabFromPathname(window.location.pathname) || 'week');
+  const [pathBlockRequest, setPathBlockRequest] = useState(null);
 
   const {
     loading,
@@ -440,6 +441,14 @@ function MainApp({ user, onSignOut }) {
     setPathTab(tab);
     handleNavigate('path');
   };
+
+  const openPathBlock = (blockId) => {
+    if (!blockId) return;
+    setPathBlockRequest({ blockId, at: Date.now() });
+    openPath('week');
+  };
+
+  const clearPathBlockRequest = useCallback(() => setPathBlockRequest(null), []);
 
   const openFromNotification = (url) => {
     let pathname = '/';
@@ -886,6 +895,8 @@ function MainApp({ user, onSignOut }) {
             projectActivity={hubProjectActivity}
             initialTab={pathTab}
             onTabChange={setPathTab}
+            openBlockRequest={pathBlockRequest}
+            onOpenBlockHandled={clearPathBlockRequest}
             routineTemplates={lifelineRoutineTemplates}
             onUpdateRoutineTemplates={updateLifelineRoutineTemplates}
             lifelineDays={lifelineDays}
@@ -1009,7 +1020,7 @@ function MainApp({ user, onSignOut }) {
         <main className="main">{renderContent()}</main>
       </div>
 
-      <WorkTimer />
+      <WorkTimer onOpenBlock={openPathBlock} />
 
       <PushToast
         notice={foregroundNotice}

@@ -32,6 +32,8 @@ export function PathView({
   onCompleteLinkedTask,
   initialTab,
   onTabChange,
+  openBlockRequest,
+  onOpenBlockHandled,
   routineTemplates = [],
   onUpdateRoutineTemplates,
   lifelineDays = {},
@@ -46,6 +48,16 @@ export function PathView({
   useEffect(() => {
     if (PATH_TABS.some((item) => item.id === initialTab)) setTab(initialTab);
   }, [initialTab]);
+
+  // PathWeek opens the block itself; here we only bring its week into view.
+  useEffect(() => {
+    if (!openBlockRequest?.blockId || path.loading) return;
+    const block = path.blocks.find((item) => item.id === openBlockRequest.blockId);
+    setTab('week');
+    setSettingsOpen(false);
+    setImporting(false);
+    if (block?.date) setWeekStart(startOfWeekMonday(block.date));
+  }, [openBlockRequest, path.loading]);
 
   const projects = useMemo(
     () => filterRegularProjects(projectList).map((project) => ({ id: project.id, title: project.title })),
@@ -139,6 +151,8 @@ export function PathView({
           onWeekStart={setWeekStart}
           onCompleteLinkedTask={onCompleteLinkedTask}
           onWorkspaceChange={setBlockOpen}
+          openBlockRequest={openBlockRequest}
+          onOpenBlockHandled={onOpenBlockHandled}
         />
       ) : null}
 
