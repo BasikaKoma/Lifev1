@@ -14,9 +14,16 @@ function metricValue(metrics, type, source = null) {
 import { getLatestWeightReading, getPreviousWeightReading, formatWeightReadingTime } from './weightReadings';
 import {
   CIRCUMFERENCE_KINDS,
+  expandCircumferenceReadings,
   getLatestCircumferenceReading,
   getPreviousCircumferenceReading,
 } from './circumferenceReadings';
+
+/** The reading to show for `day` (null when that day has none); without a day, the latest overall. */
+function circumferenceForDay(kind, healthMetrics, day) {
+  if (!day) return getLatestCircumferenceReading(kind, healthMetrics);
+  return expandCircumferenceReadings(kind, healthMetrics).find((reading) => reading.day === day) ?? null;
+}
 
 function latestWeightMetrics(metrics) {
   const latest = getLatestWeightReading(metrics);
@@ -62,13 +69,14 @@ function buildWeightMetric(kg, delta = null, recordedAt = null) {
   };
 }
 
-function applyCircumferencesToWeight(metrics, healthMetrics) {
+function applyCircumferencesToWeight(metrics, healthMetrics, day) {
   const base = { ...(metrics.weight ?? emptySelfData.metrics.weight) };
   for (const kind of CIRCUMFERENCE_KINDS) {
-    const latest = getLatestCircumferenceReading(kind, healthMetrics);
+    const latest = circumferenceForDay(kind, healthMetrics, day);
     if (!latest) {
       base[`${kind}Cm`] = null;
       base[`${kind}Delta`] = null;
+      base[`${kind}RecordedAt`] = null;
       continue;
     }
     const previous = getPreviousCircumferenceReading(kind, healthMetrics, latest.recordedAt);
@@ -82,19 +90,24 @@ function applyCircumferencesToWeight(metrics, healthMetrics) {
   return metrics;
 }
 
-function applyWeightMetric(metrics, healthMetrics) {
+function applyWeightMetric(metrics, healthMetrics, day) {
   const { latest, delta } = latestWeightMetrics(healthMetrics);
   metrics.weight = latest
     ? buildWeightMetric(latest.value, delta, latest.recordedAt)
     : emptySelfData.metrics.weight;
-  applyCircumferencesToWeight(metrics, healthMetrics);
+  applyCircumferencesToWeight(metrics, healthMetrics, day);
   return metrics;
 }
 
-export function healthMetricsToSelfData({ healthMetrics = [], ouraRow = null, connected = false }) {
+/**
+ * @param {Object} params
+ * @param {string|null} [params.day] — when set, body circumferences show only that day's
+ *   readings (empty when none), instead of the latest ever logged.
+ */
+export function healthMetricsToSelfData({ healthMetrics = [], ouraRow = null, connected = false, day = null }) {
   if (ouraRow) {
     const ouraData = mapOuraRowToSelfData(ouraRow);
-    applyWeightMetric(ouraData.metrics, healthMetrics);
+    applyWeightMetric(ouraData.metrics, healthMetrics, day);
     if (healthMetrics.some((m) => m.source === 'qn_scale')) {
       ouraData.source = 'merged';
     }
@@ -160,7 +173,7 @@ export function healthMetricsToSelfData({ healthMetrics = [], ouraRow = null, co
     }),
   };
 
-  applyWeightMetric(metrics, healthMetrics);
+  applyWeightMetric(metrics, healthMetrics, day);
 
   const sources = new Set(healthMetrics.map((m) => m.source));
   let source = 'health';
@@ -184,6 +197,6 @@ export function healthMetricsToSelfData({ healthMetrics = [], ouraRow = null, co
   };
 }
 
-export function buildSelfViewDataFromHealth({ healthMetrics, ouraRow, connected }) {
-  return healthMetricsToSelfData({ healthMetrics, ouraRow, connected });
+export function buildSelfViewDataFromHealth({ healthMetrics, ouraRow, connected, day }) {
+  return healthMetricsToSelfData({ healthMetrics, ouraRow, connected, day });
 }

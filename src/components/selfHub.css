@@ -512,6 +512,41 @@
   color: rgba(248, 250, 252, 0.5);
 }
 
+/* No reading today: an empty dashed prompt that opens the inline log form. */
+.self-body-measure__add {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
+  margin-top: 0.1rem;
+  padding: 0.1rem 0.45rem 0.1rem 0.36rem;
+  border: 1px dashed rgba(110, 231, 183, 0.45);
+  border-radius: 999px;
+  background: rgba(2, 6, 23, 0.4);
+  color: rgba(248, 250, 252, 0.6);
+  font: inherit;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.self-body-measure__add:hover,
+.self-body-measure__add:focus-visible {
+  color: #6ee7b7;
+  border-color: rgba(110, 231, 183, 0.9);
+  background: rgba(16, 185, 129, 0.14);
+  outline: none;
+}
+
+.self-body-measure__add-icon {
+  font-size: 0.82rem;
+  font-weight: 500;
+  line-height: 1;
+  color: #6ee7b7;
+}
+
 .self-body-measure--log .waist-log {
   margin-top: 0.08rem;
 }
@@ -576,6 +611,15 @@
   .app--mobile .self-body-measure__unit {
     margin-left: 0.12rem;
     font-size: 7.5px;
+  }
+
+  .app--mobile .self-body-measure__add {
+    padding: 0.06rem 0.34rem 0.06rem 0.28rem;
+    font-size: 8.5px;
+  }
+
+  .app--mobile .self-body-measure__add-icon {
+    font-size: 11px;
   }
 
   .app--mobile .self-body-measure--log .waist-log__input {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { WaistLogForm } from '../WaistLogForm';
-import { appendCircumferenceReading } from '../../../lib/health/healthMetrics';
+import { appendCircumferenceReading, todayIsoDate } from '../../../lib/health/healthMetrics';
 import { circumferenceSpec } from '../../../lib/health/circumferenceReadings';
 import { BODY_MEASURES } from '../selfOrganSpec';
 import { setOrganHover } from './SelfOrganLinks';
@@ -10,11 +10,16 @@ function formatCm(value) {
   return typeof value === 'number' ? value.toFixed(1) : String(value);
 }
 
-/** One circumference beside the body: value when logged, otherwise the inline log form. */
+/**
+ * One circumference beside the body: today's value when logged, otherwise an empty
+ * "+ σήμερα" prompt that opens the inline log form.
+ */
 function BodyMeasureLabel({ kind, side, value, labelRef, handlers }) {
   const spec = circumferenceSpec(kind);
-  const [savedCm, setSavedCm] = useState(null);
-  const shown = formatCm(value ?? savedCm);
+  // Bridges the gap until the saved reading comes back through the health refresh.
+  const [saved, setSaved] = useState(null);
+  const [adding, setAdding] = useState(false);
+  const shown = formatCm(value ?? (saved?.day === todayIsoDate() ? saved.cm : null));
   if (!spec) return null;
 
   return (
@@ -30,18 +35,34 @@ function BodyMeasureLabel({ kind, side, value, labelRef, handlers }) {
           {shown}
           <span className="self-body-measure__unit">cm</span>
         </span>
-      ) : (
+      ) : adding ? (
         <WaistLogForm
           kind={kind}
           compact
           inline
+          autoFocus
           submitLabel="OK"
+          onCancel={() => setAdding(false)}
           onSave={async (cm) => {
-            const saved = await appendCircumferenceReading({ kind, cm });
-            if (saved?.value != null) setSavedCm(saved.value);
-            return saved;
+            const reading = await appendCircumferenceReading({ kind, cm });
+            if (reading?.value != null) {
+              setSaved({ cm: reading.value, day: reading.day });
+              setAdding(false);
+            }
+            return reading;
           }}
         />
+      ) : (
+        <button
+          type="button"
+          className="self-body-measure__add"
+          onClick={() => setAdding(true)}
+          title={`Καταγραφή σημερινής μέτρησης: ${spec.label}`}
+          aria-label={`Καταγραφή σημερινής μέτρησης: ${spec.label}`}
+        >
+          <span className="self-body-measure__add-icon" aria-hidden>+</span>
+          σήμερα
+        </button>
       )}
     </div>
   );

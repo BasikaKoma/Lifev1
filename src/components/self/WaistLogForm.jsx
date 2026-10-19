@@ -8,6 +8,8 @@ export function WaistLogForm({
   inline = false,
   disabled = false,
   submitLabel = 'Καταγραφή',
+  autoFocus = false,
+  onCancel,
 }) {
   const [value, setValue] = useState('');
   const [error, setError] = useState('');
@@ -41,10 +43,16 @@ export function WaistLogForm({
     <form
       className={`waist-log${compact ? ' waist-log--compact' : ''}${inline ? ' waist-log--inline' : ''}`}
       onSubmit={handleSubmit}
+      onBlur={onCancel ? (event) => {
+        // Leaving an untouched form closes it again; a typed value stays until saved.
+        if (!value && !saving && !event.currentTarget.contains(event.relatedTarget)) onCancel();
+      } : undefined}
       noValidate
     >
       <div className="waist-log__row">
         <input
+          autoFocus={autoFocus}
+          onKeyDown={onCancel ? (event) => { if (event.key === 'Escape') onCancel(); } : undefined}
           className="input waist-log__input"
           type="number"
           inputMode="decimal"

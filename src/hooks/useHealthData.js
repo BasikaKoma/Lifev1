@@ -56,6 +56,7 @@ export function useHealthData({ enabled = true, ouraRow = null, ouraConnected = 
     healthMetrics,
     ouraRow,
     connected: ouraConnected,
+    day: todayIsoDate(),
   });
 
   const todayMetrics = healthMetrics.filter((m) => m.day === todayIsoDate());
