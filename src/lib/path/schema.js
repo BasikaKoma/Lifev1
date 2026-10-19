@@ -368,6 +368,10 @@ export function createEmptyTemplate(overrides = {}) {
     taskId: asNullableString(overrides.taskId || overrides.task_id),
     taskTitle: asNullableString(overrides.taskTitle || overrides.task_title),
     enabled: overrides.enabled !== false,
+    // Mondays of weeks whose block was deleted, so it is not created again.
+    skippedWeeks: Array.isArray(overrides.skippedWeeks)
+      ? [...new Set(overrides.skippedWeeks.filter((week) => /^\d{4}-\d{2}-\d{2}$/.test(String(week))))].sort()
+      : [],
     createdAt: overrides.createdAt || overrides.created_at || now,
     updatedAt: overrides.updatedAt || overrides.updated_at || now,
   };
@@ -375,6 +379,17 @@ export function createEmptyTemplate(overrides = {}) {
 
 export function normalizeTemplate(raw = {}) {
   return createEmptyTemplate(raw);
+}
+
+/**
+ * Templates from before deleted weeks were remembered (`skippedWeeks`). Their blocks
+ * deleted back then left no trace, so Path treats them differently (see logic.js).
+ */
+export const TEMPLATE_MEMORY_SINCE = '2026-10-19T15:00:00Z';
+
+export function isLegacyTemplate(template) {
+  const created = Date.parse(template?.createdAt || template?.created_at || '');
+  return !(created >= Date.parse(TEMPLATE_MEMORY_SINCE));
 }
 
 export function createEmptyMetricEntry(overrides = {}) {

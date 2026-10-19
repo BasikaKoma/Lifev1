@@ -78,6 +78,74 @@
   background: var(--path-accent);
 }
 
+.path-tabs-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--path-border);
+}
+
+.path-tabs-row .path-tabs {
+  flex: 1 1 auto;
+  min-width: 0;
+  border-bottom: none;
+}
+
+.path-tabs__settings {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--path-muted);
+  cursor: pointer;
+}
+
+.path-tabs__settings:hover,
+.path-tabs__settings:focus-visible {
+  color: var(--color-text);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.path-tabs__settings.is-active {
+  color: var(--path-accent);
+  background: rgba(125, 211, 252, 0.1);
+}
+
+.path-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.path-settings__head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.path-settings__head h2 {
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+}
+
+.path-settings__head .path-empty {
+  max-width: 44rem;
+  font-size: 0.88rem;
+}
+
+.path-settings__summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
 .path-review {
   display: flex;
   flex-direction: column;
@@ -702,29 +770,8 @@
   display: flex;
 }
 
-/* Untimed list: details drop down over the cards below instead of pushing them. */
-.path-block--list:hover,
-.path-block--list:focus-within {
-  z-index: 30;
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
-}
-
-.path-block--list .path-block__more {
-  position: absolute;
-  top: 100%;
-  left: -1px;
-  right: -1px;
-  padding: 2px 8px 8px;
-  background: inherit;
-  border: 1px solid;
-  border-color: inherit;
-  border-top: 0;
-  border-radius: 0 0 10px 10px;
-  box-shadow: inset 3px 0 0 var(--path-goal-color, transparent), 0 14px 28px rgba(0, 0, 0, 0.5);
-}
-
-/* Hour grid: height follows the duration; hovering opens the card in place. */
+/* Hour grid: height follows the duration; hovering opens the card in place and
+   the cards below slide down by the extra height (useTimelinePush). */
 .path-block--timeline {
   position: absolute;
   z-index: 10;
@@ -733,6 +780,7 @@
   gap: 2px;
   border-radius: 8px;
   overflow: hidden;
+  transition: transform 0.14s ease;
 }
 
 .path-block--timeline .path-block__title {

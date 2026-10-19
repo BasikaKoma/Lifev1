@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { normalizeWheel } from '../lib/path/wheel';
+import { localTodayIsoDate } from '../utils/selfDateUtils';
 import {
   createEmptyBlock,
   createEmptyGoal,
@@ -138,9 +139,21 @@ export function usePath() {
   }, [updateBundle]);
 
   const removeBlock = useCallback((blockId) => {
-    updateBundle((prev) => ({
-      blocks: prev.blocks.filter((block) => block.id !== blockId),
-    }));
+    updateBundle((prev) => {
+      const removed = prev.blocks.find((block) => block.id === blockId);
+      const week = removed?.templateId && removed.date ? startOfWeekMonday(removed.date) : null;
+      return {
+        blocks: prev.blocks.filter((block) => block.id !== blockId),
+        // A deleted template block stays deleted: remember its week on the template.
+        templates: week
+          ? prev.templates.map((template) => (
+              template.id === removed.templateId
+                ? createEmptyTemplate({ ...template, skippedWeeks: [...template.skippedWeeks, week], updatedAt: nowIso() })
+                : template
+            ))
+          : prev.templates,
+      };
+    });
   }, [updateBundle]);
 
   const moveBlock = useCallback((blockId, { date, startTime, beforeId } = {}) => {
@@ -237,9 +250,17 @@ export function usePath() {
     return next;
   }, [updateBundle]);
 
+  /** Drops the template and its upcoming blocks that were not started; past and worked ones stay. */
   const removeTemplate = useCallback((templateId) => {
+    const today = localTodayIsoDate();
     updateBundle((prev) => ({
       templates: prev.templates.filter((template) => template.id !== templateId),
+      blocks: prev.blocks.filter((block) => !(
+        block.templateId === templateId
+        && block.status === 'Planned'
+        && !(Number(block.workedMinutes) > 0)
+        && block.date >= today
+      )),
     }));
   }, [updateBundle]);
 
@@ -353,6 +374,8 @@ export function usePath() {
           ...selected.flatMap((draft) => (draft.templates || []).map((template) => createEmptyTemplate({
             ...template,
             goalId: draft.goal.id,
+            // A draft can be older than the import; the template starts now.
+            createdAt: nowIso(),
           }))),
         ],
       };

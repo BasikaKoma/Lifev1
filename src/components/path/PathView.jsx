@@ -13,6 +13,7 @@ import { PathWeek } from './PathWeek';
 import { PathRoutines } from './PathRoutines';
 import { PathImportPlan } from './PathImportPlan';
 import { PathPlanFileButton } from './PathPlanFileViewer';
+import { PathSettings, PathSettingsButton } from './PathSettings';
 import './path.css';
 
 function initialPathTab(requested) {
@@ -40,6 +41,7 @@ export function PathView({
   const [importing, setImporting] = useState(() => hasImportDraft());
   const [weekStart, setWeekStart] = useState(() => startOfWeekMonday());
   const [blockOpen, setBlockOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
     if (PATH_TABS.some((item) => item.id === initialTab)) setTab(initialTab);
@@ -53,6 +55,8 @@ export function PathView({
     () => collectLinkableTasks({ stages, canvasTasks, projectActivity, projectId, projectTitle }),
     [stages, canvasTasks, projectActivity, projectId, projectTitle],
   );
+
+  const view = settingsOpen ? 'settings' : tab;
 
   if (path.loading) {
     return (
@@ -79,30 +83,36 @@ export function PathView({
         </div>
       </header>
 
-      <nav className="path-tabs" aria-label="Path">
-        {PATH_TABS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            aria-current={tab === item.id ? 'page' : undefined}
-            onClick={() => {
-              setTab(item.id);
-              onTabChange?.(item.id);
-              setImporting(false);
-            }}
-          >
-            {item.label}
-          </button>
-        ))}
-      </nav>
+      <div className="path-tabs-row">
+        <nav className="path-tabs" aria-label="Path">
+          {PATH_TABS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              aria-current={view === item.id ? 'page' : undefined}
+              onClick={() => {
+                setTab(item.id);
+                setSettingsOpen(false);
+                onTabChange?.(item.id);
+                setImporting(false);
+              }}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
+        <PathSettingsButton active={settingsOpen} onClick={() => setSettingsOpen((open) => !open)} />
+      </div>
       </>
       )}
 
       {path.error ? <p className="path-error">{path.error}</p> : null}
 
-      {tab === 'wheel' ? <PathWheel path={path} /> : null}
+      {view === 'settings' ? <PathSettings path={path} /> : null}
 
-      {tab === 'goals' && importing ? (
+      {view === 'wheel' ? <PathWheel path={path} /> : null}
+
+      {view === 'goals' && importing ? (
         <PathImportPlan
           path={path}
           projects={projects}
@@ -111,7 +121,7 @@ export function PathView({
         />
       ) : null}
 
-      {tab === 'goals' && !importing ? (
+      {view === 'goals' && !importing ? (
         <PathGoals
           path={path}
           projects={projects}
@@ -121,7 +131,7 @@ export function PathView({
         />
       ) : null}
 
-      {tab === 'week' ? (
+      {view === 'week' ? (
         <PathWeek
           path={path}
           tasks={tasks}
@@ -132,14 +142,14 @@ export function PathView({
         />
       ) : null}
 
-      {tab === 'routines' ? (
+      {view === 'routines' ? (
         <PathRoutines
           routineTemplates={routineTemplates}
           onUpdateRoutineTemplates={onUpdateRoutineTemplates}
         />
       ) : null}
 
-      {tab === 'review' ? (
+      {view === 'review' ? (
         <div className="path-review">
           <PathThoughtsReview lifelineDays={lifelineDays} weekStart={weekStart} />
           <CallsView />

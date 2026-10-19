@@ -592,6 +592,30 @@ html.is-mobile .quick-note-orb__chip {
   padding: 0 8px;
 }
 
+/* The settings gear stays pinned at the right edge while the tabs scroll. */
+.app--mobile .path-tabs-row {
+  margin: 0 -16px;
+  padding-right: 8px;
+}
+
+.app--mobile .path-tabs-row .path-tabs {
+  margin: 0;
+}
+
+.app--mobile .path-tabs__settings {
+  width: 44px;
+  height: 44px;
+}
+
+.app--mobile .path-settings__head {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.app--mobile .path-settings__summary {
+  justify-content: space-between;
+}
+
 .app--mobile .path-tabs::-webkit-scrollbar {
   display: none;
 }
@@ -907,7 +931,7 @@ html.is-mobile .quick-note-orb__chip {
 
 .path-mweek__add {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 8px;
 }
 

@@ -59,7 +59,6 @@ function Icon({ name }) {
     left: <path d="M15 5l-7 7 7 7" />,
     right: <path d="M9 5l7 7-7 7" />,
     plus: <><path d="M12 5v14" /><path d="M5 12h14" /></>,
-    repeat: <><path d="M4 11V9a3 3 0 0 1 3-3h11" /><path d="M15 3l3 3-3 3" /><path d="M20 13v2a3 3 0 0 1-3 3H6" /><path d="M9 21l-3-3 3-3" /></>,
     open: <><path d="M14 4h6v6" /><path d="M20 4l-9 9" /><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" /></>,
     edit: <><path d="M4 20h4L19 9l-4-4L4 16z" /><path d="M13.5 6.5l4 4" /></>,
     up: <path d="M12 19V5M6 11l6-6 6 6" />,
@@ -227,7 +226,6 @@ export function PathWeekMobile({
   onEditBlock,
   onDeleteBlock,
   onNewBlock,
-  onNewTemplate,
 }) {
   const [selectedDate, setSelectedDate] = useState(() => (dates.includes(today) ? today : dates[0]));
   const [sheetBlockId, setSheetBlockId] = useState(null);
@@ -408,10 +406,6 @@ export function PathWeekMobile({
         <button type="button" className="btn" onClick={() => onNewBlock(selectedDate)}>
           <Icon name="plus" />
           Block
-        </button>
-        <button type="button" className="btn" onClick={onNewTemplate}>
-          <Icon name="repeat" />
-          Επαναλαμβανόμενο
         </button>
       </div>
 

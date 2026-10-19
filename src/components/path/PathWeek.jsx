@@ -2,8 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { localTodayIsoDate } from '../../utils/selfDateUtils';
 import {
   createEmptyBlock,
-  createEmptyTemplate,
-  WEEKDAYS,
   shiftWeek,
   startOfWeekMonday,
   weekDates,
@@ -11,7 +9,7 @@ import {
 import { defaultBlockDoneAt, formatWeekRange, fromDatetimeLocalValue, toDatetimeLocalValue } from '../../lib/path/logic';
 import { useWorkTimer } from '../../hooks/useWorkTimer';
 import { ConfirmDialog } from '../ConfirmDialog';
-import { BlockFields, PathModal, TemplateFields } from './PathFields';
+import { BlockFields, PathModal } from './PathFields';
 import { PathBlockWorkspace } from './PathBlockWorkspace';
 import { PathWeekCalendar } from './PathWeekCalendar';
 import { PathWeekMobile } from './PathWeekMobile';
@@ -20,7 +18,6 @@ import { platform } from '../../platform';
 export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteLinkedTask, onWorkspaceChange }) {
   const [editor, setEditor] = useState(null);
   const [workspaceId, setWorkspaceId] = useState(null);
-  const [templateEditor, setTemplateEditor] = useState(null);
   const [completePrompt, setCompletePrompt] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
   const timer = useWorkTimer();
@@ -29,7 +26,7 @@ export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteL
 
   useEffect(() => {
     path.ensureWeek(weekStart);
-  }, [weekStart, path.ensureWeek]);
+  }, [weekStart, path.ensureWeek, path.templates]);
 
   useEffect(() => {
     if (workspaceId && !path.blocks.some((block) => block.id === workspaceId)) {
@@ -97,27 +94,6 @@ export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteL
     setPendingDelete(null);
   };
 
-  const templatesPanel = path.templates.length ? (
-    <section className="path-panel" style={{ marginTop: 18 }}>
-      <p className="path-card__meta">Weekly templates</p>
-      <ul className="path-side-list">
-        {path.templates.map((template) => {
-          const templateGoal = path.goals.find((goal) => goal.id === template.goalId);
-          return (
-          <li key={template.id}>
-            <button type="button" className="path-day__add" onClick={() => setTemplateEditor(template)}>
-              {templateGoal?.color ? <span className="path-color-dot" style={{ background: templateGoal.color }} /> : null}
-              {WEEKDAYS.find((day) => day.id === template.weekday)?.label} · {template.title}
-            </button>
-            {' '}
-            <button type="button" className="path-day__add" onClick={() => path.removeTemplate(template.id)}>Remove</button>
-          </li>
-          );
-        })}
-      </ul>
-    </section>
-  ) : null;
-
   return (
     <div>
       {workspaceBlock ? (
@@ -140,7 +116,6 @@ export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteL
           }}
         />
       ) : platform.isMobile ? (
-        <>
         <PathWeekMobile
           path={path}
           dates={dates}
@@ -157,10 +132,7 @@ export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteL
           onEditBlock={setEditor}
           onDeleteBlock={setPendingDelete}
           onNewBlock={openNew}
-          onNewTemplate={() => setTemplateEditor(createEmptyTemplate({ title: '' }))}
         />
-        {templatesPanel}
-        </>
       ) : (
       <>
       <div className="path-week-nav">
@@ -170,9 +142,6 @@ export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteL
           <button type="button" className="btn" onClick={() => onWeekStart(shiftWeek(weekStart, 1))}>Next</button>
         </div>
         <h2>{formatWeekRange(weekStart)}</h2>
-        <button type="button" className="btn btn--primary" onClick={() => setTemplateEditor(createEmptyTemplate({ title: '' }))}>
-          Recurring block
-        </button>
       </div>
 
       <div style={{ marginTop: 16 }}>
@@ -192,8 +161,6 @@ export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteL
           onNewBlock={openNew}
         />
       </div>
-
-      {templatesPanel}
       </>
       )}
 
@@ -222,33 +189,6 @@ export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteL
               ) : null}
               <button type="button" className="btn" onClick={() => setEditor(null)}>Cancel</button>
               <button type="button" className="btn btn--primary" onClick={saveEditor} disabled={!editor.title?.trim()}>Save block</button>
-            </div>
-          </>
-        ) : null}
-      </PathModal>
-
-      <PathModal open={Boolean(templateEditor)} title="Recurring weekly block" onClose={() => setTemplateEditor(null)}>
-        {templateEditor ? (
-          <>
-            <TemplateFields
-              template={templateEditor}
-              goals={path.goals.filter((goal) => goal.status !== 'Archived')}
-              onChange={(patch) => setTemplateEditor((prev) => ({ ...prev, ...patch }))}
-            />
-            <div className="path-modal__actions">
-              <button type="button" className="btn" onClick={() => setTemplateEditor(null)}>Cancel</button>
-              <button
-                type="button"
-                className="btn btn--primary"
-                onClick={() => {
-                  path.upsertTemplate(templateEditor);
-                  path.ensureWeek(weekStart);
-                  setTemplateEditor(null);
-                }}
-                disabled={!templateEditor.title?.trim()}
-              >
-                Save template
-              </button>
             </div>
           </>
         ) : null}
@@ -283,7 +223,12 @@ export function PathWeek({ path, tasks = [], weekStart, onWeekStart, onCompleteL
       <ConfirmDialog
         open={Boolean(pendingDelete)}
         title="Διαγραφή block"
-        message={pendingDelete?.title ? `Να διαγραφεί το «${pendingDelete.title}»;` : 'Να διαγραφεί αυτό το block;'}
+        message={[
+          pendingDelete?.title ? `Να διαγραφεί το «${pendingDelete.title}»;` : 'Να διαγραφεί αυτό το block;',
+          pendingDelete?.templateId && path.templates.some((template) => template.id === pendingDelete.templateId)
+            ? 'Σβήνεται μόνο αυτή η εβδομάδα· το template συνεχίζει τις επόμενες.'
+            : null,
+        ].filter(Boolean).join(' ')}
         confirmLabel="Διαγραφή"
         onConfirm={confirmDelete}
         onCancel={() => setPendingDelete(null)}

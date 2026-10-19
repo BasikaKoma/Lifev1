@@ -2,7 +2,7 @@
  * Turns Path blocks, routines and project rhythm into the reminders the server sends.
  * Pure: the same inputs on any device give the same keys, so devices can prune each other's rows.
  */
-import { formatBlockWindow } from '../path/logic';
+import { formatBlockWindow, pendingTemplateDays } from '../path/logic';
 import { normalizeRoutineLog, normalizeRoutineTemplates } from '../../utils/lifelineRoutines';
 import { isRhythmDue, normalizeProjectRhythm, presentRhythmItem } from '../../utils/projectRhythm';
 
@@ -24,13 +24,6 @@ function shiftIsoDate(isoDate, days) {
   return localIsoDate(new Date(y, m - 1, d + days));
 }
 
-/** ISO weekday, 1 = Monday … 7 = Sunday (Path and rhythm use the same numbering). */
-function isoWeekday(isoDate) {
-  const [y, m, d] = isoDate.split('-').map(Number);
-  const day = new Date(y, m - 1, d).getDay();
-  return day === 0 ? 7 : day;
-}
-
 /** Local wall-clock time on a date → Date, or null when the time is missing/invalid. */
 export function atLocalTime(isoDate, hhmm) {
   const date = String(isoDate || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -49,20 +42,13 @@ function windowDates(now) {
   return [today, shiftIsoDate(today, 1)];
 }
 
-/** Dated blocks plus enabled weekly templates that Path has not turned into blocks yet. */
+/** Dated blocks plus weekly template days that Path has not turned into blocks yet. */
 function openBlocksForDate(pathBundle, isoDate) {
   const blocks = (pathBundle?.blocks || []).filter(
     (block) => block?.date === isoDate && OPEN_BLOCK_STATUSES.has(block.status || 'Planned')
   );
-  const materialized = new Set(
-    (pathBundle?.blocks || [])
-      .filter((block) => block?.templateId && block.date === isoDate)
-      .map((block) => block.templateId)
-  );
-  const weekday = isoWeekday(isoDate);
-  const fromTemplates = (pathBundle?.templates || [])
-    .filter((template) => template?.enabled && template.weekday === weekday && !materialized.has(template.id))
-    .map((template) => ({ ...template, id: null, templateId: template.id, date: isoDate, status: 'Planned' }));
+  const fromTemplates = pendingTemplateDays(pathBundle, [isoDate])
+    .map(({ template }) => ({ ...template, id: null, templateId: template.id, date: isoDate, status: 'Planned' }));
   return [...blocks, ...fromTemplates].sort((a, b) =>
     String(a.startTime || '99:99').localeCompare(String(b.startTime || '99:99'))
   );

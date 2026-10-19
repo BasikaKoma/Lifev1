@@ -1,8 +1,10 @@
 import { localTodayIsoDate } from '../../utils/selfDateUtils';
 import {
+  TEMPLATE_MEMORY_SINCE,
   WEEKDAYS,
   createEmptyBlock,
   createEmptyBlockAction,
+  isLegacyTemplate,
   nowIso,
   parseLocalDate,
   roleRank,
@@ -293,27 +295,61 @@ export function buildNextActionFromPath(bundle, date = localTodayIsoDate()) {
   };
 }
 
+/** Local date a template was made; it never fills days before that. */
+function templateStartDate(template) {
+  const created = new Date(template?.createdAt || '');
+  return Number.isNaN(created.getTime()) ? null : toIsoDate(created);
+}
+
+/**
+ * Days in `dates` where a weekly template still owes a block. A template gives one
+ * block per week: none is owed once that week has a block from it (even moved to
+ * another day) or the week's block was deleted.
+ *
+ * Legacy templates (see isLegacyTemplate) never fill weeks before memory began, and
+ * skip any week that already has blocks from them: the old code filled a week with all
+ * of them at once, so one missing there was deleted before deletions were remembered.
+ */
+export function pendingTemplateDays(bundle, dates = []) {
+  const templates = bundle?.templates || [];
+  const legacyIds = new Set(templates.filter(isLegacyTemplate).map((template) => template.id));
+  const covered = new Set();
+  const legacyWeeks = new Set();
+  for (const block of bundle?.blocks || []) {
+    if (!block.templateId || !block.date) continue;
+    const week = startOfWeekMonday(block.date);
+    covered.add(`${block.templateId}:${week}`);
+    if (legacyIds.has(block.templateId)) legacyWeeks.add(week);
+  }
+  const memoryWeek = startOfWeekMonday(TEMPLATE_MEMORY_SINCE.slice(0, 10));
+  const pending = [];
+  for (const date of dates) {
+    const weekday = weekdayFromDate(date);
+    const week = startOfWeekMonday(date);
+    for (const template of templates) {
+      if (!template?.enabled || template.weekday !== weekday) continue;
+      if ((template.skippedWeeks || []).includes(week)) continue;
+      if (covered.has(`${template.id}:${week}`)) continue;
+      if (legacyIds.has(template.id) && (week < memoryWeek || legacyWeeks.has(week))) continue;
+      const from = templateStartDate(template);
+      if (from && date < from) continue;
+      pending.push({ template, date });
+    }
+  }
+  return pending;
+}
+
 export function materializeWeekBlocks(bundle, weekStart) {
-  const start = weekStart || startOfWeekMonday();
-  const dates = weekDates(start);
-  const existing = new Set(
-    (bundle.blocks || [])
-      .filter((block) => block.templateId && block.date)
-      .map((block) => `${block.templateId}:${block.date}`),
-  );
-  const created = [];
-  for (const template of bundle.templates || []) {
-    if (!template.enabled) continue;
-    const date = dates[(template.weekday || 1) - 1];
-    if (!date) continue;
-    const key = `${template.id}:${date}`;
-    if (existing.has(key)) continue;
-    created.push(createEmptyBlock({
+  const pending = pendingTemplateDays(bundle, weekDates(weekStart || startOfWeekMonday()));
+  if (!pending.length) return bundle;
+  const blocks = [...(bundle.blocks || [])];
+  for (const { template, date } of pending) {
+    blocks.push(createEmptyBlock({
       goalId: template.goalId,
       title: template.title,
       date,
       weekday: weekdayFromDate(date),
-      order: nextBlockOrder([...(bundle.blocks || []), ...created], date),
+      order: nextBlockOrder(blocks, date),
       startTime: template.startTime,
       duration: template.duration,
       blockType: template.blockType,
@@ -326,11 +362,7 @@ export function materializeWeekBlocks(bundle, weekStart) {
       status: 'Planned',
     }));
   }
-  if (!created.length) return bundle;
-  return {
-    ...bundle,
-    blocks: [...(bundle.blocks || []), ...created],
-  };
+  return { ...bundle, blocks };
 }
 
 export function formatDuration(minutes) {

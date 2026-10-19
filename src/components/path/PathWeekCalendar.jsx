@@ -14,6 +14,7 @@ import {
   toDatetimeLocalValue,
 } from '../../lib/path/logic';
 import { formatClock } from '../../lib/workTimer';
+import { useGrowthReport, useTimelinePush } from './useTimelinePush';
 
 const HOUR_PX = 56;
 const PX_PER_MIN = HOUR_PX / 60;
@@ -62,11 +63,14 @@ function BlockCard({
   onDropOnBlock,
   onDragOverBlock,
   onDelete,
+  onGrow,
 }) {
   const dragMoved = useRef(false);
+  const cardRef = useRef(null);
   const progress = blockActionProgress(block);
   const statusStamp = formatBlockStatusStamp(block);
   const timeline = variant === 'timeline';
+  useGrowthReport(cardRef, timeline && placement ? placement.height : null, onGrow);
   const short = timeline && placement && placement.height < 40;
   const meta = [
     timing ? liveClock : null,
@@ -77,6 +81,7 @@ function BlockCard({
 
   return (
     <article
+      ref={cardRef}
       className={[
         'path-block',
         `path-block--${variant}`,
@@ -95,6 +100,7 @@ function BlockCard({
           ...(placement.anchorRight
             ? { right: placement.right, width: placement.width }
             : { left: placement.left, width: placement.width }),
+          ...(placement.shift ? { transform: `translateY(${placement.shift}px)` } : null),
         } : null),
       }}
       draggable
@@ -263,6 +269,7 @@ export function PathWeekCalendar({
   const [overUntimed, setOverUntimed] = useState(null);
   const [overBlockId, setOverBlockId] = useState(null);
   const nowMinutes = useNowMinutes();
+  const push = useTimelinePush();
 
   const colorByGoal = useMemo(
     () => new Map(path.goals.map((goal) => [goal.id, goal.color])),
@@ -461,7 +468,9 @@ export function PathWeekCalendar({
                     right: `calc(${(item.lanes - 1 - item.lane) * lanePct}% + 3px)`,
                     width: `calc(${lanePct}% - 6px)`,
                     anchorRight,
+                    shift: push.shiftFor(day.date, item),
                   }}
+                  onGrow={(extra) => push.report(item.block.id, day.date, item.visualEnd, extra)}
                 />
               );
             })}
