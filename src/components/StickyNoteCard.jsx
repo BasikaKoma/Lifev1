@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { canvasStyleClasses } from '../utils/canvasNodes';
-import { resolveNodeThemeStyle } from '../utils/mapTheme';
+import { resolveNodeThemeStyle, withDoneNodeStyle } from '../utils/mapTheme';
 import { useCanvasNodeCard } from '../hooks/useCanvasNodeCard';
 import { useIsNodeSelected } from '../hooks/useCanvasMultiSelect';
 import { useCanvasNodeResize, STICKY_RESIZE_HANDLES } from '../hooks/useCanvasNodeResize';
@@ -255,7 +255,7 @@ export function StickyNoteCard({
   return (
     <article
       ref={cardRef}
-      className={`sticky-note-card canvas-node canvas-node--typed ${canvasStyleClasses(sticky, mapTheme)} sticky-note-card--${side}${hasImage ? ' sticky-note-card--image' : ''}${sizeLocked && !chip ? ' sticky-note-card--size-locked' : ' sticky-note-card--auto-size'}${dragging ? ' sticky-note-card--dragging' : ''}${resizing ? ' sticky-note-card--resizing' : ''}${isConnectSource ? ' canvas-node--connect-source' : ''}${isSelected ? ' canvas-node--selected' : ''}${done ? ' sticky-note-card--done' : ''}${chip ? ' sticky-note-card--chip' : ''}${settled && peeked ? ' sticky-note-card--peeked' : ''}`}
+      className={`sticky-note-card canvas-node canvas-node--typed ${canvasStyleClasses(sticky, mapTheme)} sticky-note-card--${side}${hasImage ? ' sticky-note-card--image' : ''}${sizeLocked && !chip ? ' sticky-note-card--size-locked' : ' sticky-note-card--auto-size'}${dragging ? ' sticky-note-card--dragging' : ''}${resizing ? ' sticky-note-card--resizing' : ''}${isConnectSource ? ' canvas-node--connect-source' : ''}${isSelected ? ' canvas-node--selected' : ''}${done ? ' sticky-note-card--done canvas-node--done' : ''}${chip ? ' sticky-note-card--chip' : ''}${settled && peeked ? ' sticky-note-card--peeked' : ''}`}
       style={{
         left: sticky.canvasX,
         top: sticky.canvasY,
@@ -263,7 +263,7 @@ export function StickyNoteCard({
         ...(sizeLocked && sticky.height && !chip
           ? { height: sticky.height, minHeight: sticky.height }
           : {}),
-        ...themeVars,
+        ...withDoneNodeStyle(themeVars, done),
       }}
       title={settled ? chipTitle : undefined}
       onPointerDown={handlePointerDown}

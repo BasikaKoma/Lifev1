@@ -6,6 +6,7 @@ import {
 } from './canvasNodes';
 import { collectCanvasStages } from './stageLayout';
 import { frontsForLayout } from './projectFronts';
+import { readableInk, solidColor } from './colorInk';
 
 export const DEFAULT_MAP_THEME = {
   panelTab: 'layout',
@@ -295,6 +296,24 @@ export function resolveNodeThemeStyle(entity, mapTheme, nodeLevel, nodeTypeKey) 
     borderWidth: borderWidth,
     borderRadius: borderRadius,
     padding: padding,
+    boxShadow: shadow,
+  };
+}
+
+/** A finished card fills solid with its own border colour, text in whichever ink reads best (the HUD reads the vars too). */
+export function withDoneNodeStyle(themeVars, done) {
+  if (!done) return themeVars;
+  const fill = solidColor(themeVars?.['--node-accent-border'] || themeVars?.['--node-accent'] || '#22c55e');
+  const ink = readableInk(fill);
+  const shadow = `0 0 18px color-mix(in srgb, ${fill} 55%, transparent), 0 4px 20px rgba(0, 0, 0, 0.5)`;
+  return {
+    ...themeVars,
+    '--node-fill': fill,
+    '--node-text': ink,
+    '--node-accent': ink,
+    '--node-shadow': shadow,
+    color: ink,
+    background: fill,
     boxShadow: shadow,
   };
 }

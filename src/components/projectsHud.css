@@ -180,6 +180,11 @@
   transition: transform 0.25s ease-out, rotate 0.75s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.2s ease;
 }
 
+/* A done card is filled with its accent, so the corners switch to its text ink. */
+.projects-canvas-view--hud .projects-canvas-board .canvas-node--done {
+  --hud-c: color-mix(in srgb, var(--node-text) 70%, transparent);
+}
+
 .projects-canvas-view--hud .projects-canvas-board .canvas-node:not(.canvas-node--shape-pill):not(.sticky-note-card--chip):not(.sticky-note-card--image) {
   --hud-corners:
     linear-gradient(var(--hud-c), var(--hud-c)) left 7px top 7px / 12px 1.5px no-repeat,
@@ -241,6 +246,14 @@
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.06),
     0 0 16px rgba(34, 197, 94, 0.16),
+    0 6px 18px rgba(0, 0, 0, 0.45);
+}
+
+.projects-canvas-view--hud .projects-canvas-board .checkpoint-projects-item--done {
+  --hud-c: rgba(5, 46, 22, 0.7);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    0 0 22px rgba(74, 222, 128, 0.55),
     0 6px 18px rgba(0, 0, 0, 0.45);
 }
 

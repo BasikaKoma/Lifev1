@@ -28,6 +28,9 @@ const STATUS_CLASS = {
   Skipped: 'path-pill--skipped',
 };
 
+// A finished block fills with its goal colour; one without a goal fills slate.
+const NO_GOAL_DONE_COLOR = '#cbd5e1';
+
 function readNowMinutes() {
   const now = new Date();
   return now.getHours() * 60 + now.getMinutes();
@@ -78,6 +81,7 @@ function BlockCard({
     block.blockType,
   ].filter(Boolean).join(' · ');
   const reorderTarget = !timeline && onDropOnBlock;
+  const tint = color || (block.status === 'Done' ? NO_GOAL_DONE_COLOR : null);
 
   return (
     <article
@@ -86,14 +90,14 @@ function BlockCard({
         'path-block',
         `path-block--${variant}`,
         `path-block--${String(block.status || 'Planned').toLowerCase()}`,
-        color ? 'path-block--goal' : '',
+        tint ? 'path-block--goal' : '',
         short ? 'path-block--short' : '',
         isOver ? 'path-block--over' : '',
         timing ? 'path-block--timing' : '',
         timing && block.blockType === 'Deep Work' ? 'path-block--timing-deep' : '',
       ].filter(Boolean).join(' ')}
       style={{
-        ...goalColorStyle(color),
+        ...goalColorStyle(tint),
         ...(placement ? {
           top: placement.top,
           '--path-block-h': `${placement.height}px`,

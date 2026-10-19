@@ -11,6 +11,7 @@ import {
   toDatetimeLocalValue,
 } from '../../lib/path/logic';
 import { formatClock } from '../../lib/workTimer';
+import { readableInk, solidColor } from '../../utils/colorInk';
 
 const DAY_SHORT = ['Δευ', 'Τρί', 'Τετ', 'Πέμ', 'Παρ', 'Σάβ', 'Κυρ'];
 const DAY_LONG = ['Δευτέρα', 'Τρίτη', 'Τετάρτη', 'Πέμπτη', 'Παρασκευή', 'Σάββατο', 'Κυριακή'];
@@ -352,13 +353,19 @@ export function PathWeekMobile({
           ].filter(Boolean).join(' · ');
           const status = block.status === 'Planned' ? null : `${block.status}${stamp ? ` · ${stamp}` : ''}`;
           const canStart = block.status !== 'Done' && block.status !== 'Skipped';
+          const stripe = blockStripe(block, path.goals);
+          // A done row fills with its own stripe colour.
+          const doneFill = block.status === 'Done' ? solidColor(stripe) : null;
           return (
             <div
               key={block.id}
               role="button"
               tabIndex={0}
               className={`path-mrow path-mrow--${block.status.toLowerCase()}${timing ? ' path-mrow--timing' : ''}`}
-              style={{ '--path-mrow-stripe': blockStripe(block, path.goals) }}
+              style={{
+                '--path-mrow-stripe': stripe,
+                ...(doneFill ? { '--path-mrow-fill': doneFill, '--path-mrow-ink': readableInk(doneFill) } : null),
+              }}
               onClick={() => setSheetBlockId(block.id)}
               onKeyDown={(event) => {
                 if (event.target !== event.currentTarget) return;

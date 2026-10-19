@@ -889,6 +889,35 @@ html.is-mobile .quick-note-orb__chip {
 .path-mrow__status--moved { color: #93c5fd; }
 .path-mrow__status--skipped { color: rgba(148, 163, 184, 0.8); }
 
+/* Done fills the row with its own stripe colour; text and the check follow the ink. */
+.path-mrow--done {
+  background: var(--path-mrow-fill);
+  color: var(--path-mrow-ink);
+}
+
+.path-mrow--done .path-mrow__title,
+.path-mrow--done .path-mrow__time,
+.path-mrow--done .path-mrow__sub,
+.path-mrow--done .path-mrow__status,
+.path-mrow--done .path-mrow__action--done {
+  color: inherit;
+}
+
+.path-mrow--done .path-mrow__sub,
+.path-mrow--done .path-mrow__time {
+  opacity: 0.75;
+}
+
+.path-mrow--done .path-mrow__stripe {
+  background: currentColor;
+  opacity: 0.35;
+}
+
+.path-mrow--done .path-mrow__action--done {
+  border-color: color-mix(in srgb, currentColor 45%, transparent);
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
 .path-mrow--skipped .path-mrow__title,
 .path-mrow--moved .path-mrow__title {
   color: rgba(245, 245, 245, 0.6);

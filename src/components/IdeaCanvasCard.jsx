@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { canvasStyleClasses } from '../utils/canvasNodes';
-import { resolveNodeThemeStyle } from '../utils/mapTheme';
+import { isCompleteStatus } from '../utils/archive';
+import { resolveNodeThemeStyle, withDoneNodeStyle } from '../utils/mapTheme';
 import { useCanvasNodeCard } from '../hooks/useCanvasNodeCard';
 import { useIsNodeSelected } from '../hooks/useCanvasMultiSelect';
 import { CategoryBadge } from './CategorySelect';
@@ -32,6 +33,7 @@ export function IdeaCanvasCard({
   side = 'free',
 }) {
   const status = STATUS_MAP[idea.status] || STATUS_MAP.Locked;
+  const done = isCompleteStatus(idea.status);
   const themeVars = resolveNodeThemeStyle(idea, mapTheme, nodeLevel, 'idea');
   const nodeRef = { type: 'idea', id: idea.id, source, stageId: stageId || undefined };
   const isConnectSource =
@@ -62,8 +64,8 @@ export function IdeaCanvasCard({
 
   return (
     <article
-      className={`idea-canvas-card canvas-node canvas-node--typed ${canvasStyleClasses(idea, mapTheme)} idea-canvas-card--${idea.status?.toLowerCase() || 'locked'} idea-canvas-card--${side}${dragging ? ' idea-canvas-card--dragging' : ''}${isConnectSource ? ' canvas-node--connect-source' : ''}${isSelected ? ' canvas-node--selected' : ''}${readOnly ? ' idea-canvas-card--readonly' : ''}`}
-      style={{ left: idea.canvasX, top: idea.canvasY, ...themeVars }}
+      className={`idea-canvas-card canvas-node canvas-node--typed ${canvasStyleClasses(idea, mapTheme)} idea-canvas-card--${idea.status?.toLowerCase() || 'locked'} idea-canvas-card--${side}${dragging ? ' idea-canvas-card--dragging' : ''}${isConnectSource ? ' canvas-node--connect-source' : ''}${isSelected ? ' canvas-node--selected' : ''}${readOnly ? ' idea-canvas-card--readonly' : ''}${done ? ' canvas-node--done' : ''}`}
+      style={{ left: idea.canvasX, top: idea.canvasY, ...withDoneNodeStyle(themeVars, done) }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}

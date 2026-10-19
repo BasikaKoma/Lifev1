@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { canvasStyleClasses } from '../utils/canvasNodes';
-import { resolveNodeThemeStyle } from '../utils/mapTheme';
+import { isCompleteStatus } from '../utils/archive';
+import { resolveNodeThemeStyle, withDoneNodeStyle } from '../utils/mapTheme';
 import { useCanvasNodeCard } from '../hooks/useCanvasNodeCard';
 import { useIsNodeSelected } from '../hooks/useCanvasMultiSelect';
 import { PriorityBadge, PrioritySelect } from './PrioritySelect';
@@ -33,6 +34,7 @@ export function ObstacleCanvasCard({
     || (selectedNodeRef?.type === 'obstacle' && selectedNodeRef?.id === obstacle.id);
   const [editing, setEditing] = useState(false);
   const severityClass = SEVERITY_CLASS[obstacle.severity] || 'medium';
+  const done = isCompleteStatus(obstacle.status);
 
   const { dragging, handlePointerDown, handlePointerMove, handlePointerUp } = useCanvasNodeCard({
     readOnly,
@@ -46,8 +48,8 @@ export function ObstacleCanvasCard({
 
   return (
     <article
-      className={`obstacle-canvas-card canvas-node canvas-node--typed obstacle-canvas-card--${severityClass} ${canvasStyleClasses(obstacle, mapTheme)} obstacle-canvas-card--${side}${dragging ? ' obstacle-canvas-card--dragging' : ''}${isConnectSource ? ' canvas-node--connect-source' : ''}${isSelected ? ' canvas-node--selected' : ''}${readOnly ? ' obstacle-canvas-card--readonly' : ''}`}
-      style={{ left: obstacle.canvasX, top: obstacle.canvasY, ...themeVars }}
+      className={`obstacle-canvas-card canvas-node canvas-node--typed obstacle-canvas-card--${severityClass} ${canvasStyleClasses(obstacle, mapTheme)} obstacle-canvas-card--${side}${dragging ? ' obstacle-canvas-card--dragging' : ''}${isConnectSource ? ' canvas-node--connect-source' : ''}${isSelected ? ' canvas-node--selected' : ''}${readOnly ? ' obstacle-canvas-card--readonly' : ''}${done ? ' canvas-node--done' : ''}`}
+      style={{ left: obstacle.canvasX, top: obstacle.canvasY, ...withDoneNodeStyle(themeVars, done) }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}

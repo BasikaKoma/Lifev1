@@ -3586,8 +3586,9 @@ html:has(.app--projects) body {
 }
 
 .projects-center-line__dot--checkpoint.projects-center-line__dot--done {
-  background: #166534;
-  border-color: #86efac;
+  background: #4ade80;
+  border-color: #dcfce7;
+  box-shadow: 0 0 14px rgba(74, 222, 128, 0.85);
 }
 
 .checkpoint-projects-item {
@@ -3638,16 +3639,23 @@ html:has(.app--projects) body {
   border-color: rgba(134, 239, 172, 0.65);
 }
 
-.checkpoint-projects-item--done {
-  color: #e2e8f0;
-  border-color: rgba(134, 239, 172, 0.55);
-  background: rgba(74, 222, 128, 0.12);
+/* Done fills the pill with the checkpoint's own green, dark text on top. */
+.checkpoint-projects-item--done,
+.checkpoint-projects-item--done:hover {
+  color: #052e16;
+  border-color: #4ade80;
+  background-color: #4ade80;
+  box-shadow: 0 0 18px rgba(74, 222, 128, 0.55), 0 4px 16px rgba(0, 0, 0, 0.35);
 }
 
 .checkpoint-projects-item--done .checkpoint-projects-item__text {
   text-decoration: line-through;
-  text-decoration-color: rgba(134, 239, 172, 0.7);
-  opacity: 0.9;
+  text-decoration-color: rgba(5, 46, 22, 0.55);
+}
+
+.checkpoint-projects-item--done .checkpoint-projects-item__text--has-notes::after {
+  background: #052e16;
+  box-shadow: none;
 }
 
 .checkpoint-projects-item__date {
@@ -5286,20 +5294,6 @@ html:has(.app--projects) body {
   align-items:flex-start;
   justify-content:space-between;
   gap:12px
-}
-
-.milestone-canvas-card--done {
-  --node-fill:#064e3b;
-  --node-text:#ecfdf5;
-  --node-border:#fff;
-  --node-accent:#fff;
-  --node-accent-border:#fff;
-  border-color:#fff
-}
-
-.milestone-canvas-card.milestone-canvas-card--done {
-  background:linear-gradient(180deg,#064e3bf5,#042f27fa)!important;
-  box-shadow:0 0 0 1px #a7f3d033,0 0 18px #10b98173,0 0 36px #05966938
 }
 
 .milestone-canvas-card--compact {
@@ -7441,25 +7435,24 @@ html:has(.app--projects) body {
   outline-offset:2px
 }
 
-.sticky-note-card--done {
-  --node-border: rgba(134, 239, 172, .8);
-  --node-accent-border: rgba(134, 239, 172, .8);
-  border-color:#86efaccc!important;
-  opacity:.92;
-  box-shadow:0 0 0 1px #4ade8059,0 4px 16px #0003
-}
-
 .sticky-note-card--done.canvas-node--selected {
-  outline-color:#86eface6
-}
-
-.projects-canvas-board--premium .sticky-note-card--done {
-  border-color:#86efaccc!important
+  outline-color:var(--node-text)
 }
 
 .sticky-note-card--done .sticky-note-card__text {
   text-decoration:line-through;
-  text-decoration-color:#2264328c
+  text-decoration-color:color-mix(in srgb,currentColor 55%,transparent)
+}
+
+/* Done cards fill with their own colour (withDoneNodeStyle); labels and badges follow the ink. */
+.canvas-node--done .task-canvas-card__type,
+.canvas-node--done .obstacle-canvas-card__type,
+.canvas-node--done .resource-canvas-card__type {
+  color:var(--node-text)
+}
+
+.canvas-node--done .projects-badge--outline {
+  border-color:currentColor
 }
 
 .sticky-note-card--chip {
@@ -8562,10 +8555,6 @@ html:has(.app--projects) body {
 .idea-canvas-card--dragging {
   cursor:grabbing;
   z-index:25
-}
-
-.idea-canvas-card--executed {
-  opacity:.65
 }
 
 .idea-canvas-card__head {
@@ -10459,7 +10448,6 @@ html:has(.app--projects) body {
   text-decoration:line-through;
   text-decoration-color:#4ade808c
 }
-
 .checkpoint-card__check {
   display:inline-flex;
   align-items:center

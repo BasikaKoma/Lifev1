@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { canvasStyleClasses } from '../utils/canvasNodes';
-import { resolveNodeThemeStyle } from '../utils/mapTheme';
+import { isCompleteStatus } from '../utils/archive';
+import { resolveNodeThemeStyle, withDoneNodeStyle } from '../utils/mapTheme';
 import { useCanvasNodeCard } from '../hooks/useCanvasNodeCard';
 import { useIsNodeSelected } from '../hooks/useCanvasMultiSelect';
 import { PriorityBadge, PrioritySelect } from './PrioritySelect';
@@ -26,6 +27,7 @@ export function ResourceCanvasCard({
   const isSelected = useIsNodeSelected(nodeRef)
     || (selectedNodeRef?.type === 'resource' && selectedNodeRef?.id === resource.id);
   const [editing, setEditing] = useState(false);
+  const done = isCompleteStatus(resource.status);
 
   const { dragging, handlePointerDown, handlePointerMove, handlePointerUp } = useCanvasNodeCard({
     readOnly,
@@ -39,8 +41,8 @@ export function ResourceCanvasCard({
 
   return (
     <article
-      className={`resource-canvas-card canvas-node canvas-node--typed ${canvasStyleClasses(resource, mapTheme)} resource-canvas-card--${side}${dragging ? ' resource-canvas-card--dragging' : ''}${isConnectSource ? ' canvas-node--connect-source' : ''}${isSelected ? ' canvas-node--selected' : ''}${readOnly ? ' resource-canvas-card--readonly' : ''}`}
-      style={{ left: resource.canvasX, top: resource.canvasY, ...themeVars }}
+      className={`resource-canvas-card canvas-node canvas-node--typed ${canvasStyleClasses(resource, mapTheme)} resource-canvas-card--${side}${dragging ? ' resource-canvas-card--dragging' : ''}${isConnectSource ? ' canvas-node--connect-source' : ''}${isSelected ? ' canvas-node--selected' : ''}${readOnly ? ' resource-canvas-card--readonly' : ''}${done ? ' canvas-node--done' : ''}`}
+      style={{ left: resource.canvasX, top: resource.canvasY, ...withDoneNodeStyle(themeVars, done) }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}

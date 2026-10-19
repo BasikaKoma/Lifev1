@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { getCompletedCheckpointCount, isCheckpointDone, isStageDone } from '../utils/logic';
 import { isPlanMode, getPlanDurationDays, formatPlanDateShort, formatPlanDayHeader } from '../utils/planMode';
 import { canvasStyleClasses } from '../utils/canvasNodes';
-import { resolveNodeThemeStyle } from '../utils/mapTheme';
+import { resolveNodeThemeStyle, withDoneNodeStyle } from '../utils/mapTheme';
 import { useCanvasNodeCard } from '../hooks/useCanvasNodeCard';
 import { useIsNodeSelected } from '../hooks/useCanvasMultiSelect';
 import { CategoryBadge, CategorySelect } from './CategorySelect';
@@ -84,18 +84,7 @@ export function MilestoneCanvasCard({
 
   const cardStyle = done
     ? {
-        ...themeVars,
-        '--node-fill': '#064e3b',
-        '--node-text': '#ecfdf5',
-        '--node-border': '#ffffff',
-        '--node-accent': '#ffffff',
-        '--node-accent-border': '#ffffff',
-        '--node-accent-glow': 'rgba(52, 211, 153, 0.45)',
-        '--node-shadow': '0 0 0 1px rgba(167, 243, 208, 0.2), 0 0 18px rgba(16, 185, 129, 0.45)',
-        color: '#ecfdf5',
-        background: '#064e3b',
-        borderColor: '#ffffff',
-        boxShadow: '0 0 0 1px rgba(167, 243, 208, 0.2), 0 0 18px rgba(16, 185, 129, 0.45)',
+        ...withDoneNodeStyle(themeVars, true),
         ...(compact
           ? {
               '--node-padding': '8px 12px',
@@ -109,7 +98,7 @@ export function MilestoneCanvasCard({
 
   return (
     <article
-      className={`milestone-canvas-card canvas-node canvas-node--typed milestone-canvas-card--major ${canvasStyleClasses(stage, mapTheme)} milestone-canvas-card--${status.className} milestone-canvas-card--${side}${!onMove ? ' milestone-canvas-card--fixed' : ''}${dragging ? ' milestone-canvas-card--dragging' : ''}${isConnectSource ? ' canvas-node--connect-source' : ''}${isSelected ? ' canvas-node--selected' : ''}${readOnly ? ' milestone-canvas-card--readonly' : ''}${done ? ' milestone-canvas-card--done' : ''}${compact ? ' milestone-canvas-card--compact' : ''}`}
+      className={`milestone-canvas-card canvas-node canvas-node--typed milestone-canvas-card--major ${canvasStyleClasses(stage, mapTheme)} milestone-canvas-card--${status.className} milestone-canvas-card--${side}${!onMove ? ' milestone-canvas-card--fixed' : ''}${dragging ? ' milestone-canvas-card--dragging' : ''}${isConnectSource ? ' canvas-node--connect-source' : ''}${isSelected ? ' canvas-node--selected' : ''}${readOnly ? ' milestone-canvas-card--readonly' : ''}${done ? ' milestone-canvas-card--done canvas-node--done' : ''}${compact ? ' milestone-canvas-card--compact' : ''}`}
       style={{ left: stage.posX, top: stage.posY, ...cardStyle }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}

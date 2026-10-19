@@ -1,3 +1,4 @@
+import { readableInk } from '../../utils/colorInk';
 import { normalizeWheel, wheelHasContent } from './wheel';
 
 export const PATH_TABS = [
@@ -84,6 +85,7 @@ export function goalColorStyle(color) {
     '--path-goal-color': hex,
     '--path-goal-soft': `rgba(${r}, ${g}, ${b}, 0.16)`,
     '--path-goal-border': `rgba(${r}, ${g}, ${b}, 0.48)`,
+    '--path-goal-ink': readableInk(hex),
   };
 }
 

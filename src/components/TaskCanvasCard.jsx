@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { canvasStyleClasses } from '../utils/canvasNodes';
-import { resolveNodeThemeStyle } from '../utils/mapTheme';
+import { isCompleteStatus } from '../utils/archive';
+import { resolveNodeThemeStyle, withDoneNodeStyle } from '../utils/mapTheme';
 import { useCanvasNodeCard } from '../hooks/useCanvasNodeCard';
 import { useIsNodeSelected } from '../hooks/useCanvasMultiSelect';
 import { CategoryBadge, CategorySelect } from './CategorySelect';
@@ -34,6 +35,7 @@ export function TaskCanvasCard({
   const isSelected = useIsNodeSelected(nodeRef)
     || (selectedNodeRef?.type === 'task' && selectedNodeRef?.id === task.id);
   const status = STATUS_MAP[task.status] || STATUS_MAP.Todo;
+  const done = isCompleteStatus(task.status);
   const [editing, setEditing] = useState(false);
 
   const { dragging, handlePointerDown, handlePointerMove, handlePointerUp } = useCanvasNodeCard({
@@ -48,8 +50,8 @@ export function TaskCanvasCard({
 
   return (
     <article
-      className={`task-canvas-card canvas-node canvas-node--typed task-canvas-card--${status.className} ${canvasStyleClasses(task, mapTheme)} task-canvas-card--${side}${dragging ? ' task-canvas-card--dragging' : ''}${isConnectSource ? ' canvas-node--connect-source' : ''}${isSelected ? ' canvas-node--selected' : ''}${readOnly ? ' task-canvas-card--readonly' : ''}`}
-      style={{ left: task.canvasX, top: task.canvasY, ...themeVars }}
+      className={`task-canvas-card canvas-node canvas-node--typed task-canvas-card--${status.className} ${canvasStyleClasses(task, mapTheme)} task-canvas-card--${side}${dragging ? ' task-canvas-card--dragging' : ''}${isConnectSource ? ' canvas-node--connect-source' : ''}${isSelected ? ' canvas-node--selected' : ''}${readOnly ? ' task-canvas-card--readonly' : ''}${done ? ' canvas-node--done' : ''}`}
+      style={{ left: task.canvasX, top: task.canvasY, ...withDoneNodeStyle(themeVars, done) }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}

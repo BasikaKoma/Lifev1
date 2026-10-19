@@ -848,6 +848,34 @@
   font-weight: 800;
 }
 
+/* Done fills the block with its own goal colour; everything inside follows the ink. */
+.path-block--done.path-block--goal {
+  background: var(--path-goal-color);
+  border-color: var(--path-goal-color);
+  color: var(--path-goal-ink);
+}
+
+.path-block--done.path-block--goal .path-block__title::before,
+.path-block--done.path-block--goal .path-block__time,
+.path-block--done.path-block--goal .path-block__done-at span {
+  color: inherit;
+}
+
+.path-block--done.path-block--goal .path-block__time {
+  opacity: 0.75;
+}
+
+.path-block--done.path-block--goal .path-pill {
+  color: inherit;
+  border-color: color-mix(in srgb, currentColor 45%, transparent);
+}
+
+.path-block--done.path-block--goal .path-block__actions button,
+.path-block--done.path-block--goal .path-block__reorder button:not(.path-block__icon--delete) {
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  color: inherit;
+}
+
 .path-block--moved .path-block__title::before {
   content: '↷ ';
   color: #fbbf24;
