@@ -322,7 +322,7 @@ export function buildNodeRegistry(
       id: checkpoint.id,
       stageId: checkpoint.stageId || undefined,
     };
-    const entity = { ...checkpoint, centerX };
+    const entity = { ...checkpoint, centerX: checkpoint.lineX ?? centerX };
     map.set(nodeRefKey(ref), { ref, entity, bounds: getNodeBounds(ref, entity) });
   }
 

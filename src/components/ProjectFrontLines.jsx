@@ -107,11 +107,13 @@ function FrontLine({
   centerX,
   top,
   nodes,
+  plan,
   onRename,
   onRemove,
   onRecolor,
   onOffset,
   renderDot,
+  renderPlan,
 }) {
   const { scale } = useZoomTransform();
   const drag = useRef(null);
@@ -143,7 +145,7 @@ function FrontLine({
 
   return (
     <div
-      className="projects-center-line projects-center-line--front projects-center-line--locked"
+      className={`projects-center-line projects-center-line--front projects-center-line--locked${plan?.windows?.length ? ' projects-center-line--plan-active' : ''}`}
       style={{ left: x, top, height, '--front': front.color }}
       title="Σύρε αριστερά ή δεξιά"
       onPointerDown={onPointerDown}
@@ -153,6 +155,7 @@ function FrontLine({
     >
       <div className="projects-center-line__glow" aria-hidden="true" />
       <div className="projects-center-line__stroke" />
+      {plan ? renderPlan?.(plan, top) : null}
       {nodes.map((node) => (
         <Fragment key={node.id}>{renderDot?.(node, top)}</Fragment>
       ))}
@@ -165,11 +168,13 @@ export function ProjectFrontLines({
   lineMetrics,
   fronts = [],
   nodes = [],
+  plans = {},
   onRename,
   onRemove,
   onRecolor,
   onOffset,
   renderDot,
+  renderPlan,
 }) {
   const list = normalizeFronts(fronts);
   if (!lineMetrics || !list.length) return null;
@@ -201,11 +206,13 @@ export function ProjectFrontLines({
           centerX={centerX}
           top={top}
           nodes={nodes.filter((node) => node.frontId === front.id)}
+          plan={plans[front.id]}
           onRename={onRename}
           onRemove={onRemove}
           onRecolor={onRecolor}
           onOffset={onOffset}
           renderDot={renderDot}
+          renderPlan={renderPlan}
         />
       ))}
     </>

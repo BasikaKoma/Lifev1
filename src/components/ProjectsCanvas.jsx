@@ -47,6 +47,7 @@ import {
   collectLifelineHiddenTickRanges,
   collectPlanWindows,
   collectPlanProgressSegments,
+  groupPlanByLine,
   getPlanStartY,
   getPlanEndY,
   getNextFreeCanvasPosition,
@@ -234,6 +235,65 @@ function PlanDayTicks({ ticks, lineTop }) {
         </div>
       ))}
     </div>
+  );
+}
+
+/** Plan window, progress glow, day labels and checkpoint dots for one line (center or a front). */
+function PlanLineOverlay({ lineTop, windows = [], progress = [], dayTicks = null, checkpoints = [] }) {
+  return (
+    <>
+      {(windows || []).map((win) => (
+        <div
+          key={win.stageId}
+          className="projects-center-line__plan-segment"
+          style={{
+            top: win.top - lineTop,
+            height: win.height,
+          }}
+          title={`${win.title}: ${win.planStartDate} → ${win.planEndDate}`}
+          aria-hidden="true"
+        />
+      ))}
+      {(progress || []).map((seg) => (
+        <div
+          key={`progress:${seg.stageId}`}
+          className="projects-center-line__plan-progress"
+          style={{
+            top: seg.top - lineTop,
+            height: seg.height,
+          }}
+          aria-hidden="true"
+        />
+      ))}
+      {(progress || []).map((seg) => (
+        <div
+          key={`progress-glow:${seg.stageId}`}
+          className="projects-center-line__plan-progress-glow"
+          style={{
+            top: seg.top - lineTop,
+            height: seg.height,
+          }}
+          aria-hidden="true"
+        />
+      ))}
+      {(progress || []).filter((seg) => !seg.complete).map((seg) => (
+        <div
+          key={`progress-head:${seg.stageId}`}
+          className="projects-center-line__plan-progress-head"
+          style={{ top: seg.endY - lineTop }}
+          aria-hidden="true"
+        />
+      ))}
+      {dayTicks ? <PlanDayTicks ticks={dayTicks} lineTop={lineTop} /> : null}
+      {(checkpoints || []).map((cp) => (
+        <div
+          key={`plan-cp:${cp.stageId}:${cp.id}`}
+          className={`projects-center-line__plan-cp-dot${cp.done || cp.archived ? ' projects-center-line__plan-cp-dot--done' : ''}`}
+          style={{ top: cp.timelineY - lineTop, transform: 'translateY(-50%)' }}
+          aria-hidden="true"
+        />
+      ))}
+    </>
   );
 }
 
@@ -503,59 +563,13 @@ function ProjectsCenterLine({
           <span className="projects-center-line__pulse" />
         </div>
       ) : null}
-      {(planWindows || []).map((win) => (
-        <div
-          key={win.stageId}
-          className="projects-center-line__plan-segment"
-          style={{
-            top: win.top - lineMetrics.top,
-            height: win.height,
-          }}
-          title={`${win.title}: ${win.planStartDate} → ${win.planEndDate}`}
-          aria-hidden="true"
-        />
-      ))}
-      {(planProgressSegments || []).map((seg) => (
-        <div
-          key={`progress:${seg.stageId}`}
-          className="projects-center-line__plan-progress"
-          style={{
-            top: seg.top - lineMetrics.top,
-            height: seg.height,
-          }}
-          aria-hidden="true"
-        />
-      ))}
-      {(planProgressSegments || []).map((seg) => (
-        <div
-          key={`progress-glow:${seg.stageId}`}
-          className="projects-center-line__plan-progress-glow"
-          style={{
-            top: seg.top - lineMetrics.top,
-            height: seg.height,
-          }}
-          aria-hidden="true"
-        />
-      ))}
-      {(planProgressSegments || []).filter((seg) => !seg.complete).map((seg) => (
-        <div
-          key={`progress-head:${seg.stageId}`}
-          className="projects-center-line__plan-progress-head"
-          style={{ top: seg.endY - lineMetrics.top }}
-          aria-hidden="true"
-        />
-      ))}
-      {planDayTicks && !lifelineDayTicks && (
-        <PlanDayTicks ticks={planDayTicks} lineTop={lineMetrics.top} />
-      )}
-      {(planCheckpoints || []).map((cp) => (
-        <div
-          key={`plan-cp:${cp.stageId}:${cp.id}`}
-          className={`projects-center-line__plan-cp-dot${cp.done || cp.archived ? ' projects-center-line__plan-cp-dot--done' : ''}`}
-          style={{ top: cp.timelineY - lineMetrics.top, transform: 'translateY(-50%)' }}
-          aria-hidden="true"
-        />
-      ))}
+      <PlanLineOverlay
+        lineTop={lineMetrics.top}
+        windows={planWindows}
+        progress={planProgressSegments}
+        dayTicks={lifelineDayTicks ? null : planDayTicks}
+        checkpoints={planCheckpoints}
+      />
       {lifelineDayTicks}
       {!locked && (
         <>
@@ -824,6 +838,7 @@ const CanvasBoard = memo(function CanvasBoard({
   planDayTicks = null,
   planProgressSegments = [],
   planCheckpoints = [],
+  frontPlans = {},
   onOpenPlanPanel,
   canvasInk = [],
   inkBillboards = false,
@@ -959,6 +974,16 @@ const CanvasBoard = memo(function CanvasBoard({
           lineMetrics={lineMetrics}
           fronts={fronts}
           nodes={lineMetrics?.frontNodes || []}
+          plans={frontPlans}
+          renderPlan={(plan, lineTop) => (
+            <PlanLineOverlay
+              lineTop={lineTop}
+              windows={plan.windows}
+              progress={plan.progress}
+              dayTicks={plan.dayTicks}
+              checkpoints={plan.checkpoints}
+            />
+          )}
           onRename={onRenameFront}
           onRemove={onRemoveFront}
           onRecolor={onRecolorFront}
@@ -1093,7 +1118,7 @@ const CanvasBoard = memo(function CanvasBoard({
           <CheckpointProjectsItem
             key={`${cp.stageId}:${cp.id}`}
             checkpoint={cp}
-            centerX={lineMetrics?.centerX ?? projectsLayout.centerX}
+            centerX={cp.frontId ? cp.lineX : (lineMetrics?.centerX ?? projectsLayout.centerX)}
             side={cp.side}
             stageId={cp.stageId}
             onSelectStage={onSelectStage}
@@ -2093,6 +2118,15 @@ export function ProjectsCanvas({
   const planCheckpoints = useMemo(
     () => projectsCheckpoints.filter((cp) => cp.stagePlanMode),
     [projectsCheckpoints]
+  );
+  const planByLine = useMemo(
+    () => groupPlanByLine({
+      windows: planWindows,
+      dayTicks: planDayTicks,
+      progress: planProgressSegments,
+      checkpoints: planCheckpoints,
+    }),
+    [planWindows, planDayTicks, planProgressSegments, planCheckpoints]
   );
   const boardSize = useMemo(
     () => getBoardSizeWithStickies(stages, canvasIdeas, canvasStickies, projectsLayout),
@@ -3983,10 +4017,11 @@ export function ProjectsCanvas({
             originSelected={originSelected}
             onSelectOrigin={handleSelectOrigin}
             onUpdateOrigin={handleUpdateOrigin}
-            planWindows={planWindows}
-            planDayTicks={planDayTicks}
-            planProgressSegments={planProgressSegments}
-            planCheckpoints={planCheckpoints}
+            planWindows={planByLine.center.windows}
+            planDayTicks={planDayTicks ? planByLine.center.dayTicks : null}
+            planProgressSegments={planByLine.center.progress}
+            planCheckpoints={planByLine.center.checkpoints}
+            frontPlans={planByLine.fronts}
             onOpenPlanPanel={handleOpenPlanPanel}
             canvasInk={isLifeline ? [] : canvasInk}
             inkBillboards={flyover3d}

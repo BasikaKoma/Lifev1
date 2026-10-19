@@ -435,6 +435,7 @@ export function collectPlanWindows(stages, layout = {}, dayHeight = PLAN_DAY_HEI
     const segmentEnd = isLifelinePlanContext(lifelineContext) ? endY : endY - h / 2;
     windows.push({
       stageId: stage.id,
+      frontId: lineForItem(stage, layout).id,
       title: stage.title,
       planGoal: stage.planGoal || '',
       planStartDate: stage.planStartDate,
@@ -637,6 +638,8 @@ export function collectRoadmapCheckpoints(stages, layout = DEFAULT_ROADMAP_LAYOU
   for (const stage of stages || []) {
     if (!isOnRoadmap(stage)) continue;
     const stagePlan = isPlanMode(stage);
+    // Checkpoints ride the same line as their milestone.
+    const line = lineForItem(stage, layout);
     for (const checkpoint of getCheckpointTimelinePositions(stage, layout, lifelineContext)) {
       const rawCheckpoint = (stage.checkpoints || []).find((c) => c.id === checkpoint.id);
       const pinnedSide = rawCheckpoint?.roadmapSide;
@@ -645,6 +648,8 @@ export function collectRoadmapCheckpoints(stages, layout = DEFAULT_ROADMAP_LAYOU
         ...checkpoint,
         stageId: stage.id,
         stageTitle: stage.title,
+        frontId: line.id,
+        lineX: line.x,
         stagePlanMode: stagePlan,
         planStartDate: stage.planStartDate,
         planEndDate: stage.planEndDate,
@@ -728,6 +733,7 @@ export function collectPlanProgressSegments(stages, layout = DEFAULT_ROADMAP_LAY
 
     segments.push({
       stageId: stage.id,
+      frontId: lineForItem(stage, layout).id,
       top,
       height,
       startY: planStartY,
@@ -736,6 +742,25 @@ export function collectPlanProgressSegments(stages, layout = DEFAULT_ROADMAP_LAY
     });
   }
   return segments;
+}
+
+/** Split plan windows, ticks, progress and checkpoint dots between the center line and each front. */
+export function groupPlanByLine({ windows = [], dayTicks = null, progress = [], checkpoints = [] }) {
+  const empty = () => ({ windows: [], dayTicks: [], progress: [], checkpoints: [] });
+  const center = empty();
+  const fronts = {};
+  const bucket = (frontId) => {
+    if (!frontId) return center;
+    if (!fronts[frontId]) fronts[frontId] = empty();
+    return fronts[frontId];
+  };
+  // Day ticks only know their stage; they follow that stage's window.
+  const frontByStage = new Map(windows.map((win) => [win.stageId, win.frontId]));
+  for (const win of windows) bucket(win.frontId).windows.push(win);
+  for (const seg of progress) bucket(seg.frontId).progress.push(seg);
+  for (const cp of checkpoints) bucket(cp.frontId).checkpoints.push(cp);
+  for (const tick of dayTicks || []) bucket(frontByStage.get(tick.stageId)).dayTicks.push(tick);
+  return { center, fronts };
 }
 
 export function positionMilestoneOnTimeline(stage, timelineY, layout = {}, sideHint) {
