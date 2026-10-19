@@ -28,9 +28,13 @@ export const ORGAN_STYLES = {
   largeIntestine: { color: '#f97316', glow: 0.8, opacity: 0.6 },
   // pulse: how strongly the heartbeat wave lights this organ as it travels out from the heart.
   // Vessels are thin: draw them over the green shell (overShell) so they stay red/blue
-  // instead of mixing with it into orange/teal.
-  arteries: { color: '#ff1a2e', glow: 1.6, opacity: 0.9, pulse: 2.2, overShell: true },
-  veins: { color: '#2f6bff', glow: 0.55, opacity: 0.45, overShell: true },
+  // instead of mixing with it into orange/teal, and inflate them (metres, VH frame) so
+  // they are a few pixels wide at hub size. Red barely blooms, so width does the work.
+  arteries: { color: '#ff1a2e', glow: 1.8, opacity: 0.95, pulse: 1.8, overShell: true, inflate: 0.0035 },
+  veins: { color: '#2f6bff', glow: 0.7, opacity: 0.5, overShell: true, inflate: 0.0025 },
+  // Grown networks (selfVascularNet): thin glowing lines reaching the hands and feet.
+  arteryNet: { color: '#ff2a3d', glow: 1.7, opacity: 0.9, pulse: 2.2, network: true },
+  veinNet: { color: '#3b82f6', glow: 1.35, opacity: 0.65, network: true },
 };
 
 /** Heartbeat wave along the arteries: travel speed and band width in body heights. */
@@ -43,7 +47,7 @@ export const PULSE_WIDTH = 0.035;
  * Sleep and Movement have no organ line on purpose; the brain glows on its own.
  */
 export const ORGAN_LINKS = [
-  { key: 'heartRate', side: -1, organs: ['heart', 'arteries'], anchor: 'heart', color: '#ff2a3d' },
+  { key: 'heartRate', side: -1, organs: ['heart', 'arteries', 'arteryNet'], anchor: 'heart', color: '#ff2a3d' },
   { key: 'hrv', side: 1, organs: ['spine', 'vagus'], anchor: 'vagus', color: '#facc15' },
   { key: 'stress', side: -1, organs: ['lungs'], anchor: 'lungs', color: '#38bdf8' },
   { key: 'weight', side: 1, organs: ['smallIntestine', 'largeIntestine'], anchor: 'core', color: '#fb923c' },
@@ -73,15 +77,6 @@ export function heartBpm(metric) {
   const value = Number(metric?.value ?? metric?.resting);
   if (!Number.isFinite(value) || value <= 0) return 60;
   return Math.min(150, Math.max(40, value));
-}
-
-export const SCAN_PERIOD_S = 11;
-
-/** Scan line height at time t: eases between 4% and 96% of the body. */
-export function scanYAt(t, bounds) {
-  const height = bounds.size[1];
-  const phase = 0.5 - 0.5 * Math.cos((2 * Math.PI * t) / SCAN_PERIOD_S);
-  return bounds.min[1] + height * (0.04 + 0.92 * phase);
 }
 
 /**

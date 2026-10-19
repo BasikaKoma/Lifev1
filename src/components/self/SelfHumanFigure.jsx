@@ -11,12 +11,7 @@ const TARGET_HEIGHT = 2.05;
 const BODY_COLOR = '#178258';
 const EMERALD = '#34d399';
 
-/** Shared uniforms for a soft scan band drawn on the body shell itself (strength 0 = off). */
-function createBodyScanUniforms() {
-  return { y: { value: -1e4 }, width: { value: 0.05 }, strength: { value: 0 } };
-}
-
-function createBodyMaterial(opacity = 0.30, sourceMaterial, geometry, bodyScan) {
+function createBodyMaterial(opacity = 0.30, sourceMaterial, geometry) {
   const material = new THREE.MeshPhysicalMaterial({
     color: BODY_COLOR,
     transparent: true,
@@ -41,17 +36,11 @@ function createBodyMaterial(opacity = 0.30, sourceMaterial, geometry, bodyScan) 
     material.onBeforeCompile = (shader) => {
       shader.uniforms.bodyHeightAxis = { value: direction };
       shader.uniforms.bodyHeightRange = { value: new THREE.Vector2(box?.min[axis] || 0, Math.max(extent[axis], 0.001)) };
-      const scan = bodyScan || createBodyScanUniforms();
-      shader.uniforms.bodyScanY = scan.y;
-      shader.uniforms.bodyScanWidth = scan.width;
-      shader.uniforms.bodyScanStrength = scan.strength;
-      shader.vertexShader = 'uniform vec3 bodyHeightAxis;\n uniform vec2 bodyHeightRange;\n varying float vBodyHeadMask;\n varying float vBodyScanY;\n' + shader.vertexShader;
+      shader.vertexShader = 'uniform vec3 bodyHeightAxis;\n uniform vec2 bodyHeightRange;\n varying float vBodyHeadMask;\n' + shader.vertexShader;
       shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
         float bodyHeight = (dot(position, bodyHeightAxis) - bodyHeightRange.x) / bodyHeightRange.y;
         vBodyHeadMask = smoothstep(0.80, 0.89, bodyHeight);`);
-      shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
-        vBodyScanY = (modelMatrix * vec4(transformed, 1.0)).y;`);
-      shader.fragmentShader = 'varying float vBodyHeadMask;\n varying float vBodyScanY;\n uniform float bodyScanY;\n uniform float bodyScanWidth;\n uniform float bodyScanStrength;\n' + shader.fragmentShader;
+      shader.fragmentShader = 'varying float vBodyHeadMask;\n' + shader.fragmentShader;
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <map_fragment>',
         `float bodyDetailShade = 1.0;
@@ -77,16 +66,10 @@ function createBodyMaterial(opacity = 0.30, sourceMaterial, geometry, bodyScan) 
         diffuseColor.rgb *= reliefShade;
         totalEmissiveRadiance *= bodyDetailShade * reliefShade * mix(1.0, 0.78, vBodyHeadMask);
         float bodyRim = pow(1.0 - clamp(abs(dot(normal, normalize(vViewPosition))), 0.0, 1.0), 3.6);
-        totalEmissiveRadiance += vec3(0.025, 0.24, 0.12) * bodyRim * mix(1.0, 0.55, vBodyHeadMask);
-        // Scan band lives on the shell, so it never extends past the silhouette.
-        float scanOffset = (vBodyScanY - bodyScanY) / bodyScanWidth;
-        float scanBand = bodyScanStrength * (0.65 * exp(-scanOffset * scanOffset) + 0.35 * exp(-scanOffset * scanOffset * 8.0));
-        totalEmissiveRadiance += vec3(0.22, 0.95, 0.62) * 1.8 * scanBand * (0.6 + 0.4 * bodyRim);
-        // The shell is mostly transparent, so lift its alpha a little inside the band to let it read.
-        diffuseColor.a = min(1.0, diffuseColor.a + 0.24 * scanBand);`,
+        totalEmissiveRadiance += vec3(0.025, 0.24, 0.12) * bodyRim * mix(1.0, 0.55, vBodyHeadMask);`,
       );
     };
-    material.customProgramCacheKey = () => 'self-human-face-relief-rim-scan-v4';
+    material.customProgramCacheKey = () => 'self-human-face-relief-rim-v5';
   }
   // Preserve real relief maps if a future GLB supplies them. Never add displacement.
   if (sourceMaterial?.normalMap) {
@@ -204,19 +187,30 @@ function measureAnatomy(root) {
   if (!total) return null;
 
   const points = new Float32Array(total * 3);
+  const normals = new Float32Array(total * 3);
   const matrix = new THREE.Matrix4();
+  const normalMatrix = new THREE.Matrix3();
   const v = new THREE.Vector3();
+  const n = new THREE.Vector3();
   let offset = 0;
   let minY = Infinity;
   let maxY = -Infinity;
   meshes.forEach((mesh) => {
     matrix.multiplyMatrices(toParent, mesh.matrixWorld);
+    normalMatrix.getNormalMatrix(matrix);
     const position = mesh.geometry.attributes.position;
+    const normal = mesh.geometry.attributes.normal;
     for (let i = 0; i < position.count; i += 1) {
       v.fromBufferAttribute(position, i).applyMatrix4(matrix);
       points[offset] = v.x;
       points[offset + 1] = v.y;
       points[offset + 2] = v.z;
+      if (normal) {
+        n.fromBufferAttribute(normal, i).applyMatrix3(normalMatrix).normalize();
+        normals[offset] = n.x;
+        normals[offset + 1] = n.y;
+        normals[offset + 2] = n.z;
+      }
       offset += 3;
       if (v.y < minY) minY = v.y;
       if (v.y > maxY) maxY = v.y;
@@ -297,7 +291,31 @@ function measureAnatomy(root) {
     waist: pair(0.585, 0.615, 0.105),
     thigh: pair(0.37, 0.4, 0.12),
   };
+  anatomy.surface = sampleSurface(points, normals, 11000);
   return anatomy;
+}
+
+/**
+ * An even, deterministic sample of surface points with outward normals, for things that
+ * need to fill the body (e.g. the vascular network grows toward points just under the skin).
+ */
+function sampleSurface(points, normals, count) {
+  const total = points.length / 3;
+  const take = Math.min(count, total);
+  const positions = new Float32Array(take * 3);
+  const outward = new Float32Array(take * 3);
+  // Fixed-seed LCG so the sample (and anything grown from it) is identical on every load.
+  let seed = 0x9e3779b9;
+  const random = () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+  for (let k = 0; k < take; k += 1) {
+    const i = Math.min(total - 1, Math.floor(((k + random()) / take) * total)) * 3;
+    positions.set(points.subarray(i, i + 3), k * 3);
+    outward.set(normals.subarray(i, i + 3), k * 3);
+  }
+  return { positions, normals: outward };
 }
 
 function boundsToSnapshot(box) {
@@ -311,10 +329,10 @@ function boundsToSnapshot(box) {
   };
 }
 
-function applyPremiumLook(root, opacity, bodyScan) {
+function applyPremiumLook(root, opacity) {
   const materialCopies = new Map();
   const getMaterial = (original, geometry) => {
-    if (!materialCopies.has(original)) materialCopies.set(original, createBodyMaterial(opacity, original, geometry, bodyScan));
+    if (!materialCopies.has(original)) materialCopies.set(original, createBodyMaterial(opacity, original, geometry));
     return materialCopies.get(original);
   };
   const decorations = [];
@@ -405,7 +423,7 @@ class CanvasErrorBoundary extends Component {
   }
 }
 
-function HumanModel({ onBoundsChange, onReady, bodyOpacity, bodyScan }) {
+function HumanModel({ onBoundsChange, onReady, bodyOpacity }) {
   const groupRef = useRef();
   const modelRef = useRef(null);
   const { scene } = useGLTF(MODEL_URL);
@@ -419,7 +437,7 @@ function HumanModel({ onBoundsChange, onReady, bodyOpacity, bodyScan }) {
     root.scale.setScalar(1);
 
     const model = clone(scene);
-    applyPremiumLook(model, 0.30, bodyScan);
+    applyPremiumLook(model, 0.30);
     modelRef.current = model;
     root.add(model);
     const cleanup = () => {
@@ -436,7 +454,7 @@ function HumanModel({ onBoundsChange, onReady, bodyOpacity, bodyScan }) {
       throw error;
     }
     return cleanup;
-  }, [scene, onBoundsChange, onReady, bodyScan]);
+  }, [scene, onBoundsChange, onReady]);
 
   useLayoutEffect(() => {
     // Update opacity in place: slider changes must not rebuild/refit the rotating model.
@@ -552,7 +570,7 @@ function RotatingFigure({ reducedMotion, children }) {
   return <group ref={group}>{children}</group>;
 }
 
-function SceneContent({ reducedMotion, onReady, onBoundsChange, onZoomScaleChange, platformRef, baseGap, bodyOpacity, bodyScan, renderInternals, renderOverlay, figureScale }) {
+function SceneContent({ reducedMotion, onReady, onBoundsChange, onZoomScaleChange, platformRef, baseGap, bodyOpacity, renderInternals, renderOverlay, figureScale }) {
   const [bounds, setBounds] = useState(null);
   const [fitDistance, setFitDistance] = useState(null);
   const controlsRef = useRef();
@@ -576,11 +594,11 @@ function SceneContent({ reducedMotion, onReady, onBoundsChange, onZoomScaleChang
       <directionalLight position={[-2, 1, -2]} intensity={1.8} color="#10b981" />
 
       <RotatingFigure reducedMotion={reducedMotion}>
-        <HumanModel onBoundsChange={handleBoundsChange} onReady={onReady} bodyOpacity={bodyOpacity} bodyScan={bodyScan} />
-        {bounds && renderInternals?.({ bounds, reducedMotion, bodyScan })}
+        <HumanModel onBoundsChange={handleBoundsChange} onReady={onReady} bodyOpacity={bodyOpacity} />
+        {bounds && renderInternals?.({ bounds, reducedMotion })}
       </RotatingFigure>
       {/* Screen-aligned extras (scan line, projectors) that must not spin with the body. */}
-      {bounds && renderOverlay?.({ bounds, reducedMotion, bodyScan })}
+      {bounds && renderOverlay?.({ bounds, reducedMotion })}
 
       <OrbitControls
         ref={controlsRef}
@@ -615,7 +633,7 @@ function SceneContent({ reducedMotion, onReady, onBoundsChange, onZoomScaleChang
   );
 }
 
-function HumanFigureCanvas({ reducedMotion, onReady, onError, onZoomScaleChange, platformRef, baseGap, bodyOpacity, bodyScan, renderInternals, renderOverlay, figureScale, interactive }) {
+function HumanFigureCanvas({ reducedMotion, onReady, onError, onZoomScaleChange, platformRef, baseGap, bodyOpacity, renderInternals, renderOverlay, figureScale, interactive }) {
   return (
     <Canvas
       className="self-figure__canvas"
@@ -644,7 +662,6 @@ function HumanFigureCanvas({ reducedMotion, onReady, onError, onZoomScaleChange,
             bodyOpacity={bodyOpacity}
             renderInternals={renderInternals}
             renderOverlay={renderOverlay}
-            bodyScan={bodyScan}
             figureScale={figureScale}
           />
         </Suspense>
@@ -659,7 +676,6 @@ export function SelfHumanFigure({ bodyOpacity = 0.30, baseGap = 4, figureScale =
   const [opacity, setOpacity] = useState(() => THREE.MathUtils.clamp(bodyOpacity, 0, 1));
   useEffect(() => { setOpacity(THREE.MathUtils.clamp(bodyOpacity, 0, 1)); }, [bodyOpacity]);
   const reducedMotion = usePrefersReducedMotion();
-  const [bodyScan] = useState(createBodyScanUniforms);
   const [status, setStatus] = useState('loading');
   const [errorMessage, setErrorMessage] = useState('');
   const [mountCanvas, setMountCanvas] = useState(false);
@@ -728,7 +744,6 @@ export function SelfHumanFigure({ bodyOpacity = 0.30, baseGap = 4, figureScale =
                 bodyOpacity={opacity}
                 renderInternals={renderInternals}
                 renderOverlay={renderOverlay}
-                bodyScan={bodyScan}
                 figureScale={figureScale}
                 interactive={status === 'ready'}
               />

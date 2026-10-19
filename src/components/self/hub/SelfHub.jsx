@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, useState } from 'react';
 import { SelfHumanFigure } from '../SelfHumanFigure';
-import { SelfBodyMeasureAnchors, SelfBodyScan, SelfOrgans } from '../SelfOrgans';
+import { SelfBodyMeasureAnchors, SelfOrgans } from '../SelfOrgans';
 import { ORGAN_LINKS, hasMetricData, heartBpm } from '../selfOrganSpec';
 import { SelfFloatingMetric } from './SelfFloatingMetric';
 import { SelfMoodCard } from './SelfMoodCard';
@@ -35,11 +35,8 @@ export function SelfHub({ floatingMetrics, capacity }) {
     </>
   ), [organLinks]);
 
-  const renderOverlay = useCallback(({ bounds, reducedMotion, bodyScan }) => (
-    <>
-      {reducedMotion ? null : <SelfBodyScan bounds={bounds} bodyScan={bodyScan} />}
-      <OrganLinkProjector links={organLinks} bounds={bounds} />
-    </>
+  const renderOverlay = useCallback(({ bounds }) => (
+    <OrganLinkProjector links={organLinks} bounds={bounds} />
   ), [organLinks]);
 
   return (

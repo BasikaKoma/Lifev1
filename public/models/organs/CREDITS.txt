@@ -15,3 +15,4 @@ https://creativecommons.org/licenses/by/4.0/
 Changes made for lifev1: removed internal brain structures, bronchial cartilage and
 eye vessels, split the vasculature into arteries and veins, merged each part into a
 single mesh, simplified the geometry and applied meshopt compression.
+In the app the vessels are thickened slightly so they read at small sizes.

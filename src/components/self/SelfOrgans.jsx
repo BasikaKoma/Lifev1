@@ -14,8 +14,8 @@ import {
   VAGUS_RADIUS_M,
   buildOrganAnchors,
   organModelTransform,
-  scanYAt,
 } from './selfOrganSpec';
+import { attractorsUnderSkin, createInsideTest, growNetwork, meshSeedPoints, networkGeometry } from './selfVascularNet';
 
 const ORGAN_VERTEX = /* glsl */ `
   varying vec3 vNormalView;
@@ -36,9 +36,6 @@ const ORGAN_FRAGMENT = /* glsl */ `
   uniform vec3 uColor;
   uniform float uIntensity;
   uniform float uOpacity;
-  uniform float uScanY;
-  uniform float uScanWidth;
-  uniform float uScanBoost;
   uniform vec3 uPulseOrigin;
   uniform float uPulseRadius;
   uniform float uPulseWidth;
@@ -55,14 +52,61 @@ const ORGAN_FRAGMENT = /* glsl */ `
       : 1.0;
     float rim = pow(clamp(1.0 - facing, 0.0, 1.0), 1.8);
     float body = 0.32 + 0.68 * rim;
-    float d = (vWorldPosition.y - uScanY) / uScanWidth;
-    float scan = 1.0 + uScanBoost * exp(-d * d);
     // Heartbeat wave: a bright shell expanding from the heart (only organs with uPulseGain > 0).
     float p = (distance(vWorldPosition, uPulseOrigin) - uPulseRadius) / uPulseWidth;
     float pulse = 1.0 + uPulseGain * exp(-p * p);
-    gl_FragColor = vec4(uColor * uIntensity * body * scan * pulse, uOpacity);
+    gl_FragColor = vec4(uColor * uIntensity * body * pulse, uOpacity);
   }
 `;
+
+const NETWORK_VERTEX = /* glsl */ `
+  attribute float aLevel;
+  varying float vLevel;
+  varying vec3 vWorldPosition;
+  void main() {
+    vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+    vWorldPosition = worldPosition.xyz;
+    vLevel = aLevel;
+    gl_Position = projectionMatrix * viewMatrix * worldPosition;
+  }
+`;
+
+const NETWORK_FRAGMENT = /* glsl */ `
+  uniform vec3 uColor;
+  uniform float uIntensity;
+  uniform float uOpacity;
+  uniform vec3 uPulseOrigin;
+  uniform float uPulseRadius;
+  uniform float uPulseWidth;
+  uniform float uPulseGain;
+  varying float vLevel;
+  varying vec3 vWorldPosition;
+  void main() {
+    // Trunks read bright, the finest twigs fade into a haze.
+    float weight = 0.22 + 0.78 * vLevel;
+    float p = (distance(vWorldPosition, uPulseOrigin) - uPulseRadius) / uPulseWidth;
+    float pulse = 1.0 + uPulseGain * exp(-p * p);
+    gl_FragColor = vec4(uColor * uIntensity * weight * pulse, uOpacity * (0.35 + 0.65 * vLevel));
+  }
+`;
+
+/** Glowing lines for the grown vascular networks; same uniforms as the organs. */
+function createNetworkMaterial(style, sharedUniforms) {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uColor: { value: new THREE.Color(style.color) },
+      uIntensity: { value: style.glow },
+      uOpacity: { value: style.opacity },
+      uPulseGain: { value: 0 },
+      ...sharedUniforms,
+    },
+    vertexShader: NETWORK_VERTEX,
+    fragmentShader: NETWORK_FRAGMENT,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+}
 
 /** One shader source for every organ, so three.js compiles a single program. */
 function createOrganMaterial(style, sharedUniforms) {
@@ -117,6 +161,7 @@ function extractOrganGeometries(scene) {
     geometry.applyMatrix4(child.matrixWorld);
     // Simplification leaves some zero-length quantised normals; rebuild smooth ones from the faces.
     geometry.computeVertexNormals();
+    inflateGeometry(geometry, ORGAN_STYLES[key]?.inflate);
     geometry.computeBoundingBox();
     // Copy the box before centring: translate() recomputes it in place.
     const box = { min: geometry.boundingBox.min.toArray(), max: geometry.boundingBox.max.toArray() };
@@ -127,7 +172,63 @@ function extractOrganGeometries(scene) {
   return parts;
 }
 
-function buildOrgans(scene, transform, frameUniforms) {
+/** Thin vessels are 1–2 px at hub size; push their surface out along the normals so they read. */
+function inflateGeometry(geometry, amount) {
+  if (!amount) return;
+  const positions = geometry.attributes.position;
+  const normals = geometry.attributes.normal;
+  for (let i = 0; i < positions.count; i += 1) {
+    positions.setXYZ(
+      i,
+      positions.getX(i) + normals.getX(i) * amount,
+      positions.getY(i) + normals.getY(i) * amount,
+      positions.getZ(i) + normals.getZ(i) * amount,
+    );
+  }
+  geometry.computeVertexNormals();
+}
+
+/**
+ * Artery and vein networks grown from the central vessels toward points just under the skin
+ * (see selfVascularNet). They live in the figure's frame, so they are built after the organ
+ * group's transform is known, and they share the pulse/scan uniforms with the organs.
+ */
+function buildVascularNetworks(group, meshes, bounds, materials, geometries) {
+  const networks = new THREE.Group();
+  const surface = bounds.anatomy?.surface;
+  if (!surface) return networks;
+  group.updateMatrixWorld(true);
+  const unit = bounds.size[1] / 1.78;
+  // Keeps every branch under the skin: no shortcuts across the gaps by the hips and thighs.
+  const inside = createInsideTest(surface, 0.06 * unit, 0.002 * unit);
+  [
+    { key: 'arteryNet', seeds: meshes.arteries, every: 40, depth: [0.01, 0.034], seed: 11 },
+    { key: 'veinNet', seeds: meshes.veins, every: 40, depth: [0.005, 0.02], seed: 29 },
+  ].forEach(({ key, seeds, every, depth, seed }) => {
+    if (!materials[key] || !seeds) return;
+    const network = growNetwork({
+      seeds: meshSeedPoints(seeds, every),
+      attractors: attractorsUnderSkin(surface, { minDepth: depth[0] * unit, maxDepth: depth[1] * unit, seed }),
+      step: 0.0095 * unit,
+      influence: 0.14 * unit,
+      kill: 0.014 * unit,
+      maxNodes: 15000,
+      maxSteps: 320,
+      jitter: 0.35,
+      seed,
+      inside,
+    });
+    const geometry = networkGeometry(network);
+    const lines = new THREE.LineSegments(geometry, materials[key]);
+    lines.renderOrder = 11;
+    lines.frustumCulled = false;
+    geometries.push(geometry);
+    networks.add(lines);
+  });
+  return networks;
+}
+
+function buildOrgans(scene, transform, frameUniforms, bounds) {
   const group = new THREE.Group();
   group.position.set(...transform.position);
   group.rotation.y = transform.rotationY;
@@ -135,7 +236,9 @@ function buildOrgans(scene, transform, frameUniforms) {
   const geometries = [];
   const materials = {};
   Object.entries(ORGAN_STYLES).forEach(([name, style]) => {
-    materials[name] = createOrganMaterial(style, frameUniforms);
+    materials[name] = style.network
+      ? createNetworkMaterial(style, frameUniforms)
+      : createOrganMaterial(style, frameUniforms);
   });
 
   const add = (geometry, material, position, overShell = false) => {
@@ -168,7 +271,9 @@ function buildOrgans(scene, transform, frameUniforms) {
     });
   });
 
-  return { group, geometries, materials, anchors, heart: meshes.heart, lungs: meshes.lungs };
+  const limbGroup = buildVascularNetworks(group, meshes, bounds, materials, geometries);
+
+  return { group, limbGroup, geometries, materials, anchors, heart: meshes.heart, lungs: meshes.lungs };
 }
 
 /** Adds named anchors to the shared link runtime; returns the cleanup that removes exactly these. */
@@ -184,16 +289,16 @@ function registerAnchors(links, anchors) {
 function OrganModels({ bounds, links, reducedMotion }) {
   const { scene } = useGLTF(ORGAN_MODEL_URL);
   const transform = useMemo(() => organModelTransform(bounds), [bounds]);
-  // Shared by every organ material: scan band and the heartbeat wave front.
+  // Shared by every organ material: the heartbeat wave front.
   const frameUniforms = useMemo(() => ({
-    uScanY: { value: bounds.min[1] - 10 },
-    uScanWidth: { value: 0.03 * (bounds.size[1] / 1.78) },
-    uScanBoost: { value: 0 },
     uPulseOrigin: { value: new THREE.Vector3() },
     uPulseRadius: { value: 1e3 },
     uPulseWidth: { value: PULSE_WIDTH * bounds.size[1] },
   }), [bounds]);
-  const organs = useMemo(() => buildOrgans(scene, transform, frameUniforms), [scene, transform, frameUniforms]);
+  const organs = useMemo(
+    () => buildOrgans(scene, transform, frameUniforms, bounds),
+    [scene, transform, frameUniforms, bounds],
+  );
 
   useLayoutEffect(() => registerAnchors(links, organs.anchors), [links, organs]);
 
@@ -203,12 +308,10 @@ function OrganModels({ bounds, links, reducedMotion }) {
   }, [organs]);
 
   useEffect(() => {
-    frameUniforms.uScanBoost.value = reducedMotion ? 0 : 0.6;
     Object.entries(organs.materials).forEach(([name, material]) => {
       material.uniforms.uPulseGain.value = reducedMotion ? 0 : ORGAN_STYLES[name].pulse || 0;
     });
     if (reducedMotion) {
-      frameUniforms.uScanY.value = bounds.min[1] - 10;
       frameUniforms.uPulseRadius.value = 1e3;
       organs.heart?.scale.setScalar(1);
       organs.lungs?.scale.setScalar(1);
@@ -219,7 +322,6 @@ function OrganModels({ bounds, links, reducedMotion }) {
     const t = state.clock.elapsedTime;
     let beat = 0;
     if (!reducedMotion) {
-      frameUniforms.uScanY.value = scanYAt(t, bounds);
       // Lub-dub at the HR card's rate.
       const phase = (t * links.bpm / 60) % 1;
       beat = Math.exp(-(((phase - 0.08) / 0.05) ** 2)) + 0.55 * Math.exp(-(((phase - 0.28) / 0.05) ** 2));
@@ -253,7 +355,12 @@ function OrganModels({ bounds, links, reducedMotion }) {
     });
   });
 
-  return <primitive object={organs.group} />;
+  return (
+    <>
+      <primitive object={organs.group} />
+      <primitive object={organs.limbGroup} />
+    </>
+  );
 }
 
 useGLTF.preload(ORGAN_MODEL_URL);
@@ -295,25 +402,4 @@ export function SelfBodyMeasureAnchors({ bounds, links }) {
   useLayoutEffect(() => registerAnchors(links, anchors), [links, anchors]);
 
   return <primitive object={group} />;
-}
-
-/**
- * Drives the soft scan band drawn on the body shell (SelfHumanFigure's bodyScan uniforms),
- * so the sweep stays inside the silhouette. Organs brighten in step via the same scanYAt.
- */
-export function SelfBodyScan({ bounds, bodyScan }) {
-  useEffect(() => {
-    if (!bodyScan) return undefined;
-    bodyScan.width.value = 0.024 * (bounds.size[1] / 1.78);
-    bodyScan.strength.value = 0.6;
-    return () => {
-      bodyScan.strength.value = 0;
-    };
-  }, [bodyScan, bounds]);
-
-  useFrame((state) => {
-    if (bodyScan) bodyScan.y.value = scanYAt(state.clock.elapsedTime, bounds);
-  });
-
-  return null;
 }
