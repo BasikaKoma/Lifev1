@@ -73,7 +73,7 @@
   flex-shrink: 0;
 }
 
-.self-open__done {
+.self-open__group {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;

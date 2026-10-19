@@ -20,7 +20,7 @@ import { buildSourceIndex } from './sources';
 import { assistantInstructionBlock } from './levels';
 import { redactSecrets } from './redact';
 import { loadAssistantPack } from '../lib/assistant/pack';
-import { listOpenItems } from '../lib/assistant/openItems';
+import { listOpenWork } from '../lib/assistant/openItems';
 import { listMailMessages } from '../lib/assistant/mail';
 import { queryErp } from '../lib/assistant/erp';
 import { brainListDir, brainListRoots, brainReadImage, brainReadText, hasElectronBrain } from '../platform/brain';
@@ -139,7 +139,7 @@ async function executeTool(name, args, { policy, destination, catalog, conversat
     return resolveProjectQuery(query, catalog);
   }
   if (name === 'list_open_items') {
-    const items = await listOpenItems();
+    const items = await listOpenWork();
     const level = args.level === 'human' || args.level === 'business' ? args.level : 'all';
     return items
       .filter((item) => item.status === 'open' && (level === 'all' || item.level === level))

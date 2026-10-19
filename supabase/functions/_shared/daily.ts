@@ -52,43 +52,88 @@ async function markDone(admin: { from: (table: string) => any }, row: ItemRow) {
   row.status = 'done';
 }
 
+// Same window and rules as buildOpenRecords in src/lib/assistant/openItems.js, so the app and
+// the morning pull write identical Lifeline records. Plan blocks come from path_state.
+const OPEN_WINDOW_DAYS = 14;
+const RECORD_LIMIT = 40;
+
+type RecordEntry = { id: string; title: string; source: string };
+type PathBlock = { id?: unknown; title?: unknown; date?: unknown; status?: unknown };
+
+function shiftIsoDate(iso: string, days: number) {
+  const date = new Date(`${iso}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function athensDayOf(iso: string | null) {
+  if (!iso) return '';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Athens' }).format(date);
+}
+
+function byId(a: RecordEntry, b: RecordEntry) {
+  if (a.id === b.id) return 0;
+  return a.id < b.id ? -1 : 1;
+}
+
+function recordSignature(record: { done?: RecordEntry[]; missed?: RecordEntry[] } | null | undefined) {
+  const line = (list: RecordEntry[] | undefined) => (Array.isArray(list) ? list : [])
+    .map((item) => `${item?.id || ''}|${String(item?.title || '').trim()}|${item?.source || ''}`)
+    .sort()
+    .join('\n');
+  return `${line(record?.done)}\n--\n${line(record?.missed)}`;
+}
+
 async function writeOpenRecords(
   admin: { from: (table: string) => any },
   userId: string,
+  blocks: PathBlock[],
 ) {
   const { data: line } = await admin.from('lifelines').select('lifeline_days').eq('user_id', userId).maybeSingle();
   if (!line?.lifeline_days || typeof line.lifeline_days !== 'object') return;
   const { data: rows } = await admin
     .from('open_items')
-    .select('id, title, source, status, due_on')
+    .select('id, title, source, status, due_on, created_at')
     .eq('user_id', userId)
-    .neq('status', 'deleted');
-  const days = { ...line.lifeline_days };
-  const grouped = new Map<string, { done: Array<{ id: string; title: string; source: string }>; missed: Array<{ id: string; title: string; source: string }> }>();
+    .neq('status', 'deleted')
+    .neq('source', 'day');
   const today = athensToday();
-  for (const row of rows || []) {
-    const title = String(row.title || '').trim();
-    if (!title) continue;
-    const date = row.due_on || today;
-    if (!grouped.has(date)) grouped.set(date, { done: [], missed: [] });
-    const bucket = grouped.get(date)!;
-    const compact = { id: String(row.id), title, source: String(row.source || '') };
-    if (row.status === 'done') {
-      if (bucket.done.length < 40) bucket.done.push(compact);
-    } else if (row.status === 'open' && bucket.missed.length < 40) {
-      bucket.missed.push(compact);
-    }
+  const grouped = new Map<string, { done: RecordEntry[]; missed: RecordEntry[] }>();
+  for (let offset = OPEN_WINDOW_DAYS; offset >= 0; offset -= 1) {
+    grouped.set(shiftIsoDate(today, -offset), { done: [], missed: [] });
   }
+  const add = (date: string, done: boolean, entry: RecordEntry) => {
+    const bucket = grouped.get(date);
+    if (!bucket || !entry.title) return;
+    (done ? bucket.done : bucket.missed).push(entry);
+  };
+  // Skipped blocks count as neither done nor missed; Planned and Moved are still open.
+  for (const block of blocks) {
+    const status = String(block?.status || 'Planned');
+    if (status === 'Skipped') continue;
+    add(String(block?.date || ''), status === 'Done', {
+      id: String(block?.id || ''),
+      title: String(block?.title || '').trim(),
+      source: 'day',
+    });
+  }
+  for (const row of rows || []) {
+    add(row.due_on || athensDayOf(row.created_at), row.status === 'done', {
+      id: String(row.id),
+      title: String(row.title || '').trim(),
+      source: String(row.source || ''),
+    });
+  }
+  const days = { ...line.lifeline_days };
   let changed = false;
   for (const [date, record] of grouped) {
-    record.done.sort((a, b) => a.id.localeCompare(b.id));
-    record.missed.sort((a, b) => a.id.localeCompare(b.id));
-    const prev = days[date] && typeof days[date] === 'object' ? days[date] : {};
-    const prevRecord = prev.openRecord || {};
-    const same = JSON.stringify(prevRecord.done || []) === JSON.stringify(record.done)
-      && JSON.stringify(prevRecord.missed || []) === JSON.stringify(record.missed);
-    if (same) continue;
-    days[date] = { ...prev, openRecord: { ...record, updatedAt: new Date().toISOString() } };
+    record.done = record.done.sort(byId).slice(0, RECORD_LIMIT);
+    record.missed = record.missed.sort(byId).slice(0, RECORD_LIMIT);
+    const prev = days[date] && typeof days[date] === 'object' ? days[date] : null;
+    if (recordSignature(prev?.openRecord) === recordSignature(record)) continue;
+    days[date] = { ...(prev || {}), openRecord: { ...record, updatedAt: new Date().toISOString() } };
     changed = true;
   }
   if (!changed) return;
@@ -204,34 +249,18 @@ export async function pullAssistantForUser(userId: string) {
     if (created) itemCount += 1;
   }
 
-  const { data: path } = await admin.from('path_state').select('blocks').eq('user_id', userId).maybeSingle();
-  const blocks = Array.isArray(path?.blocks) ? path.blocks : [];
-  const blockStatus = new Map<string, string>();
-  for (const block of blocks) {
-    const date = String(block?.date || '');
-    const id = String(block?.id || '');
-    const title = String(block?.title || '').trim();
-    if (!date || !id || !title) continue;
-    const sourceRef = `${date}:path:${id}`;
-    const status = String(block.status || 'Planned');
-    blockStatus.set(sourceRef, status);
-    if (date !== today || status === 'Done' || status === 'Skipped') continue;
-    const created = await ensureItem(admin, userId, existing, {
-      title,
-      dueOn: date,
-      source: 'day',
-      sourceRef,
-    });
-    if (created) itemCount += 1;
-  }
-  for (const row of existing.values()) {
-    if (row.source !== 'day' || row.status !== 'open') continue;
-    const status = blockStatus.get(String(row.source_ref || ''));
-    const stillOpen = status && status !== 'Done' && status !== 'Skipped';
-    if (!stillOpen) await markDone(admin, row);
-  }
+  // The weekly plan is read from Path directly; retire the open copies older pulls made of its blocks.
+  await admin
+    .from('open_items')
+    .update({ status: 'deleted' })
+    .eq('user_id', userId)
+    .eq('source', 'day')
+    .eq('status', 'open');
 
-  await writeOpenRecords(admin, userId);
+  const { data: path } = await admin.from('path_state').select('blocks').eq('user_id', userId).maybeSingle();
+  const blocks = Array.isArray(path?.blocks) ? path.blocks as PathBlock[] : [];
+
+  await writeOpenRecords(admin, userId, blocks);
 
   await admin.from('assistant_runs').upsert({
     user_id: userId,

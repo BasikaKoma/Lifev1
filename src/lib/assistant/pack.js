@@ -1,7 +1,7 @@
 import { hasElectronBrain } from '../../platform/brain';
 import { getSupabaseClient, isSupabaseConfigured } from '../supabase';
 import { BUSINESS_DOMAINS, HUMAN_DOMAINS } from '../../brain/levels';
-import { listOpenItems } from './openItems';
+import { listOpenWork } from './openItems';
 import { listMailConnections, listMailMessages } from './mail';
 import { getErpStatus, listErpSnapshots } from './erp';
 import { redactSecrets } from '../../brain/redact';
@@ -64,7 +64,7 @@ async function recentPayments() {
 
 export async function loadAssistantPack() {
   const [items, mail, erp, calls, payments] = await Promise.all([
-    listOpenItems().catch(() => []),
+    listOpenWork().catch(() => []),
     (async () => {
       try {
         const mailboxes = await listMailConnections();

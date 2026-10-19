@@ -1,7 +1,15 @@
 import { getSupabaseClient, isSupabaseConfigured } from '../supabase';
+import { addDaysIso, compareBlocks } from '../path/logic';
+import { toIsoDate } from '../path/schema';
+import { readPathBundleLocal } from '../path/store';
+import { localTodayIsoDate } from '../../utils/selfDateUtils';
 
 const LOCAL_KEY = 'lifev1-open-items';
 const SOURCES = new Set(['manual', 'mail', 'call', 'day', 'commitment']);
+
+// Weekly-plan blocks are read from Path itself; rows with source 'day' are old server copies.
+export const OPEN_WINDOW_DAYS = 14;
+const RECORD_LIMIT = 40;
 
 function readLocal() {
   try {
@@ -36,23 +44,105 @@ function compactOpenRecordItem(item) {
   };
 }
 
-/** Per due-date archive: done vs still open. Dates with no due date land on fallbackDate. */
-export function openRecordsByDate(items, fallbackDate) {
+function localDayOf(iso) {
+  if (!iso) return '';
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? '' : toIsoDate(date);
+}
+
+/** Rows that come from the assistant (mail, calls, manual), not copies of plan blocks. */
+function assistantItems(items) {
+  return (items || []).filter((item) => item?.title && item.source !== 'day' && item.status !== 'deleted');
+}
+
+function itemDay(item) {
+  return item.dueOn || localDayOf(item.createdAt);
+}
+
+// Planned and Moved blocks are still open.
+function blockRowStatus(status) {
+  if (status === 'Done') return 'done';
+  if (status === 'Skipped') return 'skipped';
+  return 'open';
+}
+
+/**
+ * Per-day archive for the last OPEN_WINDOW_DAYS days: what got done and what stayed open.
+ * Skipped blocks count as neither. The server builds the same map in _shared/daily.ts.
+ */
+export function buildOpenRecords({ items = [], blocks = [], today, days = OPEN_WINDOW_DAYS }) {
   const map = {};
-  for (const item of items || []) {
-    if (!item || item.status === 'deleted') continue;
-    const title = String(item.title || '').trim();
-    if (!title) continue;
-    const date = item.dueOn || fallbackDate;
-    if (!date) continue;
-    if (!map[date]) map[date] = { done: [], missed: [] };
-    const compact = compactOpenRecordItem({ ...item, title });
-    if (item.status === 'done') map[date].done.push(compact);
-    else map[date].missed.push(compact);
-    map[date].done = map[date].done.slice(0, 40);
-    map[date].missed = map[date].missed.slice(0, 40);
+  for (let offset = days; offset >= 0; offset -= 1) {
+    map[addDaysIso(today, -offset)] = { done: [], missed: [] };
+  }
+  const add = (date, bucket, entry) => {
+    if (map[date] && entry.title) map[date][bucket].push(entry);
+  };
+  for (const block of blocks || []) {
+    const status = blockRowStatus(block?.status);
+    if (status === 'skipped') continue;
+    add(block.date, status === 'done' ? 'done' : 'missed', compactOpenRecordItem({ ...block, source: 'day' }));
+  }
+  for (const item of assistantItems(items)) {
+    add(itemDay(item), item.status === 'done' ? 'done' : 'missed', compactOpenRecordItem(item));
+  }
+  // Plain code-unit order, same as the server, so both write identical arrays.
+  const byId = (a, b) => (a.id === b.id ? 0 : a.id < b.id ? -1 : 1);
+  for (const record of Object.values(map)) {
+    record.done = record.done.sort(byId).slice(0, RECORD_LIMIT);
+    record.missed = record.missed.sort(byId).slice(0, RECORD_LIMIT);
   }
   return map;
+}
+
+/**
+ * What Self shows: today's open work, overdue work and what closed today,
+ * merging Path blocks with assistant items. Overdue plan blocks stop after OPEN_WINDOW_DAYS.
+ */
+export function buildSelfOpenList({ items = [], blocks = [], today, days = OPEN_WINDOW_DAYS }) {
+  const from = addDaysIso(today, -days);
+  const rows = [];
+  for (const block of blocks || []) {
+    if (!block?.date || block.date < from || block.date > today) continue;
+    const status = blockRowStatus(block.status);
+    rows.push({
+      key: `block:${block.id}`,
+      kind: 'block',
+      id: block.id,
+      title: String(block.title || '').trim(),
+      date: block.date,
+      status,
+      closedToday: status !== 'open' && (block.date === today || localDayOf(block.updatedAt) === today),
+      block,
+    });
+  }
+  for (const item of assistantItems(items)) {
+    const date = item.dueOn || '';
+    if (date > today) continue;
+    rows.push({
+      key: `item:${item.id}`,
+      kind: 'item',
+      id: item.id,
+      title: item.title,
+      date,
+      status: item.status === 'done' ? 'done' : 'open',
+      closedToday: item.status === 'done' && localDayOf(item.updatedAt) === today,
+      item,
+    });
+  }
+  const byDay = (a, b) => {
+    if (a.kind !== b.kind) return a.kind === 'block' ? -1 : 1;
+    if (a.kind === 'block') return compareBlocks(a.block, b.block);
+    return a.title.localeCompare(b.title, 'el');
+  };
+  const open = rows.filter((row) => row.status === 'open');
+  return {
+    today: open.filter((row) => !row.date || row.date === today).sort(byDay),
+    overdue: open
+      .filter((row) => row.date && row.date < today)
+      .sort((a, b) => b.date.localeCompare(a.date) || byDay(a, b)),
+    closedToday: rows.filter((row) => row.closedToday).sort(byDay),
+  };
 }
 
 export function openRecordsEqual(left, right) {
@@ -112,18 +202,64 @@ async function cloudAvailable() {
   return { supabase, id };
 }
 
+/** True when items live in Supabase, so the server pull (mail, calls) can run. */
+export async function openItemsCloudReady() {
+  return Boolean(await cloudAvailable());
+}
+
+function readLocalItems() {
+  return readLocal().map(normalizeOpenItem).filter((item) => item?.title && item.source !== 'day');
+}
+
+/** Assistant items (mail, calls, manual). Plan blocks are not here: they live in Path. */
 export async function listOpenItems() {
   const cloud = await cloudAvailable();
-  if (!cloud) return readLocal().map(normalizeOpenItem).filter((item) => item?.title);
+  if (!cloud) return readLocalItems();
   const { data, error } = await cloud.supabase
     .from('open_items')
     .select('id, title, body, due_on, level, source, source_ref, status, created_at, updated_at')
     .neq('status', 'deleted')
+    .neq('source', 'day')
     .order('due_on', { ascending: true });
-  if (error) return readLocal().map(normalizeOpenItem).filter((item) => item?.title);
+  if (error) return readLocalItems();
   const items = (data || []).map(normalizeOpenItem).filter((item) => item?.title);
   writeLocal(items);
   return items;
+}
+
+function openPlanRows(today = localTodayIsoDate()) {
+  const blocks = readPathBundleLocal().blocks;
+  const list = buildSelfOpenList({ blocks, today });
+  return [...list.today, ...list.overdue];
+}
+
+/** Open items plus today's and overdue plan blocks, shaped alike, for the assistant. */
+export async function listOpenWork() {
+  const items = await listOpenItems();
+  const plan = openPlanRows().map((row) => ({
+    id: row.id,
+    title: row.title,
+    body: '',
+    dueOn: row.date,
+    level: 'human',
+    source: 'day',
+    sourceRef: row.id,
+    status: 'open',
+    createdAt: row.block.createdAt || null,
+    updatedAt: row.block.updatedAt || null,
+  }));
+  return [...plan, ...items];
+}
+
+/** An open plan block (today or overdue) by id or title, for assistant actions. */
+export function findOpenPlanBlock(hint) {
+  const needle = String(hint || '').trim().toLowerCase();
+  if (!needle) return null;
+  const rows = openPlanRows();
+  const row = rows.find((item) => item.id === hint)
+    || rows.find((item) => item.title.toLowerCase() === needle)
+    || rows.find((item) => item.title.toLowerCase().includes(needle));
+  return row?.block || null;
 }
 
 export async function createOpenItem(input) {

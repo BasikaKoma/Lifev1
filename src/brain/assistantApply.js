@@ -1,5 +1,7 @@
 import { ASSISTANT_ACTION_TYPES, COMPUTER_ACTION_TYPES } from './levels';
-import { createOpenItem, findOpenItem, setOpenItemStatus } from '../lib/assistant/openItems';
+import { createOpenItem, findOpenItem, findOpenPlanBlock, setOpenItemStatus } from '../lib/assistant/openItems';
+import { defaultBlockDoneAt } from '../lib/path/logic';
+import { setPathBlockStatus } from '../lib/path/store';
 import { sendMail } from '../lib/assistant/mail';
 import { getSupabaseClient, isSupabaseConfigured } from '../lib/supabase';
 import {
@@ -99,7 +101,17 @@ export async function applyAssistantActions(actions = []) {
       if (action.type === 'complete_open_item' || action.type === 'delete_open_item') {
         const found = await findOpenItem(action.target || action.title);
         if (!found) {
-          errors.push(`δεν βρήκα την εκκρεμότητα «${action.title}»`);
+          // Weekly-plan work lives in Path: done marks the block Done, delete marks it Skipped.
+          const block = findOpenPlanBlock(action.target || action.title);
+          if (!block) {
+            errors.push(`δεν βρήκα την εκκρεμότητα «${action.title}»`);
+            continue;
+          }
+          const deleting = action.type === 'delete_open_item';
+          setPathBlockStatus(block.id, deleting ? 'Skipped' : 'Done', deleting ? undefined : defaultBlockDoneAt(block));
+          parts.push(deleting
+            ? `έβαλα παράλειψη στο «${block.title}»`
+            : `έκλεισα το «${block.title}» στο weekly plan`);
           continue;
         }
         await setOpenItemStatus(found.id, action.type === 'delete_open_item' ? 'deleted' : 'done');

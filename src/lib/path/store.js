@@ -1,6 +1,13 @@
 import { getSupabaseClient, isSupabaseConfigured } from '../supabase';
 import { waitForAuthSession } from '../auth';
-import { createEmptyBundle, normalizeBundle, nowIso, pathBundleHasContent } from './schema';
+import {
+  applyBlockStatus,
+  createEmptyBlock,
+  createEmptyBundle,
+  normalizeBundle,
+  nowIso,
+  pathBundleHasContent,
+} from './schema';
 import { isCloudSyncEnabled, mirrorVaultJson, readVaultJsonIfEnabled } from '../vault/mirror';
 import { pathBundlePath } from '../vault/paths';
 
@@ -242,6 +249,21 @@ export async function flushPathNow() {
   })();
 
   return savePromise;
+}
+
+/** Status change from outside Path (Self). Like usePath.setBlockStatus, without completing a linked task. */
+export function setPathBlockStatus(blockId, status, at) {
+  const current = readLocal();
+  if (!current?.blocks?.some((block) => block.id === blockId)) return null;
+  return queuePathSave({
+    ...current,
+    blocks: current.blocks.map((block) => (
+      block.id === blockId
+        ? createEmptyBlock({ ...applyBlockStatus(block, status, at), completeLinkedTask: false })
+        : block
+    )),
+    updatedAt: nowIso(),
+  });
 }
 
 export async function savePathBundle(bundle) {

@@ -253,6 +253,7 @@ export function SelfView({
           <SelfOpenItems
             lifelineDays={lifelineDays}
             onUpdateLifelineDay={onUpdateLifelineDay}
+            pathBundle={pathBundle}
           />
 
           <SelfSummaryStrip
