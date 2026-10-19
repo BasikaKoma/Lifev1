@@ -9,6 +9,7 @@ import {
 } from './focusWindowEngine';
 import { getNextBestMove, getCurrentStage, isCheckpointDone } from './logic';
 import { parseOuraPayload } from './heartRateMetric';
+import { ouraHrvMs } from '../lib/health/metricHistory';
 import { extractOuraSummary } from './ouraInfo';
 import {
   collectCompletedItemsForDate,
@@ -328,10 +329,7 @@ function buildFromSelfData(selfData, { displayName, stages, ouraRow, projectActi
   const usingOura = source === 'oura' || source === 'merged';
   const usingScale = source === 'qn_scale' || source === 'merged';
 
-  const hrvMs =
-    payload.sleep_sessions?.[0]?.average_hrv ??
-    payload.readiness?.contributors?.average_hrv ??
-    null;
+  const hrvMs = ouraHrvMs(payload);
 
   const tempDev = extractOuraTempDeviationC(payload);
 

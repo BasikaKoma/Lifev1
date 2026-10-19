@@ -145,10 +145,13 @@ export async function fetchOuraMetricsRange(limitOrOptions = 30) {
   const limit = Number(options.limit);
   const startDay = options.startDay || null;
   const endDay = options.endDay || null;
+  // A column list (e.g. "day,steps,payload_stress:payload->stress") keeps the heavy
+  // payload parts, like heart-rate samples, out of the response.
+  const columns = options.columns || '*';
 
   let query = supabase
     .from('oura_daily_metrics')
-    .select('*')
+    .select(columns)
     .order('day', { ascending: false });
 
   if (startDay) query = query.gte('day', startDay);

@@ -6,6 +6,7 @@ import { SelfFloatingMetric } from './SelfFloatingMetric';
 import { SelfMoodCard } from './SelfMoodCard';
 import { SelfCapacityBanner } from './SelfCapacityBanner';
 import { SelfBodyMeasures } from './SelfBodyMeasures';
+import { SelfMetricDialog } from './SelfMetricDialog';
 import { OrganLinkProjector, SelfOrganLinks, createOrganLinkRuntime, useOrganCardProps } from './SelfOrganLinks';
 import { platform } from '../../../platform';
 
@@ -16,6 +17,9 @@ const MOBILE_BODY_OPACITY = platform.isMobile ? 0.5 : undefined;
 export function SelfHub({ floatingMetrics, capacity }) {
   const [organLinks] = useState(createOrganLinkRuntime);
   const cardProps = useOrganCardProps(organLinks);
+  // Which metric's day-by-day detail is open (null when none).
+  const [detailKey, setDetailKey] = useState(null);
+  const closeDetail = useCallback(() => setDetailKey(null), []);
 
   useLayoutEffect(() => {
     ORGAN_LINKS.forEach((link) => {
@@ -43,13 +47,13 @@ export function SelfHub({ floatingMetrics, capacity }) {
       <div className="self-body-cluster">
         <div className="self-hub__ambient" aria-hidden />
         <div className="self-hub__stage">
-          <SelfFloatingMetric metric={floatingMetrics.sleep} position="tl" variant="orb" />
+          <SelfFloatingMetric metric={floatingMetrics.sleep} position="tl" variant="orb" detailKey="sleep" onOpenDetail={setDetailKey} />
           <SelfMoodCard />
-          <SelfFloatingMetric metric={floatingMetrics.heartRate} position="tr" desktopDetailed="hr" rootProps={cardProps('heartRate')} />
-          <SelfFloatingMetric metric={floatingMetrics.hrv} position="ml" rootProps={cardProps('hrv')} />
-          <SelfFloatingMetric metric={floatingMetrics.stress} position="mr" rootProps={cardProps('stress')} />
-          <SelfFloatingMetric metric={floatingMetrics.weight} position="bl" desktopDetailed="calories" rootProps={cardProps('weight')} />
-          <SelfFloatingMetric metric={floatingMetrics.movement} position="br" variant="orb" orbKind="movement" />
+          <SelfFloatingMetric metric={floatingMetrics.heartRate} position="tr" desktopDetailed="hr" rootProps={cardProps('heartRate')} detailKey="heartRate" onOpenDetail={setDetailKey} />
+          <SelfFloatingMetric metric={floatingMetrics.hrv} position="ml" rootProps={cardProps('hrv')} detailKey="hrv" onOpenDetail={setDetailKey} />
+          <SelfFloatingMetric metric={floatingMetrics.stress} position="mr" rootProps={cardProps('stress')} detailKey="stress" onOpenDetail={setDetailKey} />
+          <SelfFloatingMetric metric={floatingMetrics.weight} position="bl" desktopDetailed="calories" rootProps={cardProps('weight')} detailKey="weight" onOpenDetail={setDetailKey} />
+          <SelfFloatingMetric metric={floatingMetrics.movement} position="br" variant="orb" orbKind="movement" detailKey="movement" onOpenDetail={setDetailKey} />
 
           <div className="self-hub__figure">
             <SelfHumanFigure
@@ -60,13 +64,14 @@ export function SelfHub({ floatingMetrics, capacity }) {
           </div>
 
           <SelfOrganLinks runtime={organLinks} metrics={floatingMetrics} />
-          <SelfBodyMeasures runtime={organLinks} metric={floatingMetrics.weight} />
+          <SelfBodyMeasures runtime={organLinks} metric={floatingMetrics.weight} onOpenDetail={setDetailKey} />
 
           <div className="self-hub__capacity-wrap">
             <SelfCapacityBanner capacity={capacity} />
           </div>
         </div>
       </div>
+      {detailKey ? <SelfMetricDialog metricKey={detailKey} onClose={closeDetail} /> : null}
     </section>
   );
 }

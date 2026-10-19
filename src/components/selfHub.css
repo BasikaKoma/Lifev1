@@ -488,6 +488,41 @@
   align-items: flex-start;
 }
 
+/* Name + value open the measurement detail; looks the same as the plain readout. */
+.self-body-measure__open {
+  display: flex;
+  flex-direction: column;
+  align-items: inherit;
+  gap: 0.04rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.self-body-measure__open:hover .self-body-measure__label,
+.self-body-measure__open:focus-visible .self-body-measure__label {
+  opacity: 1;
+  text-decoration: underline;
+  text-decoration-color: rgba(110, 231, 183, 0.5);
+  text-underline-offset: 2px;
+}
+
+.self-body-measure__open:hover .self-body-measure__value,
+.self-body-measure__open:focus-visible .self-body-measure__value {
+  color: #fff;
+}
+
+.self-body-measure__open:focus-visible {
+  outline: 1px solid rgba(110, 231, 183, 0.7);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
 .self-body-measure__label {
   font-size: clamp(0.5rem, 1.5vw, 0.625rem);
   font-weight: 700;
@@ -653,6 +688,18 @@
 .self-float-metric--mr { top: 36%; right: -2%; }
 .self-float-metric--bl { bottom: 20%; left: 0; }
 .self-float-metric--br { bottom: 18%; right: -1%; }
+
+/* Cards that open their metric's day-by-day detail. */
+.self-float-metric--interactive {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.self-float-metric--interactive:focus-visible {
+  outline: 1px solid rgba(110, 231, 183, 0.7);
+  outline-offset: 3px;
+  border-radius: 14px;
+}
 
 .self-float-metric--orb {
   max-width: none;

@@ -12,9 +12,10 @@ function formatCm(value) {
 
 /**
  * One circumference beside the body: today's value when logged, otherwise an empty
- * "+ σήμερα" prompt that opens the inline log form.
+ * "+ σήμερα" prompt that opens the inline log form. Tapping the name or value opens the
+ * metric detail with today's reading and the previous days.
  */
-function BodyMeasureLabel({ kind, side, value, labelRef, handlers }) {
+function BodyMeasureLabel({ kind, side, value, labelRef, handlers, onOpenDetail }) {
   const spec = circumferenceSpec(kind);
   // Bridges the gap until the saved reading comes back through the health refresh.
   const [saved, setSaved] = useState(null);
@@ -29,13 +30,24 @@ function BodyMeasureLabel({ kind, side, value, labelRef, handlers }) {
       data-measure-key={kind}
       {...handlers}
     >
-      <span className="self-body-measure__label">{spec.label}</span>
-      {shown ? (
-        <span className="self-body-measure__value">
-          {shown}
-          <span className="self-body-measure__unit">cm</span>
-        </span>
-      ) : adding ? (
+      <button
+        type="button"
+        className="self-body-measure__open"
+        onClick={() => onOpenDetail?.(kind)}
+        aria-haspopup="dialog"
+        aria-label={shown
+          ? `${spec.label} ${shown} cm, λεπτομέρειες και ιστορικό`
+          : `${spec.label}, ιστορικό μετρήσεων`}
+      >
+        <span className="self-body-measure__label">{spec.label}</span>
+        {shown ? (
+          <span className="self-body-measure__value">
+            {shown}
+            <span className="self-body-measure__unit">cm</span>
+          </span>
+        ) : null}
+      </button>
+      {shown ? null : adding ? (
         <WaistLogForm
           kind={kind}
           compact
@@ -71,9 +83,9 @@ function BodyMeasureLabel({ kind, side, value, labelRef, handlers }) {
 /**
  * Waist, upper-arm and thigh circumferences placed beside the figure at the spot they
  * measure. OrganLinkProjector positions each label every frame and draws its tick line.
- * @param {{ runtime: object, metric: import('../../../utils/selfHubSchema').SelfHubMetric }} props
+ * @param {{ runtime: object, metric: import('../../../utils/selfHubSchema').SelfHubMetric, onOpenDetail?: (key: string) => void }} props
  */
-export function SelfBodyMeasures({ runtime, metric }) {
+export function SelfBodyMeasures({ runtime, metric, onOpenDetail }) {
   const timer = useRef(0);
   useEffect(() => () => window.clearTimeout(timer.current), []);
 
@@ -112,6 +124,7 @@ export function SelfBodyMeasures({ runtime, metric }) {
       value={metric?.[`${item.key}Cm`]}
       labelRef={labelRefs[item.key]}
       handlers={handlers[item.key]}
+      onOpenDetail={onOpenDetail}
     />
   ));
 }

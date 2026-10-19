@@ -67,6 +67,24 @@ function formatKcal(value) {
   return new Intl.NumberFormat('en-US').format(value);
 }
 
+/** Makes a card open its metric detail on click, Enter or Space. */
+function detailProps(onOpen) {
+  if (!onOpen) return {};
+  return {
+    role: 'button',
+    tabIndex: 0,
+    'aria-haspopup': 'dialog',
+    onClick: onOpen,
+    onKeyDown: (event) => {
+      if (event.target !== event.currentTarget) return;
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        onOpen();
+      }
+    },
+  };
+}
+
 function WeightCalories({ caloriesIn, caloriesOut }) {
   if (caloriesIn == null && caloriesOut == null) return null;
 
@@ -93,8 +111,8 @@ function WeightCalories({ caloriesIn, caloriesOut }) {
   );
 }
 
-/** @param {{ metric: import('../../../utils/selfHubSchema').SelfHubMetric, position: string, rootProps?: object }} props */
-function DetailedHeartRateCard({ metric, position, rootProps }) {
+/** @param {{ metric: import('../../../utils/selfHubSchema').SelfHubMetric, position: string, rootProps?: object, onOpen?: () => void }} props */
+function DetailedHeartRateCard({ metric, position, rootProps, onOpen }) {
   const hasValue = metric.value != null && metric.value !== '—';
   const chart =
     metric.chart?.type === 'heartRateTrend'
@@ -104,7 +122,8 @@ function DetailedHeartRateCard({ metric, position, rootProps }) {
   return (
     <div
       {...rootProps}
-      className={`self-float-metric self-float-metric--detailed self-float-metric--detailed-hr self-float-metric--${position}`}
+      {...detailProps(onOpen)}
+      className={`self-float-metric self-float-metric--detailed self-float-metric--detailed-hr self-float-metric--${position}${onOpen ? ' self-float-metric--interactive' : ''}`}
     >
       <div className="self-float-metric__detailed-card self-float-metric__detailed-card--hr">
         <header className="self-float-metric__detailed-head">
@@ -138,8 +157,8 @@ function DetailedHeartRateCard({ metric, position, rootProps }) {
   );
 }
 
-/** @param {{ metric: import('../../../utils/selfHubSchema').SelfHubMetric, position: string, rootProps?: object }} props */
-function DetailedCaloriesCard({ metric, position, rootProps }) {
+/** @param {{ metric: import('../../../utils/selfHubSchema').SelfHubMetric, position: string, rootProps?: object, onOpen?: () => void }} props */
+function DetailedCaloriesCard({ metric, position, rootProps, onOpen }) {
   const caloriesIn = metric.caloriesIn;
   const caloriesOut = metric.caloriesOut;
   const hasCalories = caloriesIn != null || caloriesOut != null;
@@ -156,7 +175,8 @@ function DetailedCaloriesCard({ metric, position, rootProps }) {
   return (
     <div
       {...rootProps}
-      className={`self-float-metric self-float-metric--detailed self-float-metric--detailed-calories self-float-metric--${position}`}
+      {...detailProps(onOpen)}
+      className={`self-float-metric self-float-metric--detailed self-float-metric--detailed-calories self-float-metric--${position}${onOpen ? ' self-float-metric--interactive' : ''}`}
     >
       <div className="self-float-metric__detailed-card self-float-metric__detailed-card--calories">
         <header className="self-float-metric__detailed-head">
@@ -220,7 +240,11 @@ function DetailedCaloriesCard({ metric, position, rootProps }) {
   );
 }
 
-/** @param {{ metric: import('../../../utils/selfHubSchema').SelfHubMetric, position: string, variant?: 'pill'|'orb', orbKind?: 'recovery'|'movement', desktopDetailed?: 'hr'|'calories', rootProps?: object }} props — rootProps: data attribute + hover handlers that link the card to its organ */
+/**
+ * @param {{ metric: import('../../../utils/selfHubSchema').SelfHubMetric, position: string, variant?: 'pill'|'orb', orbKind?: 'recovery'|'movement', desktopDetailed?: 'hr'|'calories', rootProps?: object, detailKey?: string, onOpenDetail?: (key: string) => void }} props
+ * rootProps: data attribute + hover handlers that link the card to its organ.
+ * detailKey: the metric detail a tap opens (the desktop calories card opens calories).
+ */
 export function SelfFloatingMetric({
   metric,
   position,
@@ -228,17 +252,22 @@ export function SelfFloatingMetric({
   orbKind,
   desktopDetailed,
   rootProps,
+  detailKey,
+  onOpenDetail,
 }) {
   const isDesktop = useIsDesktopHub();
   const hasValue = metric.value != null && metric.value !== '—';
   const iconName = METRIC_ICONS[metric.label] || 'aura';
+  const openDetail = (key) => (onOpenDetail && key ? () => onOpenDetail(key) : undefined);
+  const onOpen = openDetail(detailKey);
+  const interactive = onOpen ? ' self-float-metric--interactive' : '';
 
   if (isDesktop && desktopDetailed === 'hr') {
-    return <DetailedHeartRateCard metric={metric} position={position} rootProps={rootProps} />;
+    return <DetailedHeartRateCard metric={metric} position={position} rootProps={rootProps} onOpen={onOpen} />;
   }
 
   if (isDesktop && desktopDetailed === 'calories') {
-    return <DetailedCaloriesCard metric={metric} position={position} rootProps={rootProps} />;
+    return <DetailedCaloriesCard metric={metric} position={position} rootProps={rootProps} onOpen={openDetail('calories')} />;
   }
 
   if (variant === 'orb') {
@@ -249,9 +278,10 @@ export function SelfFloatingMetric({
     return (
       <div
         {...rootProps}
+        {...detailProps(onOpen)}
         className={`self-float-metric self-float-metric--orb self-float-metric--${position}${
           metric.label === 'Sleep' ? ' self-float-metric--sleep' : ''
-        }`}
+        }${interactive}`}
       >
         <div className="self-float-metric__orb">
           <svg className="self-float-metric__orb-ring" viewBox="0 0 100 100" aria-hidden>
@@ -308,7 +338,7 @@ export function SelfFloatingMetric({
   }
 
   return (
-    <div {...rootProps} className={`self-float-metric self-float-metric--${position}`}>
+    <div {...rootProps} {...detailProps(onOpen)} className={`self-float-metric self-float-metric--${position}${interactive}`}>
       <div className={`self-float-metric__pill${metric.label === 'Weight' ? ' self-float-metric__pill--weight' : ''}`}>
         <span className="self-float-metric__icon" aria-hidden>
           <SelfIcon name={iconName} />
