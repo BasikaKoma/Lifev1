@@ -282,6 +282,25 @@ export function NotificationSettings({ user, ouraConnected = false }) {
       <label className="settings-check">
         <input
           type="checkbox"
+          checked={settings.weightMissing}
+          disabled={optionsDisabled}
+          onChange={(e) => update({ weightMissing: e.target.checked })}
+        />
+        <span>Ζύγισμα, αν δεν υπάρχει μέτρηση βάρους μέχρι τις</span>
+      </label>
+      {settings.weightMissing && (
+        <input
+          type="time"
+          className="input notification-settings__select"
+          value={settings.weightMissingTime}
+          disabled={optionsDisabled}
+          onChange={(e) => e.target.value && update({ weightMissingTime: e.target.value })}
+        />
+      )}
+
+      <label className="settings-check">
+        <input
+          type="checkbox"
           checked={settings.heartRate}
           disabled={optionsDisabled}
           onChange={(e) => update({ heartRate: e.target.checked })}

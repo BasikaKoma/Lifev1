@@ -21,6 +21,9 @@ export const DEFAULT_PUSH_SETTINGS = {
   heartRateThreshold: 100,
   /** Morning mood 1–10: with the Oura sleep sync, or 07:00 (supabase/050_mood_checkins.sql). */
   moodCheckin: true,
+  /** No weight logged that day by this time → one push (supabase/052_weight_reminder.sql). */
+  weightMissing: true,
+  weightMissingTime: '11:00',
 };
 
 function normalizeTime(value, fallback) {
@@ -49,6 +52,8 @@ export function normalizePushSettings(raw) {
         ? Math.round(threshold)
         : DEFAULT_PUSH_SETTINGS.heartRateThreshold,
     moodCheckin: bool('moodCheckin'),
+    weightMissing: bool('weightMissing'),
+    weightMissingTime: normalizeTime(source.weightMissingTime, DEFAULT_PUSH_SETTINGS.weightMissingTime),
   };
 }
 

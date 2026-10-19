@@ -73,7 +73,7 @@ On a new PC, open **Settings** once and paste your OpenAI key for voice. Cloud s
 
 ## Push notifications
 
-Reminders for Path blocks, the end of a block timer, the day plan, routines and project rhythm, plus an alert when Oura heart-rate samples above your limit (default 100 bpm) arrive: a trigger on `oura_daily_metrics` queues the push and sends it right away. Oura webhooks (`oura-webhook`) re-read the last two days ~30 s after the ring syncs through the Oura app, so new samples land without polling. Each app writes the upcoming reminders (next 36 h) into `push_schedule`; a per-minute cron calls the `push-dispatch` Edge Function, which sends the due ones:
+Reminders for Path blocks, the end of a block timer, the day plan, routines and project rhythm, plus an alert when Oura heart-rate samples above your limit (default 100 bpm) arrive: a trigger on `oura_daily_metrics` queues the push and sends it right away. A per-minute check (`052_weight_reminder.sql`) sends one push on a day with no weight logged by your chosen time (default 11:00). Oura webhooks (`oura-webhook`) re-read the last two days ~30 s after the ring syncs through the Oura app, so new samples land without polling. Each app writes the upcoming reminders (next 36 h) into `push_schedule`; a per-minute cron calls the `push-dispatch` Edge Function, which sends the due ones:
 
 - **iPhone** — Web Push to the home-screen app (Safari → Share → Add to Home Screen, iOS 16.4+)
 - **Android app** — Firebase Cloud Messaging
@@ -84,7 +84,7 @@ Turn them on per device in **Settings → Ειδοποιήσεις**.
 
 ### Setup
 
-1. Run `supabase/047_push_notifications.sql`, `048_heart_rate_alerts.sql` and `049_oura_webhooks.sql`, in that order, in the Supabase SQL Editor.
+1. Run `supabase/047_push_notifications.sql`, `048_heart_rate_alerts.sql`, `049_oura_webhooks.sql` and `052_weight_reminder.sql`, in that order, in the Supabase SQL Editor.
 2. VAPID keys: `npm run push:vapid`. Put the public key in `.env` as `VITE_VAPID_PUBLIC_KEY`, and `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` in `supabase/functions/.env` (gitignored).
 3. Android: create a Firebase project, add an Android app with package `com.lifev1.app`, and save `google-services.json` to `android/app/`. The build turns Android push on when that file exists. Then in Firebase → Project settings → Service accounts, generate a private key and add its JSON (one line) as `FCM_SERVICE_ACCOUNT` in `supabase/functions/.env`.
 4. Upload the secrets and deploy:
