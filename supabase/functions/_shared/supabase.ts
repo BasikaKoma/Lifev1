@@ -16,17 +16,6 @@ export function getServiceClient(): SupabaseClient {
   });
 }
 
-function decodeJwtPayload(token: string): Record<string, unknown> | null {
-  try {
-    const part = token.split('.')[1];
-    if (!part) return null;
-    const json = atob(part.replace(/-/g, '+').replace(/_/g, '/'));
-    return JSON.parse(json);
-  } catch {
-    return null;
-  }
-}
-
 function getBearerToken(req: Request): string {
   const authHeader = req.headers.get('Authorization');
   if (!authHeader?.startsWith('Bearer ')) {
@@ -35,30 +24,29 @@ function getBearerToken(req: Request): string {
   return authHeader.slice('Bearer '.length).trim();
 }
 
+/** Verifies the user JWT with Supabase Auth, so a forged token fails even where verify_jwt is off. */
 export async function getUserFromRequest(req: Request): Promise<AuthUser> {
   const token = getBearerToken(req);
-  const payload = decodeJwtPayload(token);
-  const subject = typeof payload?.sub === 'string' ? payload.sub : null;
-  const role = payload?.role;
+  if (token.split('.').length !== 3) {
+    throw new Error('Invalid session');
+  }
 
-  if (!subject || role !== 'authenticated') {
+  const { data, error } = await getServiceClient().auth.getUser(token);
+  if (error || !data?.user?.id) {
     throw new Error('Invalid session');
   }
 
   return {
-    id: subject,
-    email: typeof payload?.email === 'string' ? payload.email : null,
+    id: data.user.id,
+    email: data.user.email ?? null,
   };
 }
 
-/** Authorize cron / admin callers (service role JWT or vault cron secret). */
+/** Authorize cron / admin callers (exact service role key or vault cron secret). */
 export async function assertServiceOrCronAuth(req: Request): Promise<void> {
   const token = getBearerToken(req);
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
   if (serviceKey && token === serviceKey) return;
-
-  const payload = decodeJwtPayload(token);
-  if (payload?.role === 'service_role') return;
 
   const cronSecret = Deno.env.get('OURA_CRON_SECRET') ?? '';
   if (cronSecret && token === cronSecret) return;

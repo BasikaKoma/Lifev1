@@ -1,3 +1,5 @@
+import { sanitizeReturnTo as sanitizeAppReturnTo } from './returnTo.ts';
+
 export const META_GRAPH_VERSION = 'v21.0';
 export const META_GRAPH_BASE = `https://graph.facebook.com/${META_GRAPH_VERSION}`;
 export const META_OAUTH_DIALOG = `https://www.facebook.com/${META_GRAPH_VERSION}/dialog/oauth`;
@@ -53,16 +55,7 @@ export function fallbackMetaRedirect(): string {
 }
 
 export function sanitizeReturnTo(value: unknown): string {
-  const fallback = fallbackMetaRedirect();
-  if (typeof value !== 'string' || !value.trim()) return fallback;
-  try {
-    const url = new URL(value);
-    if (url.protocol === 'lifev1:') return url.toString();
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') return fallback;
-    return url.toString();
-  } catch {
-    return fallback;
-  }
+  return sanitizeAppReturnTo(value, fallbackMetaRedirect());
 }
 
 export function withMetaResult(returnTo: string, result: 'connected' | 'error'): string {

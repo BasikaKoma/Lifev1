@@ -7,6 +7,42 @@ type BrainTool = {
   parameters?: Record<string, unknown>;
 };
 
+// Override with the BRAIN_ALLOWED_MODELS secret (comma-separated).
+const DEFAULT_ALLOWED_MODELS = ['gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-5.6-luna'];
+const MAX_PROMPT_CHARS = 500_000;
+const MAX_ATTACHMENTS = 6;
+const MAX_ATTACHMENT_TEXT_CHARS = 200_000;
+const MAX_IMAGE_DATA_URL_CHARS = 10_000_000;
+const MAX_TOOLS = 64;
+const MAX_OUTPUT_TOKENS = 32_000;
+
+function envList(name: string): string[] {
+  return (Deno.env.get(name) ?? '').split(',').map((item) => item.trim()).filter(Boolean);
+}
+
+function allowedModels(): string[] {
+  const configured = envList('BRAIN_ALLOWED_MODELS');
+  return configured.length ? configured : DEFAULT_ALLOWED_MODELS;
+}
+
+/** Empty when BRAIN_ALLOWED_USER_IDS is unset, which lets every signed-in user in. */
+function allowedUserIds(): string[] {
+  return envList('BRAIN_ALLOWED_USER_IDS');
+}
+
+function requestTooLarge(body: BrainRequest): string | null {
+  const promptChars = String(body.instructions || '').length + String(body.input || '').length;
+  if (promptChars > MAX_PROMPT_CHARS) return 'Request is too large';
+  const attachments = body.attachments || [];
+  if (attachments.length > MAX_ATTACHMENTS) return `At most ${MAX_ATTACHMENTS} attachments`;
+  for (const file of attachments) {
+    if (String(file?.text || '').length > MAX_ATTACHMENT_TEXT_CHARS) return 'Attachment is too large';
+    if (String(file?.dataUrl || '').length > MAX_IMAGE_DATA_URL_CHARS) return 'Image is too large';
+  }
+  if ((body.tools || []).length > MAX_TOOLS) return 'Too many tools';
+  return null;
+}
+
 type BrainRequest = {
   model?: string;
   instructions?: string;
@@ -78,7 +114,11 @@ Deno.serve(async (req) => {
   }
 
   try {
-    await getUserFromRequest(req);
+    const user = await getUserFromRequest(req);
+    const userIds = allowedUserIds();
+    if (userIds.length && !userIds.includes(user.id)) {
+      return errorResponse('Brain is not enabled for this account', 403);
+    }
 
     const apiKey = Deno.env.get('OPENAI_API_KEY');
     if (!apiKey) {
@@ -90,10 +130,18 @@ Deno.serve(async (req) => {
     if (!model) {
       return errorResponse('Missing model', 400);
     }
+    if (!allowedModels().includes(model)) {
+      return errorResponse(`Model ${model.slice(0, 60)} is not allowed`, 400);
+    }
+    const tooLarge = requestTooLarge(body);
+    if (tooLarge) {
+      return errorResponse(tooLarge, 413);
+    }
 
     const payload: Record<string, unknown> = {
       model,
       store: false,
+      max_output_tokens: MAX_OUTPUT_TOKENS,
       instructions: body.instructions || undefined,
       input: buildInput(body.input, body.attachments),
     };

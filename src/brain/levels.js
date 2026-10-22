@@ -51,10 +51,15 @@ export const ASSISTANT_ACTION_TYPES = [
 ];
 
 export const OUTBOUND_ACTION_TYPES = [
-  'send_mail',
   'record_payment',
   'delete_open_item',
   'commit_customer',
+];
+
+// send_mail only saves a draft in the mailbox (the user sends it from Zoho), but it still waits for yes.
+export const CONFIRM_ACTION_TYPES = [
+  'send_mail',
+  ...OUTBOUND_ACTION_TYPES,
 ];
 
 export const COMPUTER_ACTION_TYPES = [
@@ -76,7 +81,7 @@ export function holdActions(actions, question) {
   const hold = [];
   const run = [];
   for (const action of list) {
-    const outbound = OUTBOUND_ACTION_TYPES.includes(action.type);
+    const outbound = CONFIRM_ACTION_TYPES.includes(action.type);
     const computer = COMPUTER_ACTION_TYPES.includes(action.type);
     const project = !ASSISTANT_ACTION_TYPES.includes(action.type);
     if (outbound || (computer && !computerAsked) || (project && holdProjectBatch)) hold.push(action);
@@ -87,7 +92,7 @@ export function holdActions(actions, question) {
 
 export function actionLabel(action) {
   const labels = {
-    send_mail: 'Αποστολή mail',
+    send_mail: 'Πρόχειρο mail',
     record_payment: 'Καταγραφή πληρωμής',
     delete_open_item: 'Διαγραφή εκκρεμότητας',
     commit_customer: 'Δέσμευση σε πελάτη',
@@ -115,10 +120,10 @@ Human domains: day, body, time, communication, people, money, work, obligations,
 Business domains: cash, customers, sales, prices, operations, people, suppliers, documents, outward image, weekly risk.
 SNAPSHOT.assistant is the live pack: open items, mail summaries, ERP snapshots, recent calls, payment records.
 JOBS YOU CAN ACTUALLY DO:
-- Mail: each project has its own mailbox. call list_mail to read summaries. projectId is that project's UUID or "" for every mailbox. Messages include project_id. Draft a reply in send_mail.body using MEMORY style and writing_example, and set projectTitle to the project whose mailbox should send it. You never send it. The app asks for yes. You never see the mailbox token.
+- Mail: each project has its own mailbox. call list_mail to read summaries. projectId is that project's UUID or "" for every mailbox. Messages include project_id. Draft a reply in send_mail.body using MEMORY style and writing_example, and set projectTitle to the project whose mailbox holds the thread. send_mail only saves a draft in that Zoho mailbox; nothing is sent. The user reviews and sends it from Zoho. A reply (target = message id) goes to the original sender in the same thread. The app asks for yes. You never see the mailbox token.
 - Open items: create_open_item and complete_open_item. delete_open_item always waits for yes. dueOn is YYYY-MM-DD or "". projectTitle is "human" or "business". items[0] is mail, call, day, or manual. target is a source id when you have one. The morning briefing reads this list.
 - Computer: only when SNAPSHOT.assistant.computer is "act" (desktop app). Emit computer_open, computer_write, or computer_fill. rootId comes from LOCAL FILES. relativePath stays inside that folder. computer_fill items are "find => replace". On web and mobile computer is "read": do not emit those actions. Say the computer works only in the desktop app, and here you can only read.
-OUTBOUND ALWAYS WAITS FOR YES: send_mail, record_payment, delete_open_item, commit_customer. record_payment only stores the decision; it does not move money. commit_customer stores the promise as an open item; it does not message the customer. If they also need a mail, add a separate send_mail.
+ALWAYS WAITS FOR YES: send_mail (a draft), record_payment, delete_open_item, commit_customer. Never say a mail was sent. record_payment only stores the decision; it does not move money. commit_customer stores the promise as an open item; it does not message the customer. If they also need a mail, add a separate send_mail.
 Unused action strings (dueOn, target, rootId, relativePath, amount, stageTitle, projectTitle, body) must be "".
 Never print API keys, OAuth tokens, or Authorization headers.
 ${briefing}`;

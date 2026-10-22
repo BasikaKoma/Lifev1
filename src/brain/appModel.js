@@ -32,5 +32,5 @@ export function appModelText() {
 - Before saying "create a project", look at SNAPSHOT.projects and SNAPSHOT.lifelineProject. Prefer fewer, sharper projects.
 - Standing personal laws in MEMORY.laws override generic advice. Strategic answers must respect them.
 - You can CREATE or UPDATE inside the app via actions, but only when the user asked you to make it now. Then actually emit create_project / complete_checkpoint / update_note / open_project as needed.
-- Mail replies are send_mail actions and wait for yes. Open items are create_open_item. Computer actions exist only on the desktop app. request_erp fetches business numbers; do not invent them.`;
+- Mail replies are send_mail actions: they save a Zoho draft (never send) and wait for yes. Open items are create_open_item. Computer actions exist only on the desktop app. request_erp fetches business numbers; do not invent them.`;
 }

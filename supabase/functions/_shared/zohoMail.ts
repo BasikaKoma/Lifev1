@@ -297,13 +297,42 @@ export async function syncZohoMailbox(
   return { count: rows.length };
 }
 
-export async function sendZohoMessage(
+/** Reads one header from a raw MIME message, joining folded lines. */
+function mimeHeader(raw: string, name: string): string {
+  const head = raw.split(/\r?\n\r?\n/, 1)[0] || '';
+  const unfolded = head.replace(/\r?\n[ \t]+/g, ' ');
+  const prefix = `${name.toLowerCase()}:`;
+  const line = unfolded.split(/\r?\n/).find((item) => item.toLowerCase().startsWith(prefix));
+  return line ? line.slice(prefix.length).trim() : '';
+}
+
+/** Message-ID and References of a received mail, so a draft lands in the same thread. */
+async function zohoThreadHeaders(session: ZohoSession, messageId: string) {
+  const payload = await zohoFetch(
+    session.apiBase!,
+    session.token,
+    `accounts/${encodeURIComponent(session.accountId!)}/messages/${encodeURIComponent(messageId)}/originalmessage`,
+  );
+  const data = payload?.data as { content?: unknown } | undefined;
+  const raw = typeof data?.content === 'string' ? data.content : '';
+  const inReplyTo = mimeHeader(raw, 'Message-ID');
+  if (!inReplyTo) throw new Error('Zoho message has no Message-ID');
+  const refHeader = [mimeHeader(raw, 'References'), inReplyTo].filter(Boolean).join(' ').slice(0, 4000);
+  return { inReplyTo, refHeader };
+}
+
+/**
+ * Saves a draft in the Zoho mailbox. Nothing is sent: mode "draft" is required by the API,
+ * and the user sends it from Zoho. A reply draft carries the thread headers of the original.
+ */
+export async function createZohoDraft(
   session: ZohoSession,
-  { to, subject, body, messageId }: { to: string; subject: string; body: string; messageId?: string | null },
+  { to, subject, body, replyToMessageId }: { to: string; subject: string; body: string; replyToMessageId?: string | null },
 ) {
   if (!session.apiBase || !session.accountId) throw new Error('Zoho Mail account is incomplete');
   if (!session.email) throw new Error('Zoho sender address is missing');
   const payload: Record<string, string> = {
+    mode: 'draft',
     fromAddress: session.email,
     toAddress: to,
     subject,
@@ -312,18 +341,8 @@ export async function sendZohoMessage(
     encoding: 'UTF-8',
     askReceipt: 'no',
   };
-  if (messageId) {
-    payload.action = 'reply';
-    return zohoFetch(
-      session.apiBase,
-      session.token,
-      `accounts/${encodeURIComponent(session.accountId)}/messages/${encodeURIComponent(messageId)}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      },
-    );
+  if (replyToMessageId) {
+    Object.assign(payload, await zohoThreadHeaders(session, replyToMessageId));
   }
   return zohoFetch(
     session.apiBase,

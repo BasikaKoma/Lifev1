@@ -1,6 +1,6 @@
 import {
+  createZohoDraft,
   refreshZohoToken,
-  sendZohoMessage,
   syncZohoMailbox,
 } from './zohoMail.ts';
 
@@ -8,9 +8,9 @@ const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GMAIL_API = 'https://gmail.googleapis.com/gmail/v1/users/me';
 
+// Read only: Lifev1 never sends mail, and Gmail drafts are not supported.
 export const MAIL_SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
-  'https://www.googleapis.com/auth/gmail.send',
 ].join(' ');
 
 const URGENT_RE = /επείγ|urgent|asap|deadline|σήμερα|ληγ/i;
@@ -288,21 +288,6 @@ export async function accessTokenForUser(
   return sessionFromRow(admin, data);
 }
 
-function encodeHeader(value: string): string {
-  if (/^[\x00-\x7F]*$/.test(value)) return value;
-  const bytes = new TextEncoder().encode(value);
-  let binary = '';
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return `=?UTF-8?B?${btoa(binary)}?=`;
-}
-
-function encodeRaw(message: string): string {
-  const bytes = new TextEncoder().encode(message);
-  let binary = '';
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
 export function parseEmailAddress(value: string): string {
   const match = String(value || '').match(/<([^>]+)>/);
   const email = (match ? match[1] : value).trim();
@@ -310,37 +295,16 @@ export function parseEmailAddress(value: string): string {
   return email;
 }
 
-export async function sendMailMessage(
+/** Saves a draft in the mailbox. There is no send path: the user sends drafts from the mail app. */
+export async function createMailDraft(
   session: MailSession,
-  { to, subject, body, threadId, inReplyTo, messageId }: {
+  { to, subject, body, replyToMessageId }: {
     to: string;
     subject: string;
     body: string;
-    threadId?: string | null;
-    inReplyTo?: string | null;
-    messageId?: string | null;
+    replyToMessageId?: string | null;
   },
 ) {
-  if (session.provider === 'zoho') {
-    return sendZohoMessage(session, { to, subject, body, messageId });
-  }
-  const token = session.token;
-  const headers = [
-    `To: ${to}`,
-    `Subject: ${encodeHeader(subject)}`,
-    'MIME-Version: 1.0',
-    'Content-Type: text/plain; charset=utf-8',
-  ];
-  if (inReplyTo) {
-    headers.push(`In-Reply-To: ${inReplyTo}`);
-    headers.push(`References: ${inReplyTo}`);
-  }
-  const raw = encodeRaw(`${headers.join('\r\n')}\r\n\r\n${body}`);
-  const payload: { raw: string; threadId?: string } = { raw };
-  if (threadId) payload.threadId = threadId;
-  return gmailFetch(token, 'messages/send', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+  if (session.provider !== 'zoho') throw new Error('Drafts work only with Zoho Mail');
+  return createZohoDraft(session, { to, subject, body, replyToMessageId });
 }

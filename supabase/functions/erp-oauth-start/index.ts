@@ -1,19 +1,9 @@
 import { handleCors, jsonResponse, errorResponse } from '../_shared/cors.ts';
 import { getServiceClient, getUserFromRequest } from '../_shared/supabase.ts';
 import { buildSymphonAuthorizeUrl, createCodeChallenge, createCodeVerifier } from '../_shared/symphon.ts';
+import { sanitizeReturnTo } from '../_shared/returnTo.ts';
 
-function sanitizeReturnTo(value: unknown): string {
-  const fallback = Deno.env.get('SYMPHON_SUCCESS_REDIRECT') ?? 'https://lifev1-app.pages.dev/?erp=connected';
-  if (typeof value !== 'string' || !value.trim()) return fallback;
-  try {
-    const url = new URL(value);
-    if (url.protocol === 'lifev1:') return url.toString();
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') return fallback;
-    return url.toString();
-  } catch {
-    return fallback;
-  }
-}
+const FALLBACK_RETURN = Deno.env.get('SYMPHON_SUCCESS_REDIRECT') ?? 'https://lifev1-app.pages.dev/?erp=connected';
 
 Deno.serve(async (req) => {
   const cors = handleCors(req);
@@ -23,7 +13,7 @@ Deno.serve(async (req) => {
   try {
     const user = await getUserFromRequest(req);
     const body = await req.json().catch(() => ({}));
-    const returnTo = sanitizeReturnTo(body?.return_to);
+    const returnTo = sanitizeReturnTo(body?.return_to, FALLBACK_RETURN);
     const state = crypto.randomUUID();
     const codeVerifier = createCodeVerifier();
     const codeChallenge = await createCodeChallenge(codeVerifier);

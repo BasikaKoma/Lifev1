@@ -128,7 +128,7 @@ export async function applyAssistantActions(actions = []) {
           body: action.body,
           projectTitle: action.projectTitle || '',
         });
-        parts.push(`έστειλα το mail «${action.title}»`);
+        parts.push(`έφτιαξα πρόχειρο «${action.title}» στο Zoho. Δεν στάλθηκε, το στέλνεις εσύ από εκεί`);
         continue;
       }
       if (action.type === 'commit_customer') {
