@@ -152,7 +152,8 @@ html:has(.app--projects) body {
 .app--path .main,
 .app--devices .main,
 .app--brand .main,
-.app--nutrition .main {
+.app--nutrition .main,
+.app--agents .main {
   max-width: none;
   width: 100%;
   margin: 0;
@@ -161,7 +162,8 @@ html:has(.app--projects) body {
 
 .app--path .main,
 .app--brand .main,
-.app--nutrition .main {
+.app--nutrition .main,
+.app--agents .main {
   padding: 0;
   max-width: none;
   width: 100%;
@@ -174,7 +176,8 @@ html:has(.app--projects) body {
 
 .app--path .app__content,
 .app--brand .app__content,
-.app--nutrition .app__content {
+.app--nutrition .app__content,
+.app--agents .app__content {
   min-width: 0;
 }
 

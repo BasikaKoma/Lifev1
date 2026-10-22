@@ -38,6 +38,7 @@ import { CamerasConnectModal } from './components/CamerasConnectModal';
 import { CamerasView } from './components/CamerasView';
 import { PersonalBrandView } from './components/brand/PersonalBrandView';
 import { NutritionView } from './components/nutrition/NutritionView';
+import { AgentsView } from './components/agents/AgentsView';
 import { PathView } from './components/path/PathView';
 import { loadPathBundle, readPathBundleLocal, subscribePathBundle } from './lib/path/store';
 import { normalizeActiveView, pathTabFromPathname } from './utils/appNavigation';
@@ -424,7 +425,7 @@ function MainApp({ user, onSignOut }) {
   const handleNavigate = (view) => {
     setFocusMode(false);
     const keepsLifelineProject =
-      view === 'self' || view === 'path' || view === 'brand' || view === 'settings' || view === 'devices';
+      view === 'self' || view === 'path' || view === 'agents' || view === 'brand' || view === 'settings' || view === 'devices';
     if (isLifeline && !keepsLifelineProject) {
       const regular = filterRegularProjects(projectList);
       const target = regular.find((p) => p.id === projectId && !p.isLifeline) || regular[0];
@@ -930,6 +931,8 @@ function MainApp({ user, onSignOut }) {
         );
       case 'nutrition':
         return <NutritionView />;
+      case 'agents':
+        return <AgentsView user={user} />;
       case 'devices':
         return (
           <CamerasView
@@ -978,7 +981,7 @@ function MainApp({ user, onSignOut }) {
   };
 
   return (
-    <div className={`app ${focusMode ? 'app--focus' : ''} ${selectedStage ? 'app--detail' : ''} ${activeView === 'projects' && !selectedStage ? 'app--projects' : ''} ${activeView === 'self' ? 'app--self' : ''} ${activeView === 'path' ? 'app--path' : ''} ${activeView === 'brand' ? 'app--brand' : ''} ${activeView === 'nutrition' ? 'app--nutrition' : ''} ${activeView === 'settings' ? 'app--settings' : ''} ${activeView === 'devices' ? 'app--devices' : ''} ${canvasFullscreen ? 'app--canvas-fullscreen' : ''} ${sidebarCollapsed ? 'app--sidebar-collapsed' : ''} ${platform.isMobile ? 'app--mobile' : ''}`}>
+    <div className={`app ${focusMode ? 'app--focus' : ''} ${selectedStage ? 'app--detail' : ''} ${activeView === 'projects' && !selectedStage ? 'app--projects' : ''} ${activeView === 'self' ? 'app--self' : ''} ${activeView === 'path' ? 'app--path' : ''} ${activeView === 'brand' ? 'app--brand' : ''} ${activeView === 'nutrition' ? 'app--nutrition' : ''} ${activeView === 'agents' ? 'app--agents' : ''} ${activeView === 'settings' ? 'app--settings' : ''} ${activeView === 'devices' ? 'app--devices' : ''} ${canvasFullscreen ? 'app--canvas-fullscreen' : ''} ${sidebarCollapsed ? 'app--sidebar-collapsed' : ''} ${platform.isMobile ? 'app--mobile' : ''}`}>
       {!canvasFullscreen && !platform.isMobile && (
         <Sidebar
           activeView={activeView}

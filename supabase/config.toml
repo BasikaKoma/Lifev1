@@ -22,6 +22,9 @@ verify_jwt = false
 [functions.push-dispatch]
 verify_jwt = false
 
+[functions.mail-agent]
+verify_jwt = false
+
 [functions.oura-webhook]
 verify_jwt = false
 

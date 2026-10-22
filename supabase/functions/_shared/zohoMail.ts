@@ -133,6 +133,11 @@ export async function refreshZohoToken(accountsHost: string, refreshToken: strin
   }));
 }
 
+/** Zoho ids pass 2^53, so a bare integer of 16+ digits is read as text before JSON.parse. */
+export function parseZohoJson(text: string) {
+  return JSON.parse(text.replace(/([:[,]\s*)(-?\d{16,})(?=\s*[,}\]])/g, '$1"$2"'));
+}
+
 async function zohoFetch(apiBase: string, token: string, path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers || {});
   headers.set('Authorization', `Zoho-oauthtoken ${token}`);
@@ -144,7 +149,7 @@ async function zohoFetch(apiBase: string, token: string, path: string, init: Req
   const text = await res.text();
   let body: { status?: { code?: number; description?: string }; error?: string; data?: unknown } | null = null;
   try {
-    body = text ? JSON.parse(text) : null;
+    body = text ? parseZohoJson(text) : null;
   } catch {
     body = null;
   }
@@ -220,81 +225,170 @@ function formatFrom(message: Record<string, unknown>): string {
   return (email || name).slice(0, 300);
 }
 
-async function inboxFolderId(apiBase: string, token: string, accountId: string): Promise<string | null> {
+type ZohoFolder = { id: string; kind: 'inbox' | 'archive' };
+type FolderCursor = { receivedTime?: string };
+
+const PAGE_SIZE = 50;
+const MAX_PAGES = 4;
+// With no cursor yet, a folder is read back this far.
+export const FIRST_SYNC_DAYS = 3;
+
+async function syncFolders(apiBase: string, token: string, accountId: string): Promise<ZohoFolder[]> {
   const payload = await zohoFetch(apiBase, token, `accounts/${encodeURIComponent(accountId)}/folders`);
-  const folders = asList(payload?.data);
-  const inbox = folders.find((folder) => {
+  const folders: ZohoFolder[] = [];
+  for (const folder of asList(payload?.data)) {
+    if (folder.folderId == null) continue;
     const type = String(folder.folderType || '').toLowerCase();
     const name = String(folder.folderName || '').toLowerCase();
-    return type === 'inbox' || name === 'inbox';
-  });
-  return inbox?.folderId != null ? String(inbox.folderId) : null;
+    const kind = type === 'inbox' || name === 'inbox'
+      ? 'inbox'
+      : type === 'archive' || name === 'archive'
+        ? 'archive'
+        : null;
+    if (kind) folders.push({ id: String(folder.folderId), kind });
+  }
+  return folders;
 }
 
+function addressList(value: unknown): string {
+  return decodeBasic(String(value || '')).replace(/\s+/g, ' ').trim().slice(0, 1000);
+}
+
+/**
+ * Inbox + Archive from each folder's cursor (newest receivedTime already seen), paging back
+ * until it reaches that point. The first page is always written so read/unread stays current.
+ */
 export async function syncZohoMailbox(
   admin: { from: (table: string) => any },
   userId: string,
   session: ZohoSession,
 ) {
   if (!session.apiBase || !session.accountId) throw new Error('Zoho Mail account is incomplete');
-  let folderId: string | null = null;
-  try {
-    folderId = await inboxFolderId(session.apiBase, session.token, session.accountId);
-  } catch {
-    folderId = null;
-  }
-  const params = new URLSearchParams({
-    limit: '20',
-    start: '1',
-    status: 'all',
-    includeto: 'true',
-    sortBy: 'date',
-    sortorder: 'false',
-  });
-  if (folderId) params.set('folderId', folderId);
-  const payload = await zohoFetch(
-    session.apiBase,
-    session.token,
-    `accounts/${encodeURIComponent(session.accountId)}/messages/view?${params.toString()}`,
-  );
-  const messages = asList(payload?.data);
-  const rows = messages
-    .filter((message) => message.messageId != null)
-    .map((message) => {
-      const subject = String(message.subject || '').slice(0, 300);
-      const snippet = cleanSnippet(message.summary);
-      const unread = isUnread(message.status);
-      const urgent = unread && (isImportant(message) || URGENT_RE.test(`${subject} ${snippet}`));
-      const connectionKey = session.connectionKey || (session.projectId ? session.projectId : 'account');
-      return {
-        user_id: userId,
-        project_id: session.projectId || null,
-        connection_key: connectionKey,
-        gmail_id: String(message.messageId),
-        thread_id: message.threadId != null ? String(message.threadId) : null,
-        message_id_header: null,
-        from_addr: formatFrom(message),
-        subject,
-        snippet,
-        received_at: receivedAt(message.receivedTime),
-        unread,
-        urgent,
-        synced_at: new Date().toISOString(),
-      };
-    });
-  if (rows.length) {
-    const { error } = await admin.from('mail_messages').upsert(rows, { onConflict: 'user_id,connection_key,gmail_id' });
-    if (error) throw error;
-  }
+  const apiBase = session.apiBase;
+  const accountId = session.accountId;
   const connectionKey = session.connectionKey || (session.projectId ? session.projectId : 'account');
+
+  let connectionQuery = admin.from('mail_connections').select('sync_cursor').eq('user_id', userId);
+  connectionQuery = session.connectionId
+    ? connectionQuery.eq('id', session.connectionId)
+    : connectionQuery.eq('connection_key', connectionKey);
+  const { data: connection, error: cursorError } = await connectionQuery.maybeSingle();
+  if (cursorError) throw cursorError;
+  const cursor: Record<string, FolderCursor> = connection?.sync_cursor && typeof connection.sync_cursor === 'object'
+    ? { ...connection.sync_cursor }
+    : {};
+
+  const folders = await syncFolders(apiBase, session.token, accountId);
+  if (!folders.some((folder) => folder.kind === 'inbox')) throw new Error('Zoho Inbox folder was not found');
+
+  let count = 0;
+  let newCount = 0;
+  for (const folder of folders) {
+    const since = Number(cursor[folder.id]?.receivedTime) || Date.now() - FIRST_SYNC_DAYS * 86400000;
+    let newest = since;
+    const rows = [];
+    for (let page = 0; page < MAX_PAGES; page += 1) {
+      const params = new URLSearchParams({
+        folderId: folder.id,
+        start: String(1 + page * PAGE_SIZE),
+        limit: String(PAGE_SIZE),
+        status: 'all',
+        includeto: 'true',
+        sortBy: 'date',
+        sortorder: 'false',
+      });
+      const payload = await zohoFetch(
+        apiBase,
+        session.token,
+        `accounts/${encodeURIComponent(accountId)}/messages/view?${params.toString()}`,
+      );
+      const messages = asList(payload?.data).filter((message) => message.messageId != null);
+      let reachedCursor = false;
+      for (const message of messages) {
+        const time = Number(message.receivedTime);
+        const isNew = Number.isFinite(time) && time > since;
+        if (!isNew) reachedCursor = true;
+        if (!isNew && page > 0) break;
+        if (isNew) {
+          newCount += 1;
+          newest = Math.max(newest, time);
+        }
+        const subject = String(message.subject || '').slice(0, 300);
+        const snippet = cleanSnippet(message.summary);
+        const unread = isUnread(message.status);
+        rows.push({
+          user_id: userId,
+          project_id: session.projectId || null,
+          connection_key: connectionKey,
+          gmail_id: String(message.messageId),
+          thread_id: message.threadId != null ? String(message.threadId) : null,
+          message_id_header: null,
+          from_addr: formatFrom(message),
+          to_addr: addressList(message.toAddress),
+          cc_addr: addressList(message.ccAddress),
+          folder_id: folder.id,
+          folder: folder.kind,
+          has_attachment: String(message.hasAttachment ?? '') === '1' || message.hasAttachment === true,
+          subject,
+          snippet,
+          received_at: receivedAt(message.receivedTime),
+          unread,
+          urgent: unread && (isImportant(message) || URGENT_RE.test(`${subject} ${snippet}`)),
+          synced_at: new Date().toISOString(),
+        });
+      }
+      if (reachedCursor || messages.length < PAGE_SIZE) break;
+    }
+    if (rows.length) {
+      const { error } = await admin.from('mail_messages').upsert(rows, { onConflict: 'user_id,connection_key,gmail_id' });
+      if (error) throw error;
+      count += rows.length;
+    }
+    cursor[folder.id] = { receivedTime: String(newest) };
+  }
+
   let touch = admin.from('mail_connections').update({
+    sync_cursor: cursor,
     last_synced_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   }).eq('user_id', userId);
   touch = session.connectionId ? touch.eq('id', session.connectionId) : touch.eq('connection_key', connectionKey);
   const { error: touchError } = await touch;
   if (touchError) throw touchError;
-  return { count: rows.length };
+  return { count, newCount };
+}
+
+function fromCodePoint(code: number): string {
+  return Number.isInteger(code) && code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : ' ';
+}
+
+function htmlToText(html: string): string {
+  return decodeBasic(
+    html
+      .replace(/<(style|script|head)[^>]*>[\s\S]*?<\/\1>/gi, ' ')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/(p|div|li|tr|h[1-6]|blockquote)>/gi, '\n')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&#(\d+);/g, (_, code) => fromCodePoint(Number(code)))
+      .replace(/&#x([0-9a-f]+);/gi, (_, code) => fromCodePoint(parseInt(code, 16))),
+  )
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\s*\n\s*/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/** Plain text of one message (its own content, without quoted earlier mail). */
+export async function fetchZohoMessageText(session: ZohoSession, folderId: string, messageId: string, maxChars = 8000) {
+  if (!session.apiBase || !session.accountId) throw new Error('Zoho Mail account is incomplete');
+  const payload = await zohoFetch(
+    session.apiBase,
+    session.token,
+    `accounts/${encodeURIComponent(session.accountId)}/folders/${encodeURIComponent(folderId)}/messages/${encodeURIComponent(messageId)}/content`,
+  );
+  const data = payload?.data as { content?: unknown } | undefined;
+  return htmlToText(typeof data?.content === 'string' ? data.content : '').slice(0, maxChars);
 }
 
 /** Reads one header from a raw MIME message, joining folded lines. */
