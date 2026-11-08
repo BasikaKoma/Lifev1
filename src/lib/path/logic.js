@@ -397,6 +397,17 @@ export function minutesToClock(total) {
   return `${pad(Math.floor(value / 60))}:${pad(value % 60)}`;
 }
 
+/**
+ * Minutes a block covers on the schedule: its planned duration, or the time
+ * worked on it (plus a running timer's minutes) when that ran longer.
+ */
+export function blockSpanMinutes(block, liveMinutes = 0) {
+  const planned = toNum(block?.duration);
+  const worked = (toNum(block?.workedMinutes) || 0) + (Number(liveMinutes) || 0);
+  const span = Math.max(planned > 0 ? planned : 0, worked);
+  return span > 0 ? span : null;
+}
+
 /** Planned minutes for a day; skipped blocks do not count. */
 export function plannedDayMinutes(blocks = []) {
   return (blocks || []).reduce((sum, block) => {
@@ -408,16 +419,16 @@ export function plannedDayMinutes(blocks = []) {
 
 /**
  * Places timed blocks on an hour grid. Blocks that overlap share the width in
- * lanes; `visualEnd` keeps very short blocks tall enough to read.
+ * lanes; `visualEnd` keeps very short blocks tall enough to read. `live`
+ * ({ blockId, minutes }) stretches the block a timer is running on.
  */
-export function layoutDayTimeline(blocks = [], { minMinutes = 30, defaultMinutes = 30 } = {}) {
+export function layoutDayTimeline(blocks = [], { minMinutes = 30, defaultMinutes = 30, live = null } = {}) {
   const dayEnd = 24 * 60;
   const items = [];
   for (const block of blocks || []) {
     const start = clockMinutes(block?.startTime);
     if (start == null) continue;
-    const duration = toNum(block.duration);
-    const minutes = duration && duration > 0 ? duration : defaultMinutes;
+    const minutes = blockSpanMinutes(block, live?.blockId === block.id ? live.minutes : 0) || defaultMinutes;
     items.push({
       block,
       start,

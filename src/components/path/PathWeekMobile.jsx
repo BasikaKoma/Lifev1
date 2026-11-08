@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { normalizeGoalColor, shiftWeek, startOfWeekMonday } from '../../lib/path/schema';
 import {
   blockActionProgress,
+  blockSpanMinutes,
   blocksForDate,
   blockStatusAt,
   formatBlockStatusStamp,
@@ -101,7 +102,7 @@ function BlockActionSheet({
   const dayIndex = dates.indexOf(block.date);
   const canStart = !timing && block.status !== 'Done' && block.status !== 'Skipped';
   const meta = [
-    formatBlockWindow(block.startTime, block.duration),
+    formatBlockWindow(block.startTime, blockSpanMinutes(block)),
     block.blockType,
     dayIndex >= 0 ? `${DAY_LONG[dayIndex]} ${Number(block.date.slice(8))}` : null,
   ].filter(Boolean).join(' · ');
@@ -346,7 +347,7 @@ export function PathWeekMobile({
           const progress = blockActionProgress(block);
           const stamp = formatBlockStatusStamp(block);
           const sub = [
-            formatBlockWindow(block.startTime, block.duration),
+            formatBlockWindow(block.startTime, blockSpanMinutes(block)),
             block.blockType,
             block.workedMinutes ? formatDuration(block.workedMinutes) : null,
             progress ? `${progress.done}/${progress.total}` : null,

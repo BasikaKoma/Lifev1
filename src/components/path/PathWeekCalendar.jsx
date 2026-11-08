@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { WEEKDAYS, goalColorStyle } from '../../lib/path/schema';
 import {
   blockActionProgress,
+  blockSpanMinutes,
   blockStatusAt,
   blocksForDate,
   formatBlockStatusStamp,
@@ -55,6 +56,7 @@ function BlockCard({
   canMoveDown,
   timing = false,
   liveClock = null,
+  liveMinutes = 0,
   onOpen,
   onEdit,
   onStart,
@@ -77,7 +79,7 @@ function BlockCard({
   const short = timeline && placement && placement.height < 40;
   const meta = [
     timing ? liveClock : null,
-    formatBlockWindow(block.startTime, block.duration),
+    formatBlockWindow(block.startTime, blockSpanMinutes(block, liveMinutes)),
     block.blockType,
   ].filter(Boolean).join(' · ');
   const reorderTarget = !timeline && onDropOnBlock;
@@ -274,6 +276,8 @@ export function PathWeekCalendar({
   const [overBlockId, setOverBlockId] = useState(null);
   const nowMinutes = useNowMinutes();
   const push = useTimelinePush();
+  const liveBlockId = timer.session?.blockId || null;
+  const liveMinutes = liveBlockId ? Math.floor(timer.elapsedMs / 60_000) : 0;
 
   const colorByGoal = useMemo(
     () => new Map(path.goals.map((goal) => [goal.id, goal.color])),
@@ -282,7 +286,10 @@ export function PathWeekCalendar({
 
   const days = useMemo(() => dates.map((date) => {
     const blocks = blocksForDate(path.blocks, date);
-    const timeline = layoutDayTimeline(blocks, { minMinutes: MIN_VISUAL_MINUTES });
+    const timeline = layoutDayTimeline(blocks, {
+      minMinutes: MIN_VISUAL_MINUTES,
+      live: liveBlockId ? { blockId: liveBlockId, minutes: liveMinutes } : null,
+    });
     const timedIds = new Set(timeline.map((item) => item.block.id));
     return {
       date,
@@ -290,7 +297,7 @@ export function PathWeekCalendar({
       untimed: blocks.filter((block) => !timedIds.has(block.id)),
       planned: plannedDayMinutes(blocks),
     };
-  }), [dates, path.blocks]);
+  }), [dates, path.blocks, liveBlockId, liveMinutes]);
 
   const bounds = useMemo(
     () => timelineHourBounds(days.flatMap((day) => day.timeline)),
@@ -330,6 +337,7 @@ export function PathWeekCalendar({
     color: colorByGoal.get(block.goalId),
     timing: timer.session?.blockId === block.id,
     liveClock: timer.session?.blockId === block.id ? formatClock(timer.elapsedMs) : null,
+    liveMinutes: liveBlockId === block.id ? liveMinutes : 0,
     onOpen: onOpenBlock,
     onStart: timer.startBlock,
     onEdit: onEditBlock,
@@ -337,8 +345,8 @@ export function PathWeekCalendar({
     onStatus,
     onDoneAt,
     onDragStartBlock: (item, offsetY) => {
-      const duration = Number(item.duration) > 0 ? Number(item.duration) : MIN_VISUAL_MINUTES;
-      dragRef.current = { id: item.id, offsetY, minutes: duration };
+      const minutes = blockSpanMinutes(item, liveBlockId === item.id ? liveMinutes : 0) || MIN_VISUAL_MINUTES;
+      dragRef.current = { id: item.id, offsetY, minutes };
     },
     onDragEndBlock: clearDrag,
   });
