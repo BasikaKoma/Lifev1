@@ -67,6 +67,8 @@ function blockReminders(pathBundle, dates, settings) {
   const out = [];
   for (const isoDate of dates) {
     for (const block of openBlocksForDate(pathBundle, isoDate)) {
+      // A block whose timer was already started needs no "starts soon" nudge.
+      if (block.startedAt || Number(block.workedMinutes) > 0) continue;
       const startsAt = atLocalTime(isoDate, block.startTime);
       if (!startsAt) continue;
       const fireAt = new Date(startsAt.getTime() - lead * 60000);

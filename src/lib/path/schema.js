@@ -279,6 +279,8 @@ export function createEmptyBlock(overrides = {}) {
     resultSummary: asFreeText(overrides.resultSummary || overrides.result_summary),
     remaining: asFreeText(overrides.remaining),
     nextStep: asFreeText(overrides.nextStep || overrides.next_step),
+    // First time a work timer ran on the block; its start reminder is not sent after that.
+    startedAt: asNullableString(overrides.startedAt || overrides.started_at),
     statusAt: asNullableString(overrides.statusAt || overrides.status_at),
     completedAt: asNullableString(overrides.completedAt || overrides.completed_at),
     skippedAt: asNullableString(overrides.skippedAt || overrides.skipped_at),

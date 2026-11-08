@@ -215,6 +215,22 @@ function recordBlockWork(blockId, minutes, window = null) {
   });
 }
 
+/** Marks the block started in Path, so every device drops its "starts in N′" reminder. */
+function markBlockStarted(blockId, at) {
+  const bundle = readPathBundleLocal();
+  const block = bundle?.blocks?.find((item) => item.id === blockId);
+  if (!block || block.startedAt) return;
+  queuePathSave({
+    ...bundle,
+    blocks: bundle.blocks.map((item) => (
+      item.id === blockId
+        ? createEmptyBlock({ ...item, startedAt: new Date(at).toISOString(), updatedAt: nowIso() })
+        : item
+    )),
+    updatedAt: nowIso(),
+  });
+}
+
 /** Work resumed after a pause continues in a new block from now, so Path shows the gap. */
 function openNextBlock(blockId, at) {
   const bundle = readPathBundleLocal();
@@ -233,6 +249,7 @@ function openNextBlock(blockId, at) {
     date,
     order: nextBlockOrder(bundle.blocks, date),
     startTime: clockOf(at),
+    startedAt: new Date(at).toISOString(),
   });
   queuePathSave({ ...bundle, blocks: [...bundle.blocks, next], updatedAt: nowIso() });
   return next.id;
@@ -259,6 +276,7 @@ export function startBlockTimer(block) {
     recordedMs: 0,
     splitOnResume: false,
   });
+  markBlockStarted(block.id, at);
 }
 
 /** Pausing writes the block's time so far, ending it at the pause; the gap shows on the day line and in Path. */
