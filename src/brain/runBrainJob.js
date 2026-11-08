@@ -21,7 +21,6 @@ import { assistantInstructionBlock } from './levels';
 import { redactSecrets } from './redact';
 import { loadAssistantPack } from '../lib/assistant/pack';
 import { listOpenWork } from '../lib/assistant/openItems';
-import { listMailMessages } from '../lib/assistant/mail';
 import { queryErp } from '../lib/assistant/erp';
 import { brainListDir, brainListRoots, brainReadImage, brainReadText, hasElectronBrain } from '../platform/brain';
 import { fetchOuraMetricsRange } from '../lib/oura';
@@ -67,7 +66,7 @@ ${assistantInstructionBlock(kind)}`;
 }
 
 function allowedTools(policy, destination, kind) {
-  const tools = ['list_open_items', 'list_mail', 'request_erp']
+  const tools = ['list_open_items', 'request_erp']
     .map((name) => BRAIN_TOOLS.find((tool) => tool.name === name));
   if (kind !== 'ask') tools.push(BRAIN_TOOLS.find((tool) => tool.name === 'search_memory'));
   if (policy.appScopes.projects) tools.push(BRAIN_TOOLS.find((tool) => tool.name === 'get_project'));
@@ -144,19 +143,6 @@ async function executeTool(name, args, { policy, destination, catalog, conversat
     return items
       .filter((item) => item.status === 'open' && (level === 'all' || item.level === level))
       .slice(0, 30);
-  }
-  if (name === 'list_mail') {
-    try {
-      const projectId = typeof args.projectId === 'string' ? args.projectId.trim() : '';
-      const messages = await listMailMessages({
-        urgentOnly: args.urgentOnly === true,
-        limit: 20,
-        projectId,
-      });
-      return { connected: true, messages };
-    } catch (err) {
-      return { connected: false, messages: [], error: err.message };
-    }
   }
   if (name === 'request_erp') {
     return queryErp(args.domain);

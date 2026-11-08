@@ -1,4 +1,4 @@
-export const APP_VIEWS = ['projects', 'workspace', 'self', 'path', 'agents', 'brand', 'nutrition', 'settings', 'devices'];
+export const APP_VIEWS = ['projects', 'workspace', 'self', 'path', 'brand', 'nutrition', 'settings', 'devices'];
 
 const VIEW_ALIASES = {
   open: 'self',

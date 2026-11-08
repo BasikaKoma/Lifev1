@@ -5,6 +5,7 @@ import { readPathBundleLocal } from '../path/store';
 import { localTodayIsoDate } from '../../utils/selfDateUtils';
 
 const LOCAL_KEY = 'lifev1-open-items';
+// 'mail' is kept only so items from the old mail pull still show.
 const SOURCES = new Set(['manual', 'mail', 'call', 'day', 'commitment']);
 
 // Weekly-plan blocks are read from Path itself; rows with source 'day' are old server copies.
@@ -202,7 +203,7 @@ async function cloudAvailable() {
   return { supabase, id };
 }
 
-/** True when items live in Supabase, so the server pull (mail, calls) can run. */
+/** True when items live in Supabase, so the server pull (calls) can run. */
 export async function openItemsCloudReady() {
   return Boolean(await cloudAvailable());
 }
@@ -211,7 +212,7 @@ function readLocalItems() {
   return readLocal().map(normalizeOpenItem).filter((item) => item?.title && item.source !== 'day');
 }
 
-/** Assistant items (mail, calls, manual). Plan blocks are not here: they live in Path. */
+/** Assistant items (calls, manual). Plan blocks are not here: they live in Path. */
 export async function listOpenItems() {
   const cloud = await cloudAvailable();
   if (!cloud) return readLocalItems();

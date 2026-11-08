@@ -2,7 +2,6 @@ import { ASSISTANT_ACTION_TYPES, COMPUTER_ACTION_TYPES } from './levels';
 import { createOpenItem, findOpenItem, findOpenPlanBlock, setOpenItemStatus } from '../lib/assistant/openItems';
 import { defaultBlockDoneAt } from '../lib/path/logic';
 import { setPathBlockStatus } from '../lib/path/store';
-import { sendMail } from '../lib/assistant/mail';
 import { getSupabaseClient, isSupabaseConfigured } from '../lib/supabase';
 import {
   brainFillText,
@@ -18,13 +17,8 @@ function levelOf(action) {
 
 function sourceOf(action) {
   const source = action.items?.[0];
-  if (source === 'mail' || source === 'call' || source === 'day' || source === 'manual') return source;
+  if (source === 'call' || source === 'day' || source === 'manual') return source;
   return 'manual';
-}
-
-function emailOrEmpty(value) {
-  const text = String(value || '').trim();
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text) ? text : '';
 }
 
 async function recordPayment(action) {
@@ -118,17 +112,6 @@ export async function applyAssistantActions(actions = []) {
         parts.push(action.type === 'delete_open_item'
           ? `έσβησα την εκκρεμότητα «${found.title}»`
           : `έκλεισα την εκκρεμότητα «${found.title}»`);
-        continue;
-      }
-      if (action.type === 'send_mail') {
-        await sendMail({
-          gmailId: emailOrEmpty(action.target) ? '' : action.target,
-          to: emailOrEmpty(action.target),
-          subject: action.title,
-          body: action.body,
-          projectTitle: action.projectTitle || '',
-        });
-        parts.push(`έφτιαξα πρόχειρο «${action.title}» στο Zoho. Δεν στάλθηκε, το στέλνεις εσύ από εκεί`);
         continue;
       }
       if (action.type === 'commit_customer') {

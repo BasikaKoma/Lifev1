@@ -57,7 +57,6 @@ export const BRAIN_INSIGHTS_SCHEMA = {
               'create_open_item',
               'complete_open_item',
               'delete_open_item',
-              'send_mail',
               'commit_customer',
               'record_payment',
               'computer_open',
@@ -154,26 +153,13 @@ export const BRAIN_TOOLS = [
   },
   {
     name: 'list_open_items',
-    description: 'List open items kept in the app. They are tied to mail, calls, and the day, and the morning briefing reads them.',
+    description: 'List open items kept in the app. They are tied to calls and the day, and the morning briefing reads them.',
     parameters: {
       type: 'object',
       additionalProperties: false,
       required: ['level'],
       properties: {
         level: { type: 'string', enum: ['human', 'business', 'all'] },
-      },
-    },
-  },
-  {
-    name: 'list_mail',
-    description: 'Read synced mail summaries for one project or every project mailbox. Each message includes project_id. Does not return the mailbox token.',
-    parameters: {
-      type: 'object',
-      additionalProperties: false,
-      required: ['urgentOnly'],
-      properties: {
-        urgentOnly: { type: 'boolean' },
-        projectId: { type: 'string', description: 'Project UUID. Empty string reads every mailbox.' },
       },
     },
   },

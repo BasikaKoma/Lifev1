@@ -152,8 +152,7 @@ html:has(.app--projects) body {
 .app--path .main,
 .app--devices .main,
 .app--brand .main,
-.app--nutrition .main,
-.app--agents .main {
+.app--nutrition .main {
   max-width: none;
   width: 100%;
   margin: 0;
@@ -162,8 +161,7 @@ html:has(.app--projects) body {
 
 .app--path .main,
 .app--brand .main,
-.app--nutrition .main,
-.app--agents .main {
+.app--nutrition .main {
   padding: 0;
   max-width: none;
   width: 100%;
@@ -176,8 +174,7 @@ html:has(.app--projects) body {
 
 .app--path .app__content,
 .app--brand .app__content,
-.app--nutrition .app__content,
-.app--agents .app__content {
+.app--nutrition .app__content {
   min-width: 0;
 }
 
@@ -976,24 +973,6 @@ html:has(.app--projects) body {
   line-height: 1;
   cursor: pointer;
   padding: 0 2px;
-}
-
-.settings-mail-project {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 0;
-  border-top: 1px solid var(--color-border);
-}
-
-.settings-mail-project__name {
-  font-weight: 600;
-  min-width: 8rem;
-}
-
-.settings-mail-project__email {
-  color: var(--color-text-muted);
 }
 
 .settings-choice {

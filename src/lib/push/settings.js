@@ -24,8 +24,6 @@ export const DEFAULT_PUSH_SETTINGS = {
   /** No weight logged that day by this time → one push (supabase/052_weight_reminder.sql). */
   weightMissing: true,
   weightMissingTime: '11:00',
-  /** New mail that needs an answer → one push per mail agent run (supabase/functions/_shared/mailAgent.ts). */
-  mailAgent: true,
 };
 
 function normalizeTime(value, fallback) {
@@ -56,7 +54,6 @@ export function normalizePushSettings(raw) {
     moodCheckin: bool('moodCheckin'),
     weightMissing: bool('weightMissing'),
     weightMissingTime: normalizeTime(source.weightMissingTime, DEFAULT_PUSH_SETTINGS.weightMissingTime),
-    mailAgent: bool('mailAgent'),
   };
 }
 

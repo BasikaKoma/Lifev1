@@ -1,5 +1,4 @@
 import { getServiceClient } from './supabase.ts';
-import { listMailSessions, syncMailbox } from './mail.ts';
 import { ERP_DOMAINS, fetchErpDomain } from './erp.ts';
 import {
   isSymphonConnection,
@@ -44,12 +43,6 @@ async function ensureItem(
   if (error) throw error;
   existing.set(key, { id: '', source: item.source, source_ref: item.sourceRef, status: 'open' });
   return true;
-}
-
-async function markDone(admin: { from: (table: string) => any }, row: ItemRow) {
-  if (!row.id || row.status !== 'open') return;
-  await admin.from('open_items').update({ status: 'done' }).eq('id', row.id);
-  row.status = 'done';
 }
 
 // Same window and rules as buildOpenRecords in src/lib/assistant/openItems.js, so the app and
@@ -144,24 +137,9 @@ export async function pullAssistantForUser(userId: string) {
   const admin = getServiceClient();
   const today = athensToday();
   const since = new Date(Date.now() - 7 * 86400000).toISOString();
-  let mailConnected = false;
   let erpConnected = false;
-  let mailCount = 0;
   const erpDomains: string[] = [];
   let itemCount = 0;
-
-  const sessions = await listMailSessions(admin, userId);
-  if (sessions.length) {
-    mailConnected = true;
-    for (const session of sessions) {
-      try {
-        const synced = await syncMailbox(admin, userId, session);
-        mailCount += synced.count || 0;
-      } catch (err) {
-        console.error('mail pull failed', err instanceof Error ? err.message : '');
-      }
-    }
-  }
 
   const { data: erp } = await admin
     .from('erp_connections')
@@ -206,33 +184,6 @@ export async function pullAssistantForUser(userId: string) {
     existing.set(keyOf(row.source, row.source_ref || ''), row);
   }
 
-  const { data: messages } = mailConnected
-    ? await admin
-      .from('mail_messages')
-      .select('gmail_id, subject, snippet, unread, urgent')
-      .eq('user_id', userId)
-      .eq('urgent', true)
-    : { data: [] };
-
-  const unreadUrgent = new Set<string>();
-  for (const message of messages || []) {
-    if (!message.unread || !message.gmail_id) continue;
-    unreadUrgent.add(message.gmail_id);
-    const created = await ensureItem(admin, userId, existing, {
-      title: message.subject || 'Επείγον mail',
-      body: message.snippet || '',
-      dueOn: today,
-      source: 'mail',
-      sourceRef: message.gmail_id,
-    });
-    if (created) itemCount += 1;
-  }
-  for (const row of existing.values()) {
-    if (row.source === 'mail' && row.status === 'open' && row.source_ref && !unreadUrgent.has(row.source_ref)) {
-      await markDone(admin, row);
-    }
-  }
-
   const { data: calls } = await admin
     .from('calls')
     .select('id, contact, purpose')
@@ -265,17 +216,13 @@ export async function pullAssistantForUser(userId: string) {
   await admin.from('assistant_runs').upsert({
     user_id: userId,
     pulled_at: new Date().toISOString(),
-    mail_connected: mailConnected,
     erp_connected: erpConnected,
-    mail_count: mailCount,
     erp_count: erpDomains.length,
     item_count: itemCount,
   });
 
   return {
-    mailConnected,
     erpConnected,
-    mailCount,
     erpCount: erpDomains.length,
     itemCount,
   };
@@ -284,7 +231,7 @@ export async function pullAssistantForUser(userId: string) {
 export async function pullAssistantForAll() {
   const admin = getServiceClient();
   const ids = new Set<string>();
-  const tables = ['mail_connections', 'erp_connections', 'lifelines', 'path_state', 'calls'];
+  const tables = ['erp_connections', 'lifelines', 'path_state', 'calls'];
   for (const table of tables) {
     const { data } = await admin.from(table).select('user_id');
     for (const row of data || []) {

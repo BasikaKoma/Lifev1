@@ -18,7 +18,6 @@ export const BRAIN_ACTION_TYPES = [
   'create_open_item',
   'complete_open_item',
   'delete_open_item',
-  'send_mail',
   'commit_customer',
   'record_payment',
   'computer_open',

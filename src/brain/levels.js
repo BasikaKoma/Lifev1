@@ -42,7 +42,6 @@ export const ASSISTANT_ACTION_TYPES = [
   'create_open_item',
   'complete_open_item',
   'delete_open_item',
-  'send_mail',
   'commit_customer',
   'record_payment',
   'computer_open',
@@ -54,12 +53,6 @@ export const OUTBOUND_ACTION_TYPES = [
   'record_payment',
   'delete_open_item',
   'commit_customer',
-];
-
-// send_mail only saves a draft in the mailbox (the user sends it from Zoho), but it still waits for yes.
-export const CONFIRM_ACTION_TYPES = [
-  'send_mail',
-  ...OUTBOUND_ACTION_TYPES,
 ];
 
 export const COMPUTER_ACTION_TYPES = [
@@ -81,7 +74,7 @@ export function holdActions(actions, question) {
   const hold = [];
   const run = [];
   for (const action of list) {
-    const outbound = CONFIRM_ACTION_TYPES.includes(action.type);
+    const outbound = OUTBOUND_ACTION_TYPES.includes(action.type);
     const computer = COMPUTER_ACTION_TYPES.includes(action.type);
     const project = !ASSISTANT_ACTION_TYPES.includes(action.type);
     if (outbound || (computer && !computerAsked) || (project && holdProjectBatch)) hold.push(action);
@@ -92,7 +85,6 @@ export function holdActions(actions, question) {
 
 export function actionLabel(action) {
   const labels = {
-    send_mail: 'Πρόχειρο mail',
     record_payment: 'Καταγραφή πληρωμής',
     delete_open_item: 'Διαγραφή εκκρεμότητας',
     commit_customer: 'Δέσμευση σε πελάτη',
@@ -108,7 +100,7 @@ export function actionLabel(action) {
 
 export function assistantInstructionBlock(kind) {
   const briefing = kind === 'morning'
-    ? `MORNING BRIEFING. Answer in three short parts, in the user's language: (1) what happened, from SNAPSHOT.lifeline, SNAPSHOT.assistant.calls, and mail already handled; (2) what is still open, from SNAPSHOT.assistant.openItems, especially due today or overdue; (3) exactly one next move. Do not invent numbers.`
+    ? `MORNING BRIEFING. Answer in three short parts, in the user's language: (1) what happened, from SNAPSHOT.lifeline and SNAPSHOT.assistant.calls; (2) what is still open, from SNAPSHOT.assistant.openItems, especially due today or overdue; (3) exactly one next move. Do not invent numbers.`
     : kind === 'evening'
       ? `EVENING BRIEFING. Say what was scheduled (open items due today, the day's todos) and what actually happened (completed work, day notes, calls). Keep it short. Do not add a new advice list.`
       : kind === 'business'
@@ -118,12 +110,11 @@ export function assistantInstructionBlock(kind) {
   return `ONE ASSISTANT, TWO LEVELS.
 Human domains: day, body, time, communication, people, money, work, obligations, home, memory.
 Business domains: cash, customers, sales, prices, operations, people, suppliers, documents, outward image, weekly risk.
-SNAPSHOT.assistant is the live pack: open items, mail summaries, ERP snapshots, recent calls, payment records.
+SNAPSHOT.assistant is the live pack: open items, ERP snapshots, recent calls, payment records.
 JOBS YOU CAN ACTUALLY DO:
-- Mail: each project has its own mailbox. call list_mail to read summaries. projectId is that project's UUID or "" for every mailbox. Messages include project_id. Draft a reply in send_mail.body using MEMORY style and writing_example, and set projectTitle to the project whose mailbox holds the thread. send_mail only saves a draft in that Zoho mailbox; nothing is sent. The user reviews and sends it from Zoho. A reply (target = message id) goes to the original sender in the same thread. The app asks for yes. You never see the mailbox token.
-- Open items: create_open_item and complete_open_item. delete_open_item always waits for yes. dueOn is YYYY-MM-DD or "". projectTitle is "human" or "business". items[0] is mail, call, day, or manual. target is a source id when you have one. The morning briefing reads this list.
+- Open items: create_open_item and complete_open_item. delete_open_item always waits for yes. dueOn is YYYY-MM-DD or "". projectTitle is "human" or "business". items[0] is call, day, or manual. target is a source id when you have one. The morning briefing reads this list.
 - Computer: only when SNAPSHOT.assistant.computer is "act" (desktop app). Emit computer_open, computer_write, or computer_fill. rootId comes from LOCAL FILES. relativePath stays inside that folder. computer_fill items are "find => replace". On web and mobile computer is "read": do not emit those actions. Say the computer works only in the desktop app, and here you can only read.
-ALWAYS WAITS FOR YES: send_mail (a draft), record_payment, delete_open_item, commit_customer. Never say a mail was sent. record_payment only stores the decision; it does not move money. commit_customer stores the promise as an open item; it does not message the customer. If they also need a mail, add a separate send_mail.
+ALWAYS WAITS FOR YES: record_payment, delete_open_item, commit_customer. record_payment only stores the decision; it does not move money. commit_customer stores the promise as an open item; it does not message the customer.
 Unused action strings (dueOn, target, rootId, relativePath, amount, stageTitle, projectTitle, body) must be "".
 Never print API keys, OAuth tokens, or Authorization headers.
 ${briefing}`;

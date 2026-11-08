@@ -1,9 +1,6 @@
 [functions.oura-oauth-callback]
 verify_jwt = false
 
-[functions.mail-oauth-callback]
-verify_jwt = false
-
 [functions.erp-oauth-callback]
 verify_jwt = false
 
@@ -20,9 +17,6 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.push-dispatch]
-verify_jwt = false
-
-[functions.mail-agent]
 verify_jwt = false
 
 [functions.oura-webhook]

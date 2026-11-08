@@ -282,16 +282,6 @@ export function NotificationSettings({ user, ouraConnected = false }) {
       <label className="settings-check">
         <input
           type="checkbox"
-          checked={settings.mailAgent}
-          disabled={optionsDisabled}
-          onChange={(e) => update({ mailAgent: e.target.checked })}
-        />
-        <span>Mail που θέλει απάντηση (από τον agent του mail, 08:00–20:00)</span>
-      </label>
-
-      <label className="settings-check">
-        <input
-          type="checkbox"
           checked={settings.weightMissing}
           disabled={optionsDisabled}
           onChange={(e) => update({ weightMissing: e.target.checked })}

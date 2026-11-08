@@ -2,7 +2,6 @@ import { hasElectronBrain } from '../../platform/brain';
 import { getSupabaseClient, isSupabaseConfigured } from '../supabase';
 import { BUSINESS_DOMAINS, HUMAN_DOMAINS } from '../../brain/levels';
 import { listOpenWork } from './openItems';
-import { listMailConnections, listMailMessages } from './mail';
 import { getErpStatus, listErpSnapshots } from './erp';
 import { redactSecrets } from '../../brain/redact';
 
@@ -63,26 +62,8 @@ async function recentPayments() {
 }
 
 export async function loadAssistantPack() {
-  const [items, mail, erp, calls, payments] = await Promise.all([
+  const [items, erp, calls, payments] = await Promise.all([
     listOpenWork().catch(() => []),
-    (async () => {
-      try {
-        const mailboxes = await listMailConnections();
-        const messages = mailboxes.length ? await listMailMessages({ limit: 30 }) : [];
-        return {
-          connected: mailboxes.length > 0,
-          mailboxes: mailboxes.map((item) => ({
-            projectId: item.project_id || '',
-            email: item.email || '',
-            provider: item.provider || '',
-          })),
-          urgent: messages.filter((item) => item.urgent),
-          recent: messages,
-        };
-      } catch {
-        return { connected: false, mailboxes: [], urgent: [], recent: [] };
-      }
-    })(),
     (async () => {
       try {
         const status = await getErpStatus();
@@ -103,7 +84,6 @@ export async function loadAssistantPack() {
     humanDomains: HUMAN_DOMAINS.map((item) => item.id),
     businessDomains: BUSINESS_DOMAINS.map((item) => item.id),
     openItems: items.filter((item) => item.status === 'open').slice(0, 30).map(compactItem),
-    mail,
     erp,
     calls,
     payments,

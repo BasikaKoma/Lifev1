@@ -100,9 +100,7 @@ export function SelfOpenItems({ lifelineDays = {}, onUpdateLifelineDay, pathBund
       const result = await pullAssistantNow();
       setRun({
         pulled_at: new Date().toISOString(),
-        mail_connected: result.mailConnected,
         erp_connected: result.erpConnected,
-        mail_count: result.mailCount,
         erp_count: result.erpCount,
         item_count: result.itemCount,
       });
@@ -189,8 +187,8 @@ export function SelfOpenItems({ lifelineDays = {}, onUpdateLifelineDay, pathBund
       </header>
       <p className="self-open__note">
         {canPull
-          ? 'Το weekly plan φαίνεται εδώ αμέσως. Mail και κλήσεις έρχονται κάθε πρωί στις 7 ή με «Τράβηξε τώρα».'
-          : 'Το weekly plan φαίνεται εδώ αμέσως. Για mail και κλήσεις χρειάζεται σύνδεση στο cloud.'}
+          ? 'Το weekly plan φαίνεται εδώ αμέσως. Οι κλήσεις έρχονται κάθε πρωί στις 7 ή με «Τράβηξε τώρα».'
+          : 'Το weekly plan φαίνεται εδώ αμέσως. Για τις κλήσεις χρειάζεται σύνδεση στο cloud.'}
       </p>
       {canPull && run?.pulled_at ? (
         <p className="self-open__note">

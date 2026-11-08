@@ -8,7 +8,7 @@ export async function getAssistantRun() {
   const supabase = getSupabaseForAssistant();
   const { data, error } = await supabase
     .from('assistant_runs')
-    .select('pulled_at, mail_connected, erp_connected, mail_count, erp_count, item_count')
+    .select('pulled_at, erp_connected, erp_count, item_count')
     .maybeSingle();
   if (error) return null;
   return data;
