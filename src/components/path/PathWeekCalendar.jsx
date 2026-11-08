@@ -277,7 +277,7 @@ export function PathWeekCalendar({
   const nowMinutes = useNowMinutes();
   const push = useTimelinePush();
   const liveBlockId = timer.session?.blockId || null;
-  const liveMinutes = liveBlockId ? Math.floor(timer.elapsedMs / 60_000) : 0;
+  const liveMinutes = liveBlockId ? Math.floor((timer.blockElapsedMs ?? timer.elapsedMs) / 60_000) : 0;
 
   const colorByGoal = useMemo(
     () => new Map(path.goals.map((goal) => [goal.id, goal.color])),

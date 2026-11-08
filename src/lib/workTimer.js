@@ -1,3 +1,5 @@
+import { localTodayIsoDate } from '../utils/selfDateUtils';
+import { nextBlockOrder } from './path/logic';
 import { createEmptyBlock, nowIso } from './path/schema';
 import { queuePathSave, readPathBundleLocal } from './path/store';
 
@@ -35,6 +37,7 @@ function readStored() {
   try {
     const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
     if (!raw || typeof raw !== 'object' || !raw.id || !raw.blockId) return null;
+    const runs = normalizeRuns(raw.runs);
     return {
       id: String(raw.id),
       label: String(raw.label || 'Time block'),
@@ -46,7 +49,10 @@ function readStored() {
       running: raw.running === true,
       targetChimed: raw.targetChimed === true,
       halfHoursChimed: Math.max(0, Math.floor(Number(raw.halfHoursChimed) || 0)),
-      runs: normalizeRuns(raw.runs),
+      runs,
+      blockStartedAt: Number(raw.blockStartedAt) || runs[0]?.start || null,
+      recordedMs: Math.max(0, Number(raw.recordedMs) || 0),
+      splitOnResume: raw.splitOnResume === true,
     };
   } catch {
     return null;
@@ -183,7 +189,13 @@ function minutesFromElapsed(ms) {
   return Math.max(1, Math.round(ms / 60000));
 }
 
-function recordBlockWork(blockId, minutes) {
+function clockOf(ms) {
+  const date = new Date(ms);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function recordBlockWork(blockId, minutes, window = null) {
   if (!blockId || !minutes) return;
   const bundle = readPathBundleLocal();
   if (!bundle?.blocks?.some((block) => block.id === blockId)) return;
@@ -193,6 +205,7 @@ function recordBlockWork(blockId, minutes) {
       block.id === blockId
         ? createEmptyBlock({
           ...block,
+          ...window,
           workedMinutes: (Number(block.workedMinutes) || 0) + minutes,
           updatedAt: nowIso(),
         })
@@ -200,6 +213,29 @@ function recordBlockWork(blockId, minutes) {
     )),
     updatedAt: nowIso(),
   });
+}
+
+/** Work resumed after a pause continues in a new block from now, so Path shows the gap. */
+function openNextBlock(blockId, at) {
+  const bundle = readPathBundleLocal();
+  const source = bundle?.blocks?.find((block) => block.id === blockId);
+  if (!source) return null;
+  const date = localTodayIsoDate();
+  const next = createEmptyBlock({
+    goalId: source.goalId,
+    projectId: source.projectId,
+    projectTitle: source.projectTitle,
+    title: source.title,
+    blockType: source.blockType,
+    taskId: source.taskId,
+    taskTitle: source.taskTitle,
+    taskSource: source.taskSource,
+    date,
+    order: nextBlockOrder(bundle.blocks, date),
+    startTime: clockOf(at),
+  });
+  queuePathSave({ ...bundle, blocks: [...bundle.blocks, next], updatedAt: nowIso() });
+  return next.id;
 }
 
 export function startBlockTimer(block) {
@@ -219,26 +255,47 @@ export function startBlockTimer(block) {
     targetChimed: false,
     halfHoursChimed: 0,
     runs: [{ start: at, end: null }],
+    blockStartedAt: at,
+    recordedMs: 0,
+    splitOnResume: false,
   });
 }
 
+/** Pausing writes the block's time so far, ending it at the pause; the gap shows on the day line and in Path. */
 export function pauseWorkTimer() {
   if (!session?.running) return;
+  const current = session;
   const at = Date.now();
-  commit({
-    ...session,
+  const elapsed = sessionElapsedMs(current, at);
+  const minutes = minutesFromElapsed(elapsed - (current.recordedMs || 0));
+  const next = {
+    ...current,
     running: false,
-    accumulatedMs: sessionElapsedMs(session, at),
+    accumulatedMs: elapsed,
     startedAt: null,
-    runs: closeOpenRun(session, at),
-  });
+    runs: closeOpenRun(current, at),
+    recordedMs: minutes ? elapsed : current.recordedMs,
+    splitOnResume: current.splitOnResume || Boolean(minutes),
+  };
+  commit(next);
+  if (elapsed >= MIN_RECORD_MS) writeLogEntry(next);
+  if (minutes) {
+    recordBlockWork(current.blockId, minutes, {
+      startTime: clockOf(current.blockStartedAt || current.startedAt),
+      duration: minutes,
+    });
+  }
 }
 
 export function resumeWorkTimer() {
   if (!session || session.running) return;
   const at = Date.now();
+  const nextBlockId = session.splitOnResume ? openNextBlock(session.blockId, at) : null;
   commit({
     ...session,
+    blockId: nextBlockId || session.blockId,
+    blockStartedAt: nextBlockId ? at : session.blockStartedAt,
+    splitOnResume: false,
     running: true,
     startedAt: at,
     runs: [...normalizeRuns(session.runs), { start: at, end: null }],
@@ -258,7 +315,7 @@ export function stopWorkTimer() {
   }
   commit(null);
   if (!current.blockId) return;
-  recordBlockWork(current.blockId, minutesFromElapsed(elapsed));
+  recordBlockWork(current.blockId, minutesFromElapsed(elapsed - (current.recordedMs || 0)));
 }
 
 export function markWorkTimerChimed({ target = false, halfHours = 0 } = {}) {
