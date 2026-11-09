@@ -117,6 +117,7 @@ export function PathWeek({
       {workspaceBlock ? (
         <PathBlockWorkspace
           block={workspaceBlock}
+          blocks={path.blocks}
           goal={path.goals.find((goal) => goal.id === workspaceBlock.goalId) || null}
           tasks={tasks}
           saving={path.saving}
@@ -132,6 +133,7 @@ export function PathWeek({
             const at = fromDatetimeLocalValue(value);
             if (at) path.setBlockDoneAt(workspaceBlock.id, at);
           }}
+          onCompleteTask={onCompleteLinkedTask}
         />
       ) : platform.isMobile ? (
         <PathWeekMobile

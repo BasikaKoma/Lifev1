@@ -279,6 +279,8 @@ export function createEmptyBlock(overrides = {}) {
     resultSummary: asFreeText(overrides.resultSummary || overrides.result_summary),
     remaining: asFreeText(overrides.remaining),
     nextStep: asFreeText(overrides.nextStep || overrides.next_step),
+    // Earlier block whose leftover tasks were carried here or turned down; it is not offered again.
+    carryOverDismissedFrom: asNullableString(overrides.carryOverDismissedFrom || overrides.carry_over_dismissed_from),
     // First time a work timer ran on the block; its start reminder is not sent after that.
     startedAt: asNullableString(overrides.startedAt || overrides.started_at),
     statusAt: asNullableString(overrides.statusAt || overrides.status_at),
@@ -311,6 +313,12 @@ export function createEmptyBlockAction(overrides = {}) {
       ? asNullableString(overrides.completedAt || overrides.completed_at)
       : null,
     position: Number.isFinite(Number(overrides.position)) ? Number(overrides.position) : 0,
+    url: asNullableString(overrides.url),
+    // A project checkpoint or canvas task picked into the block; the project stays its source.
+    taskId: asNullableString(overrides.taskId || overrides.task_id),
+    taskSource: asNullableString(overrides.taskSource || overrides.task_source),
+    // The open action of an earlier block this one continues.
+    carriedFrom: asNullableString(overrides.carriedFrom || overrides.carried_from),
     createdAt: overrides.createdAt || overrides.created_at || now,
     updatedAt: overrides.updatedAt || overrides.updated_at || now,
   };
