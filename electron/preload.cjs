@@ -64,6 +64,17 @@ contextBridge.exposeInMainWorld('electronNotifications', {
   },
 });
 
+contextBridge.exposeInMainWorld('electronTimerFloat', {
+  update(state) {
+    ipcRenderer.send('timer-float:update', state);
+  },
+  onAction(callback) {
+    const handler = (_event, action) => callback(action);
+    ipcRenderer.on('timer-float:action', handler);
+    return () => ipcRenderer.removeListener('timer-float:action', handler);
+  },
+});
+
 contextBridge.exposeInMainWorld('electronCameras', {
   snapshot(camera) {
     return ipcRenderer.invoke('cameras:snapshot', camera);

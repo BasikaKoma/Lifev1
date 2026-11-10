@@ -1,6 +1,7 @@
+/* Above every panel, modal and overlay; only confirm dialogs (12000) stay on top. */
 .work-timer {
   position: fixed;
-  z-index: 96;
+  z-index: 11500;
   left: calc(260px + 20px);
   bottom: 22px;
   display: flex;
@@ -212,6 +213,27 @@
 .work-timer--deep.work-timer--paused .work-timer__resume {
   background: #fb923c;
   color: #1c1008;
+}
+
+/* Pulses with the half-hour bell; the offset already uses transform, so only the glow moves. */
+@keyframes work-timer-ring {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px rgba(74, 222, 128, 0.28),
+      0 16px 44px rgba(0, 0, 0, 0.45);
+  }
+
+  50% {
+    border-color: #f5c16c;
+    box-shadow:
+      0 0 0 7px rgba(245, 193, 108, 0.55),
+      0 16px 44px rgba(0, 0, 0, 0.45);
+  }
+}
+
+.work-timer--ring {
+  animation: work-timer-ring 0.9s ease-in-out 6;
 }
 
 @media (max-width: 768px) {

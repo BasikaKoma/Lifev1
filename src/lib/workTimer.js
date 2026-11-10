@@ -344,7 +344,15 @@ export function markWorkTimerChimed({ target = false, halfHours = 0 } = {}) {
   commit({ ...session, targetChimed, halfHoursChimed });
 }
 
-function playNotes(notes) {
+// Partials of a small struck bell: [frequency ratio, share of the peak, share of the ring time].
+const BELL_PARTIALS = [
+  [1, 1, 1],
+  [2, 0.45, 0.6],
+  [3, 0.2, 0.4],
+  [4.2, 0.12, 0.25],
+];
+
+function playBell(strikes) {
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtx) return;
@@ -352,23 +360,25 @@ function playNotes(notes) {
     if (ctx.state === 'suspended') ctx.resume?.().catch(() => {});
     let last = null;
     let lastEnd = 0;
-    for (const note of notes) {
-      const start = ctx.currentTime + (note.at || 0);
-      const end = start + note.duration;
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.value = note.frequency;
-      gain.gain.setValueAtTime(0.0001, start);
-      gain.gain.exponentialRampToValueAtTime(note.peak, start + 0.03);
-      gain.gain.exponentialRampToValueAtTime(0.0001, end);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(start);
-      osc.stop(end + 0.02);
-      if (end >= lastEnd) {
-        last = osc;
-        lastEnd = end;
+    for (const strike of strikes) {
+      const start = ctx.currentTime + (strike.at || 0);
+      for (const [ratio, level, length] of BELL_PARTIALS) {
+        const end = start + strike.ring * length;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = strike.frequency * ratio;
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.exponentialRampToValueAtTime(strike.peak * level, start + 0.006);
+        gain.gain.exponentialRampToValueAtTime(0.0001, end);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(start);
+        osc.stop(end + 0.02);
+        if (end >= lastEnd) {
+          last = osc;
+          lastEnd = end;
+        }
       }
     }
     if (last) last.onended = () => ctx.close();
@@ -378,12 +388,17 @@ function playNotes(notes) {
 }
 
 export function chimeWorkTimer() {
-  playNotes([{ frequency: 698, duration: 0.7, peak: 0.045 }]);
+  playBell([
+    { frequency: 659, peak: 0.3, ring: 1.6 },
+    { frequency: 784, at: 0.35, peak: 0.3, ring: 1.6 },
+    { frequency: 988, at: 0.7, peak: 0.32, ring: 3 },
+  ]);
 }
 
+/** A two-tone bell, loud enough to notice from another app. */
 export function chimeHalfHour() {
-  playNotes([
-    { frequency: 880, duration: 0.22, peak: 0.03 },
-    { frequency: 1175, at: 0.14, duration: 0.34, peak: 0.03 },
+  playBell([
+    { frequency: 988, peak: 0.3, ring: 2.2 },
+    { frequency: 784, at: 0.5, peak: 0.3, ring: 2.8 },
   ]);
 }

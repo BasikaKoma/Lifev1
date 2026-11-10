@@ -13,6 +13,7 @@ import './WorkTimer.css';
 const OFFSET_KEY = 'lifev1-work-timer-offset';
 const DRAG_THRESHOLD = 6;
 const EDGE = 8;
+const RING_MS = 6000;
 
 function readOffset() {
   try {
@@ -55,6 +56,11 @@ export function WorkTimer({ onOpenBlock }) {
   const movedRef = useRef(false);
   const [offset, setOffset] = useState(readOffset);
   const [dragging, setDragging] = useState(false);
+  const [ringing, setRinging] = useState(false);
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
+  const openBlockRef = useRef(onOpenBlock);
+  openBlockRef.current = onOpenBlock;
   const offsetRef = useRef(offset);
   offsetRef.current = offset;
   // Where the user left it; a smaller window only clamps the shown offset.
@@ -85,7 +91,34 @@ export function WorkTimer({ onOpenBlock }) {
     if (targetDue) chimeWorkTimer();
     else chimeHalfHour();
     markWorkTimerChimed({ target: targetDue, halfHours });
+    setRinging(true);
   }, [deep, over, session, elapsedMs]);
+
+  useEffect(() => {
+    if (!ringing) return undefined;
+    const id = window.setTimeout(() => setRinging(false), RING_MS);
+    return () => window.clearTimeout(id);
+  }, [ringing]);
+
+  // The desktop app mirrors the timer in an always-on-top window while lifev1 is in the background.
+  useEffect(() => {
+    window.electronTimerFloat?.update(session ? {
+      label: session.label,
+      blockType: session.blockType,
+      deep,
+      running: session.running,
+      startedAt: session.startedAt,
+      accumulatedMs: session.accumulatedMs,
+      targetMinutes: session.targetMinutes,
+    } : null);
+  }, [session, deep]);
+
+  useEffect(() => window.electronTimerFloat?.onAction((action) => {
+    if (action === 'pause') pause();
+    else if (action === 'resume') resume();
+    else if (action === 'stop') stop();
+    else if (action === 'open' && sessionRef.current) openBlockRef.current?.(sessionRef.current.blockId);
+  }), [pause, resume, stop]);
 
   useLayoutEffect(() => {
     if (!hasSession) return undefined;
@@ -172,7 +205,7 @@ export function WorkTimer({ onOpenBlock }) {
   return (
     <section
       ref={nodeRef}
-      className={`work-timer${deep ? ' work-timer--deep' : ''}${over ? ' work-timer--over' : ''}${session.running ? '' : ' work-timer--paused'}${dragging ? ' work-timer--dragging' : ''}`}
+      className={`work-timer${deep ? ' work-timer--deep' : ''}${over ? ' work-timer--over' : ''}${session.running ? '' : ' work-timer--paused'}${dragging ? ' work-timer--dragging' : ''}${ringing ? ' work-timer--ring' : ''}`}
       style={{
         '--timer-p': `${progress}%`,
         ...(offset.x || offset.y ? { transform: `translate3d(${offset.x}px, ${offset.y}px, 0)` } : null),

@@ -7,6 +7,7 @@ const { setupAuthStoreIpc } = require('./authStore.cjs');
 const { setupBrainIpc } = require('./brain.cjs');
 const { setupCamerasIpc } = require('./cameras.cjs');
 const { setupVaultIpc } = require('./vault.cjs');
+const { setupTimerFloat } = require('./timerFloat.cjs');
 
 const APP_PORT = 17823;
 const DEV_URL = 'http://localhost:5173';
@@ -33,6 +34,8 @@ let staticServer = null;
 let allowWindowClose = false;
 let scaleBackgroundEnabled = false;
 let notificationsBackgroundEnabled = false;
+let workTimerRunning = false;
+let timerFloat = null;
 let tray = null;
 let updateDownloaded = false;
 let quittingForUpdate = false;
@@ -203,6 +206,7 @@ function createWindow() {
   });
 
   setupCloseGuard(mainWindow);
+  timerFloat?.attach(mainWindow);
 
   // Chromium caret browsing (F7) draws a text caret on every click.
   mainWindow.webContents.on('before-input-event', (event, input) => {
@@ -276,9 +280,14 @@ function syncBackgroundTray() {
     tray.destroy();
     tray = null;
   }
-  // A hidden window is throttled by Chromium; reminders need the Realtime socket alive.
+  syncBackgroundThrottling();
+}
+
+// A hidden window is throttled by Chromium; reminders need the Realtime socket alive,
+// and a running work timer needs its half-hour chime on time.
+function syncBackgroundThrottling() {
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.setBackgroundThrottling(!notificationsBackgroundEnabled);
+    mainWindow.webContents.setBackgroundThrottling(!(notificationsBackgroundEnabled || workTimerRunning));
   }
 }
 
@@ -357,6 +366,13 @@ if (!gotSingleInstanceLock) {
     setupBrainIpc();
     setupCamerasIpc();
     setupVaultIpc();
+    timerFloat = setupTimerFloat({
+      onRunningChange: (running) => {
+        if (running === workTimerRunning) return;
+        workTimerRunning = running;
+        syncBackgroundThrottling();
+      },
+    });
     if (app.isPackaged) {
       await clearStaleServiceWorkers();
     }
@@ -391,6 +407,7 @@ if (!gotSingleInstanceLock) {
   app.on('before-quit', () => {
     allowWindowClose = true;
     stopBackgroundModes();
+    timerFloat?.destroy();
     if (tray && !tray.isDestroyed()) {
       tray.destroy();
       tray = null;

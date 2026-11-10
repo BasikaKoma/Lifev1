@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="el">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+  <title>lifev1 timer</title>
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: transparent;
+      color: #f4f4f5;
+      font-family: Inter, "Segoe UI", system-ui, sans-serif;
+      user-select: none;
+    }
+
+    .card {
+      position: absolute;
+      inset: 8px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 7px;
+      padding: 10px 10px 10px 14px;
+      border: 2px solid #4ade80;
+      border-radius: 16px;
+      background: rgba(10, 10, 10, 0.95);
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+      cursor: grab;
+      -webkit-app-region: drag;
+    }
+
+    .card[hidden] {
+      display: none;
+    }
+
+    .card.deep {
+      background:
+        radial-gradient(120% 90% at 50% -10%, rgba(245, 193, 108, 0.22), transparent 58%),
+        rgba(16, 12, 8, 0.96);
+    }
+
+    .card.paused {
+      border-color: #fb923c;
+      background:
+        radial-gradient(120% 90% at 50% -20%, rgba(251, 146, 60, 0.3), transparent 58%),
+        rgba(22, 11, 4, 0.96);
+    }
+
+    .top {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      color: #a1a1aa;
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      flex-shrink: 0;
+      border-radius: 50%;
+      background: #4ade80;
+    }
+
+    .paused .dot {
+      background: #fb923c;
+    }
+
+    .kicker {
+      flex-shrink: 0;
+    }
+
+    .deep .kicker {
+      color: #f5c16c;
+    }
+
+    .paused .kicker {
+      color: #fb923c;
+    }
+
+    .title {
+      min-width: 0;
+      overflow: hidden;
+      color: #e4e4e7;
+      font-size: 12px;
+      font-weight: 650;
+      letter-spacing: 0;
+      text-overflow: ellipsis;
+      text-transform: none;
+      white-space: nowrap;
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .clock {
+      flex: 1;
+      font-size: 27px;
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1;
+    }
+
+    .paused .clock {
+      color: #fb923c;
+    }
+
+    .deep.over .clock {
+      color: #f5c16c;
+    }
+
+    button {
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      padding: 0;
+      border: none;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.1);
+      color: inherit;
+      cursor: pointer;
+      -webkit-app-region: no-drag;
+    }
+
+    button:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    button svg {
+      width: 12px;
+      height: 12px;
+      fill: currentColor;
+    }
+
+    .paused .toggle {
+      background: #fb923c;
+      color: #1c1008;
+    }
+
+    .stop:hover {
+      background: #f87171;
+      color: #1c0808;
+    }
+
+    .bar {
+      height: 3px;
+      overflow: hidden;
+      border-radius: 99px;
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .bar[hidden] {
+      display: none;
+    }
+
+    .bar span {
+      display: block;
+      width: 0;
+      height: 100%;
+      background: rgba(255, 255, 255, 0.5);
+    }
+
+    .deep .bar span {
+      background: #f5c16c;
+    }
+
+    .paused .bar span {
+      background: #fb923c;
+    }
+
+    @keyframes ring {
+      0%,
+      100% {
+        transform: scale(1);
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+      }
+
+      50% {
+        transform: scale(1.03);
+        border-color: #f5c16c;
+        box-shadow: 0 0 0 4px rgba(245, 193, 108, 0.6);
+      }
+    }
+
+    .card.ring {
+      animation: ring 0.9s ease-in-out 6;
+    }
+  </style>
+</head>
+<body>
+  <section id="card" class="card" hidden>
+    <div class="top">
+      <span class="dot"></span>
+      <span id="kicker" class="kicker"></span>
+      <span id="title" class="title"></span>
+    </div>
+    <div class="row">
+      <span id="clock" class="clock">00:00</span>
+      <button id="toggle" class="toggle" type="button"></button>
+      <button id="stop" class="stop" type="button" title="Stop" aria-label="Stop">
+        <svg viewBox="0 0 12 12" aria-hidden="true"><rect x="2" y="2" width="8" height="8" rx="1.5" /></svg>
+      </button>
+      <button id="open" type="button" title="Άνοιγμα του block στο lifev1" aria-label="Άνοιγμα στο lifev1">
+        <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M4 2h6v6H8.6V4.4L3 10 2 9l5.6-5.6H4z" /></svg>
+      </button>
+    </div>
+    <div id="bar" class="bar" hidden><span id="fill"></span></div>
+  </section>
+  <script>
+    const HALF_HOUR_MS = 30 * 60000;
+    const PAUSE_ICON = '<svg viewBox="0 0 12 12" aria-hidden="true"><rect x="2.5" y="2" width="2.5" height="8" rx="0.8" /><rect x="7" y="2" width="2.5" height="8" rx="0.8" /></svg>';
+    const PLAY_ICON = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3.5 2.2v7.6L10 6z" /></svg>';
+    const $ = (id) => document.getElementById(id);
+    const card = $('card');
+    let state = null;
+    let lastHalfHour = null;
+
+    function elapsedMs(now = Date.now()) {
+      if (!state) return 0;
+      const live = state.running && state.startedAt ? Math.max(0, now - state.startedAt) : 0;
+      return (Number(state.accumulatedMs) || 0) + live;
+    }
+
+    function formatClock(ms) {
+      const total = Math.max(0, Math.floor(ms / 1000));
+      const hours = Math.floor(total / 3600);
+      const minutes = Math.floor((total % 3600) / 60);
+      const seconds = total % 60;
+      const pad = (n) => String(n).padStart(2, '0');
+      return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${pad(minutes)}:${pad(seconds)}`;
+    }
+
+    function ring() {
+      card.classList.remove('ring');
+      void card.offsetWidth;
+      card.classList.add('ring');
+    }
+
+    function render() {
+      if (!state) return;
+      const ms = elapsedMs();
+      const targetMs = state.targetMinutes ? state.targetMinutes * 60000 : 0;
+      $('clock').textContent = formatClock(ms);
+      card.classList.toggle('over', Boolean(targetMs) && ms >= targetMs);
+      $('bar').hidden = !targetMs;
+      $('fill').style.width = targetMs ? `${Math.min(100, (ms / targetMs) * 100)}%` : '0';
+      const halfHour = Math.floor(ms / HALF_HOUR_MS);
+      if (lastHalfHour != null && halfHour > lastHalfHour && state.running) ring();
+      lastHalfHour = halfHour;
+    }
+
+    window.timerFloat.onState((next) => {
+      state = next || null;
+      card.hidden = !state;
+      if (!state) {
+        lastHalfHour = null;
+        return;
+      }
+      if (lastHalfHour == null) lastHalfHour = Math.floor(elapsedMs() / HALF_HOUR_MS);
+      card.classList.toggle('deep', state.deep);
+      card.classList.toggle('paused', !state.running);
+      $('kicker').textContent = state.deep ? 'Deep Work' : (state.blockType || 'Timer');
+      $('title').textContent = state.label && state.label !== state.blockType ? `· ${state.label}` : '';
+      const toggle = $('toggle');
+      toggle.innerHTML = state.running ? PAUSE_ICON : PLAY_ICON;
+      toggle.title = state.running ? 'Pause' : 'Resume';
+      toggle.setAttribute('aria-label', toggle.title);
+      render();
+    });
+
+    $('toggle').addEventListener('click', () => window.timerFloat.command(state?.running ? 'pause' : 'resume'));
+    $('stop').addEventListener('click', () => window.timerFloat.command('stop'));
+    $('open').addEventListener('click', () => window.timerFloat.command('open'));
+    // A leftover class would replay the pulse whenever the card is shown again.
+    card.addEventListener('animationend', () => card.classList.remove('ring'));
+    setInterval(render, 500);
+  </script>
+</body>
+</html>
