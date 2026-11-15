@@ -3,6 +3,7 @@ import {
   blockAccentColor,
   blockArea,
   blockKindLabel,
+  blockPausedMinutes,
   blockServesLabel,
   createEmptyBlockResource,
   createEmptyNoteSketch,
@@ -1111,6 +1112,10 @@ export function PathBlockWorkspace({
               <Fact label="Ώρα" value={formatBlockWindow(block.startTime, block.duration)} />
               <Fact label="Διάρκεια" value={formatDuration(block.duration)} />
               <TrackedFact key={block.id} minutes={block.workedMinutes} onChange={setTracked} />
+              <Fact
+                label="Παύσεις"
+                value={block.pauses?.length ? `${formatDuration(blockPausedMinutes(block))} (${block.pauses.length})` : null}
+              />
               <Fact label="Κατάσταση" value={block.status} />
             </dl>
             {block.status !== 'Done' && block.status !== 'Skipped' ? (

@@ -11,6 +11,7 @@ import {
 } from '../../lib/path/schema';
 import {
   blockActionProgress,
+  blockPauseMarks,
   blockSpanMinutes,
   blockStatusAt,
   blocksForDate,
@@ -99,6 +100,9 @@ function BlockCard({
   const reorderTarget = !timeline && onDropOnBlock;
   const tint = color || (block.status === 'Done' ? NO_GOAL_DONE_COLOR : null);
   const tasks = sortBlockActions(block.actions).filter((action) => String(action.text || '').trim());
+  // Where the timer stood still inside the block (paused and resumed).
+  const pauses = blockPauseMarks(block, liveMinutes);
+  const pausedMinutes = pauses.reduce((sum, pause) => sum + pause.minutes, 0);
 
   return (
     <article
@@ -165,6 +169,16 @@ function BlockCard({
         if (id) onDropOnBlock(id, block);
       } : undefined}
     >
+      {/* On the hour grid each stop is a band at its own minutes, so the block stays one card. */}
+      {timeline ? pauses.map((pause) => (
+        <span
+          key={pause.at}
+          className="path-block__pause"
+          style={{ top: Math.max(0, pause.at * PX_PER_MIN - 1), height: pause.minutes * PX_PER_MIN }}
+          title={`Paused ${pause.clock || ''} · ${formatDuration(pause.minutes)}`}
+          aria-hidden="true"
+        />
+      )) : null}
       <div className="path-block__summary">
         <div className="path-block__title">{block.title}</div>
         {meta || depth ? (
@@ -193,6 +207,11 @@ function BlockCard({
           </span>
           {progress ? <span className="path-pill path-pill--actions">{progress.done}/{progress.total} actions</span> : null}
           {block.workedMinutes ? <span className="path-pill">{formatDuration(block.workedMinutes)} tracked</span> : null}
+          {pauses.length ? (
+            <span className="path-pill" title={pauses.map((pause) => pause.clock).filter(Boolean).join(', ')}>
+              {formatDuration(pausedMinutes)} paused
+            </span>
+          ) : null}
         </div>
         <div className="path-block__actions">
           {block.status !== 'Done' && block.status !== 'Skipped' ? (

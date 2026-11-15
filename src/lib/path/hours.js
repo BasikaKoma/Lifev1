@@ -1,4 +1,4 @@
-import { blockAccentColor, blockKindLabel, isReminder, weekDates } from './schema';
+import { blockAccentColor, blockKindLabel, blockNetMinutes, isReminder, weekDates } from './schema';
 import { foldSearchText } from './logic';
 import { blockLoggedMinutes } from './areaTime';
 import { WORK_WHEEL_AREAS } from './wheel';
@@ -145,7 +145,7 @@ export function weekHours(bundle, weekStart) {
   const rows = new Map();
   for (const block of bundle?.blocks || []) {
     if (!dates.has(block.date) || isReminder(block)) continue;
-    const planned = block.status === 'Skipped' ? 0 : positive(block.duration);
+    const planned = block.status === 'Skipped' ? 0 : positive(blockNetMinutes(block));
     const logged = blockLoggedMinutes(block);
     if (!planned && !logged) continue;
     addEntry(rows, block, categoryOf(block), { planned, logged, color: blockAccentColor(block, colors.get(block.goalId)) });

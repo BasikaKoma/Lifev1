@@ -1,6 +1,6 @@
 import { localTodayIsoDate } from '../utils/selfDateUtils';
-import { nextBlockOrder } from './path/logic';
-import { blockArea, createEmptyBlock, isDeepWork, nowIso } from './path/schema';
+import { blockStartMinutes, nextBlockOrder } from './path/logic';
+import { blockArea, blockPausedMinutes, createEmptyBlock, isDeepWork, nowIso, toIsoDate } from './path/schema';
 import { queuePathSave, readPathBundleLocal } from './path/store';
 
 const STORAGE_KEY = 'lifev1-work-timer';
@@ -52,7 +52,8 @@ function readStored() {
       runs,
       blockStartedAt: Number(raw.blockStartedAt) || runs[0]?.start || null,
       recordedMs: Math.max(0, Number(raw.recordedMs) || 0),
-      splitOnResume: raw.splitOnResume === true,
+      // `splitOnResume`: the same fact in a timer saved before stops stayed inside their block.
+      windowWritten: raw.windowWritten === true || raw.splitOnResume === true,
     };
   } catch {
     return null;
@@ -217,46 +218,18 @@ function clockOf(ms) {
   return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-function recordBlockWork(blockId, minutes, window = null) {
-  if (!blockId || !minutes) return;
-  const bundle = readPathBundleLocal();
-  if (!bundle?.blocks?.some((block) => block.id === blockId)) return;
-  queuePathSave({
-    ...bundle,
-    blocks: bundle.blocks.map((block) => (
-      block.id === blockId
-        ? createEmptyBlock({
-          ...block,
-          ...window,
-          workedMinutes: (Number(block.workedMinutes) || 0) + minutes,
-          updatedAt: nowIso(),
-        })
-        : block
-    )),
-    updatedAt: nowIso(),
-  });
+/** The minute of the clock `ms` falls in, so a difference is the one between two shown times. */
+function clockMinute(ms) {
+  return Math.floor(ms / 60000);
 }
 
-/**
- * The fields to change so a block shows `minutes` tracked; null when nothing changes.
- * A length the timer wrote (equal to the tracked time) follows the correction.
- */
-export function workedMinutesPatch(block, minutes) {
-  const before = Number(block?.workedMinutes) || 0;
-  const after = Math.max(0, Math.round(Number(minutes) || 0));
-  if (!block || after === before) return null;
-  const timerLength = before > 0 && after > 0 && Number(block.duration) === before;
-  return { workedMinutes: after || null, ...(timerLength ? { duration: after } : null) };
-}
-
-/** Adds `deltaMinutes` (negative takes off) to a block's tracked time; returns the minutes that changed. */
-function shiftBlockWork(blockId, deltaMinutes) {
-  if (!blockId || !deltaMinutes) return 0;
+/** Saves what `change(block)` returns on the timer's block in Path; a block that is gone, or no change, saves nothing. */
+function patchBlock(blockId, change) {
+  if (!blockId) return;
   const bundle = readPathBundleLocal();
   const block = bundle?.blocks?.find((item) => item.id === blockId);
-  const before = Number(block?.workedMinutes) || 0;
-  const patch = workedMinutesPatch(block, before + deltaMinutes);
-  if (!patch) return 0;
+  const patch = block ? change(block) : null;
+  if (!patch) return;
   queuePathSave({
     ...bundle,
     blocks: bundle.blocks.map((item) => (
@@ -264,26 +237,133 @@ function shiftBlockWork(blockId, deltaMinutes) {
     )),
     updatedAt: nowIso(),
   });
-  return (patch.workedMinutes || 0) - before;
+}
+
+/** The block without a stop at its very end: one the timer came back from with no work to count. */
+function withoutTrailingPause(block) {
+  const pauses = block.pauses || [];
+  const last = pauses[pauses.length - 1];
+  if (!last || last.at + last.minutes < (Number(block.duration) || 0)) return null;
+  return { pauses: pauses.slice(0, -1), duration: last.at };
+}
+
+/**
+ * Writes the minutes worked since the last write on the timer's block. A pause (`pausing`)
+ * also moves the block to where the work really began. From then on (`windowWritten`) the
+ * block's length follows the timer: work adds to it here, a stop in `recordBlockPause`.
+ */
+function recordBlockWork(value, minutes, { pausing = false } = {}) {
+  patchBlock(value.blockId, (block) => {
+    const worked = (Number(block.workedMinutes) || 0) + minutes;
+    if (value.windowWritten) {
+      if (!minutes) return withoutTrailingPause(block);
+      return { workedMinutes: worked, duration: (Number(block.duration) || 0) + minutes };
+    }
+    if (!minutes) return null;
+    if (!pausing) return { workedMinutes: worked };
+    return {
+      workedMinutes: worked,
+      startTime: clockOf(value.blockStartedAt || value.startedAt),
+      duration: minutes,
+      pauses: [],
+    };
+  });
+}
+
+/** The stop that ends at `at` goes inside the block: from the end of the work written so far up to now. */
+function recordBlockPause(value, at) {
+  patchBlock(value.blockId, (block) => {
+    const from = Number(block.duration) || 0;
+    const minutes = clockMinute(at) - clockMinute(value.blockStartedAt) - from;
+    if (from <= 0 || minutes <= 0) return null;
+    return { pauses: [...(block.pauses || []), { at: from, minutes }], duration: from + minutes };
+  });
+}
+
+/** Takes `minutes` off the block's latest stop and off its length: the work after it began that much earlier. */
+function shortenLastPause(blockId, minutes) {
+  patchBlock(blockId, (block) => {
+    const pauses = block.pauses || [];
+    const last = pauses[pauses.length - 1];
+    if (!last) return null;
+    const cut = Math.min(minutes, last.minutes);
+    return {
+      pauses: cut < last.minutes
+        ? [...pauses.slice(0, -1), { at: last.at, minutes: last.minutes - cut }]
+        : pauses.slice(0, -1),
+      duration: Math.max(0, (Number(block.duration) || 0) - cut) || null,
+    };
+  });
+}
+
+/**
+ * When a block the timer already ran on today, and whose time is over, is started again:
+ * where it began, in ms. The work goes on in the same block and the time since is a stop
+ * inside it. Null for a block whose length is not the timer's (planned, or set by hand).
+ */
+function timedWindowStart(block, at) {
+  const start = blockStartMinutes(block);
+  const worked = Number(block?.workedMinutes) || 0;
+  const length = Number(block?.duration) || 0;
+  if (start == null || !block.startedAt || !worked || length !== worked + blockPausedMinutes(block)) return null;
+  const day = new Date(at);
+  if (block.date !== toIsoDate(day)) return null;
+  day.setHours(Math.floor(start / 60), start % 60, 0, 0);
+  return clockMinute(day.getTime()) + length <= clockMinute(at) ? day.getTime() : null;
+}
+
+/** A block's stops that still have work after them once it shows `worked` minutes tracked. */
+function pausesWithin(pauses, worked) {
+  const kept = [];
+  let paused = 0;
+  for (const pause of pauses || []) {
+    if (pause.at - paused >= worked) break;
+    kept.push(pause);
+    paused += pause.minutes;
+  }
+  return kept;
+}
+
+/**
+ * The fields to change so a block shows `minutes` tracked; null when nothing changes.
+ * A length the timer wrote (the tracked time and the stops in it) follows the correction,
+ * and a stop left with no work after it goes.
+ */
+export function workedMinutesPatch(block, minutes) {
+  const before = Number(block?.workedMinutes) || 0;
+  const after = Math.max(0, Math.round(Number(minutes) || 0));
+  if (!block || after === before) return null;
+  const hasPauses = Boolean(block.pauses?.length);
+  if (!after) return { workedMinutes: null, ...(hasPauses ? { pauses: [] } : null) };
+  const timerLength = before > 0 && Number(block.duration) === before + blockPausedMinutes(block);
+  if (!timerLength) return { workedMinutes: after };
+  const pauses = pausesWithin(block.pauses, after);
+  return {
+    workedMinutes: after,
+    duration: after + blockPausedMinutes({ pauses }),
+    ...(hasPauses ? { pauses } : null),
+  };
+}
+
+/** Adds `deltaMinutes` (negative takes off) to a block's tracked time; returns the minutes that changed. */
+function shiftBlockWork(blockId, deltaMinutes) {
+  if (!deltaMinutes) return 0;
+  let changed = 0;
+  patchBlock(blockId, (block) => {
+    const before = Number(block.workedMinutes) || 0;
+    const patch = workedMinutesPatch(block, before + deltaMinutes);
+    changed = patch ? (patch.workedMinutes || 0) - before : 0;
+    return patch;
+  });
+  return changed;
 }
 
 /** Marks the block started in Path, so every device drops its "starts in N′" reminder. */
 function markBlockStarted(blockId, at) {
-  const bundle = readPathBundleLocal();
-  const block = bundle?.blocks?.find((item) => item.id === blockId);
-  if (!block || block.startedAt) return;
-  queuePathSave({
-    ...bundle,
-    blocks: bundle.blocks.map((item) => (
-      item.id === blockId
-        ? createEmptyBlock({ ...item, startedAt: new Date(at).toISOString(), updatedAt: nowIso() })
-        : item
-    )),
-    updatedAt: nowIso(),
-  });
+  patchBlock(blockId, (block) => (block.startedAt ? null : { startedAt: new Date(at).toISOString() }));
 }
 
-/** Work resumed after a pause continues in a new block from now, so Path shows the gap. */
+/** Work resumed on a later day than it stopped continues in a new block there: a block does not run overnight. */
 function openNextBlock(blockId, at) {
   const bundle = readPathBundleLocal();
   const source = bundle?.blocks?.find((block) => block.id === blockId);
@@ -314,27 +394,37 @@ export function startBlockTimer(block) {
   if (session?.blockId === block.id) return;
   if (session) stopWorkTimer();
   const at = Date.now();
-  commit({
+  const stored = readPathBundleLocal().blocks?.find((item) => item.id === block.id) || block;
+  const began = timedWindowStart(stored, at);
+  const next = {
     id: `timer-${at}`,
     label: block.title || 'Time block',
     // A timer knows one thing about its block: 'Deep Work' (see isDeepWorkTimer), else a name to show.
     blockType: isDeepWork(block) ? 'Deep Work' : (blockArea(block) || 'Shallow Work'),
     blockId: block.id,
-    targetMinutes: Number(block.duration) > 0 ? Number(block.duration) : null,
+    // A block picked up again has its real length so far, not a planned one to count down.
+    targetMinutes: !began && Number(block.duration) > 0 ? Number(block.duration) : null,
     startedAt: at,
     accumulatedMs: 0,
     running: true,
     targetChimed: false,
     halfHoursChimed: 0,
     runs: [{ start: at, end: null }],
-    blockStartedAt: at,
+    // Where the block begins on the clock; the stops in it are counted from here.
+    blockStartedAt: began || at,
     recordedMs: 0,
-    splitOnResume: false,
-  });
+    // True once the block's start and length are the timer's own, not the planned ones.
+    windowWritten: Boolean(began),
+  };
+  commit(next);
   markBlockStarted(block.id, at);
+  if (began) recordBlockPause(next, at);
 }
 
-/** Pausing writes the block's time so far, ending it at the pause; the gap shows on the day line and in Path. */
+/**
+ * Pausing writes the block's time so far, ending it at the pause. Resuming goes on in the
+ * same block, with the stop inside it; the stop also shows as a gap on the day line.
+ */
 export function pauseWorkTimer() {
   if (!session?.running) return;
   const current = session;
@@ -348,30 +438,29 @@ export function pauseWorkTimer() {
     startedAt: null,
     runs: closeOpenRun(current, at),
     recordedMs: minutes ? elapsed : current.recordedMs,
-    splitOnResume: current.splitOnResume || Boolean(minutes),
+    windowWritten: current.windowWritten || Boolean(minutes),
   };
   commit(next);
   if (elapsed >= MIN_RECORD_MS) writeLogEntry(next);
-  if (minutes) {
-    recordBlockWork(current.blockId, minutes, {
-      startTime: clockOf(current.blockStartedAt || current.startedAt),
-      duration: minutes,
-    });
-  }
+  recordBlockWork(current, minutes, { pausing: true });
 }
 
 export function resumeWorkTimer() {
   if (!session || session.running) return;
   const at = Date.now();
-  const nextBlockId = session.splitOnResume ? openNextBlock(session.blockId, at) : null;
+  const runs = normalizeRuns(session.runs);
+  const pausedAt = runs[runs.length - 1]?.end || at;
+  const overnight = toIsoDate(new Date(pausedAt)) !== toIsoDate(new Date(at));
+  const nextBlockId = session.windowWritten && overnight ? openNextBlock(session.blockId, at) : null;
+  if (session.windowWritten && !nextBlockId) recordBlockPause(session, at);
   commit({
     ...session,
     blockId: nextBlockId || session.blockId,
     blockStartedAt: nextBlockId ? at : session.blockStartedAt,
-    splitOnResume: false,
+    windowWritten: nextBlockId ? false : session.windowWritten,
     running: true,
     startedAt: at,
-    runs: [...normalizeRuns(session.runs), { start: at, end: null }],
+    runs: [...runs, { start: at, end: null }],
   });
 }
 
@@ -387,8 +476,7 @@ export function stopWorkTimer() {
     });
   }
   commit(null);
-  if (!current.blockId) return;
-  recordBlockWork(current.blockId, minutesFromElapsed(elapsed - (current.recordedMs || 0)));
+  recordBlockWork(current, minutesFromElapsed(elapsed - (current.recordedMs || 0)));
 }
 
 /**
@@ -417,7 +505,11 @@ function correctedSession(current, at, deltaMs, recordedDeltaMs = 0) {
       runs: last >= 0
         ? runs.map((run, index) => (index === last ? { ...run, start: run.start - deltaMs } : run))
         : [{ start: (current.running && current.startedAt ? current.startedAt : at) - deltaMs, end: current.running ? null : at }],
-      blockStartedAt: current.blockStartedAt ? current.blockStartedAt - deltaMs : current.blockStartedAt,
+      // A start no pause has written yet moves back with the added time; a written one stays,
+      // and the next stop is that much shorter.
+      blockStartedAt: current.blockStartedAt && !current.windowWritten
+        ? current.blockStartedAt - deltaMs
+        : current.blockStartedAt,
     };
   }
   const runs = trimRunsTail(closeOpenRun(current, at), -deltaMs);
@@ -443,6 +535,8 @@ export function adjustWorkTimer(deltaMinutes) {
   if (minutes > 0) {
     // A paused timer has written its time already, so the addition goes to the block now.
     if (!current.running) recordedDeltaMs = shiftBlockWork(current.blockId, minutes) * 60000;
+    // Resumed late: the added time comes out of the stop before the latest run.
+    if (current.windowWritten) shortenLastPause(current.blockId, minutes);
   } else {
     const elapsed = sessionElapsedMs(current, at);
     const recorded = Math.min(elapsed, Number(current.recordedMs) || 0);

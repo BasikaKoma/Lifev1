@@ -353,6 +353,37 @@ export function applyBlockStatusMoment(block, at) {
   });
 }
 
+/**
+ * The stops inside a block whose timer was paused and resumed: `at` is minutes from the
+ * block's start to the stop, `minutes` how long it lasted. In order, none over another.
+ * The block's `duration` covers them, so its window runs from the first work to the last.
+ */
+function normalizeBlockPauses(raw) {
+  if (!Array.isArray(raw)) return [];
+  const pauses = raw
+    .map((item) => ({ at: Math.round(Number(item?.at)), minutes: Math.round(Number(item?.minutes)) }))
+    .filter((item) => item.at > 0 && item.minutes > 0)
+    .sort((a, b) => a.at - b.at);
+  let end = 0;
+  return pauses.filter((item) => {
+    if (item.at < end) return false;
+    end = item.at + item.minutes;
+    return true;
+  });
+}
+
+/** Minutes a block stood still between its start and its end. */
+export function blockPausedMinutes(block) {
+  return (block?.pauses || []).reduce((sum, pause) => sum + (Number(pause?.minutes) || 0), 0);
+}
+
+/** A block's length without the stops inside it: the time it plans or took. Null without a length. */
+export function blockNetMinutes(block) {
+  const length = Number(block?.duration);
+  if (!(length > 0)) return null;
+  return Math.max(0, length - blockPausedMinutes(block));
+}
+
 export function createEmptyBlock(overrides = {}) {
   const now = nowIso();
   return {
@@ -397,6 +428,8 @@ export function createEmptyBlock(overrides = {}) {
     carryOverDismissedFrom: asNullableString(overrides.carryOverDismissedFrom || overrides.carry_over_dismissed_from),
     // First time a work timer ran on the block; its start reminder is not sent after that.
     startedAt: asNullableString(overrides.startedAt || overrides.started_at),
+    // Stops inside the block, written by its work timer (see normalizeBlockPauses).
+    pauses: normalizeBlockPauses(overrides.pauses),
     statusAt: asNullableString(overrides.statusAt || overrides.status_at),
     completedAt: asNullableString(overrides.completedAt || overrides.completed_at),
     skippedAt: asNullableString(overrides.skippedAt || overrides.skipped_at),

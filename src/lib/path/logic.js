@@ -3,6 +3,8 @@ import {
   TEMPLATE_MEMORY_SINCE,
   WEEKDAYS,
   blockAccentColor,
+  blockNetMinutes,
+  blockPausedMinutes,
   createEmptyBlock,
   createEmptyBlockAction,
   createEmptyTemplate,
@@ -505,21 +507,41 @@ export function recentBlockTitles(blocks = [], { excludeId = null, query = '', l
 
 /**
  * Minutes a block covers on the schedule: its planned duration, or the time
- * worked on it (plus a running timer's minutes) when that ran longer.
+ * worked on it (plus a running timer's minutes) and the stops in between when
+ * that ran longer.
  */
 export function blockSpanMinutes(block, liveMinutes = 0) {
   const planned = toNum(block?.duration);
   const worked = (toNum(block?.workedMinutes) || 0) + (Number(liveMinutes) || 0);
-  const span = Math.max(planned > 0 ? planned : 0, worked);
+  const span = Math.max(planned > 0 ? planned : 0, worked ? worked + blockPausedMinutes(block) : 0);
   return span > 0 ? span : null;
 }
 
-/** Planned minutes for a day; skipped blocks do not count. */
+/**
+ * The stops inside a block, for showing: minutes from its start, length, and the
+ * clock times when the block has a start. One past the block's end is left out.
+ */
+export function blockPauseMarks(block, liveMinutes = 0) {
+  const span = blockSpanMinutes(block, liveMinutes);
+  if (!span) return [];
+  const start = blockStartMinutes(block);
+  return (block?.pauses || [])
+    .filter((pause) => pause.at < span)
+    .map((pause) => {
+      const minutes = Math.min(pause.minutes, span - pause.at);
+      return {
+        at: pause.at,
+        minutes,
+        clock: start == null ? null : `${minutesToClock(start + pause.at)}–${minutesToClock(start + pause.at + minutes)}`,
+      };
+    });
+}
+
+/** Planned minutes for a day; skipped blocks and the stops inside a block do not count. */
 export function plannedDayMinutes(blocks = []) {
   return (blocks || []).reduce((sum, block) => {
     if (block.status === 'Skipped') return sum;
-    const minutes = toNum(block.duration);
-    return minutes && minutes > 0 ? sum + minutes : sum;
+    return sum + (blockNetMinutes(block) || 0);
   }, 0);
 }
 

@@ -1833,6 +1833,23 @@
   overflow: hidden;
 }
 
+/* A stop inside a timed block (timer paused, then resumed): a hatched band at its own
+   minutes, behind the text, so the block reads as one card with the breaks in it. */
+.path-block__pause {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: -1;
+  min-height: 2px;
+  background:
+    repeating-linear-gradient(
+      135deg,
+      color-mix(in srgb, currentColor 15%, transparent) 0 1.5px,
+      transparent 1.5px 7px
+    ),
+    rgba(0, 0, 0, 0.42);
+}
+
 .path-block--timeline .path-block__time {
   font-size: 0.66rem;
   font-variant-numeric: tabular-nums;

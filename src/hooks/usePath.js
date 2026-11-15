@@ -17,6 +17,8 @@ import {
 import { loadPathBundle, queuePathSave, subscribePathBundle, subscribePathSave } from '../lib/path/store';
 import { deletePlanSourceFile, syncPlanSourceFile } from '../lib/path/planFile';
 import { blocksForDate, materializeWeekBlocks, nextBlockOrder, reorderDayBlocks } from '../lib/path/logic';
+import { joinTimerSplits } from '../lib/path/timerSplits';
+import { getWorkTimerSnapshot } from '../lib/workTimer';
 
 export function usePath() {
   const [bundle, setBundle] = useState(null);
@@ -26,7 +28,10 @@ export function usePath() {
   useEffect(() => {
     let cancelled = false;
     loadPathBundle()
-      .then((next) => {
+      .then((loaded) => {
+        // Sittings an older timer split into a block per resume become one block again.
+        const joined = joinTimerSplits(loaded, { busyBlockIds: [getWorkTimerSnapshot()?.blockId] });
+        const next = joined === loaded ? loaded : queuePathSave(joined);
         if (!cancelled) setBundle(next);
       })
       .catch((err) => {

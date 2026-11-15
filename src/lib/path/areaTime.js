@@ -1,4 +1,4 @@
-import { weekDates } from './schema';
+import { blockNetMinutes, weekDates } from './schema';
 import { LIFE_WHEEL_AREAS, normalizeLifeAreaId, normalizeWheel } from './wheel';
 
 function positive(value) {
@@ -49,7 +49,7 @@ export function weekLifeAreaTime(bundle, weekStart) {
 
   for (const block of bundle?.blocks || []) {
     if (!dates.has(block.date)) continue;
-    const planned = block.status === 'Skipped' ? 0 : positive(block.duration);
+    const planned = block.status === 'Skipped' ? 0 : positive(blockNetMinutes(block));
     const logged = blockLoggedMinutes(block);
     if (!planned && !logged) continue;
     const goal = block.goalId ? goalsById.get(block.goalId) || null : null;

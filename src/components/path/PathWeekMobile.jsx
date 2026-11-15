@@ -5,6 +5,7 @@ import {
   blockArea,
   blockDepthLabel,
   blockKindLabel,
+  blockPausedMinutes,
   isDeepWork,
   shiftWeek,
   startOfWeekMonday,
@@ -379,6 +380,7 @@ export function PathWeekMobile({
             blockDepthLabel(block),
             blockArea(block),
             block.workedMinutes ? formatDuration(block.workedMinutes) : null,
+            block.pauses?.length ? `παύσεις ${formatDuration(blockPausedMinutes(block))}` : null,
             progress ? `${progress.done}/${progress.total}` : null,
           ].filter(Boolean).join(' · ');
           const status = block.status === 'Planned' ? null : `${block.status}${stamp ? ` · ${stamp}` : ''}`;

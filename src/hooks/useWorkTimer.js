@@ -28,7 +28,7 @@ export function useWorkTimer() {
   return {
     session,
     elapsedMs,
-    // The running block's share: earlier runs were already written to their own blocks.
+    // The time not written on the block yet: a pause writes the runs before it.
     blockElapsedMs: Math.max(0, elapsedMs - (Number(session?.recordedMs) || 0)),
     startBlock: startBlockTimer,
     pause: pauseWorkTimer,

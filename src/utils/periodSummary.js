@@ -2,7 +2,7 @@ import { addDays, parseDate, toDateString } from './lifeline';
 import { buildSleepClock } from '../brain/snapshot/sleepClock';
 import { blockLoggedMinutes as loggedMinutes } from '../lib/path/areaTime';
 import { computeTrackStatus } from '../lib/path/logic';
-import { isDeepWork, isReminder, roleRank } from '../lib/path/schema';
+import { blockNetMinutes, isDeepWork, isReminder, roleRank } from '../lib/path/schema';
 import { collectCompletedItemsForDate, getDayEntry } from './lifelineDays';
 import { getSelfHubDayEntry } from './selfHubDays';
 import { summarizeCalls } from './callsDb';
@@ -210,7 +210,7 @@ function pct(done, total) {
 }
 
 function durationHours(blocks) {
-  const minutes = (blocks || []).reduce((sum, block) => sum + (Number(block.duration) || 0), 0);
+  const minutes = (blocks || []).reduce((sum, block) => sum + (blockNetMinutes(block) || 0), 0);
   return minutes ? minutes / 60 : 0;
 }
 
