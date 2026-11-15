@@ -714,28 +714,52 @@ html.is-mobile .quick-note-orb__chip {
 
 .path-mweek .path-wgoals__list {
   grid-template-columns: 1fr;
-  gap: 6px;
+  gap: 8px;
 }
 
-.path-mweek .path-wgoals__item {
-  grid-template-columns: 28px minmax(0, 1fr);
-  padding: 3px 12px;
+.path-mweek .path-wgoals__row {
+  grid-template-columns: 28px minmax(0, 1fr) 40px;
+  padding: 5px 6px 5px 15px;
 }
 
 .path-mweek .path-wgoals__box {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border-radius: 8px;
 }
 
 .path-mweek .path-wgoals__box svg {
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
 }
 
 .path-mweek .path-wgoals__text {
+  font-size: 17px;
+  padding: 8px 0;
+}
+
+.path-mweek .path-wgoals__toggle {
+  width: 40px;
+  height: 40px;
+}
+
+.path-mweek .path-wgoals__toggle svg {
+  width: 18px;
+  height: 18px;
+}
+
+.path-mweek .path-wgoals__peek {
+  margin-top: -4px;
+  padding: 0 46px 11px 55px;
+  font-size: 13px;
+}
+
+.path-mweek .path-wgoals__notes {
+  padding: 0 10px 10px 15px;
+}
+
+.path-mweek .path-wgoals__notes textarea {
   font-size: 16px;
-  padding: 6px 0;
 }
 
 .path-mweek__strip {

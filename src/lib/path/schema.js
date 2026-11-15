@@ -164,12 +164,14 @@ export function normalizePlanSourceFile(raw) {
 
 export const WEEK_GOAL_SLOTS = 3;
 const WEEK_GOAL_MAX_LENGTH = 240;
+const WEEK_GOAL_NOTES_MAX_LENGTH = 4000;
 
 function createWeekGoal(raw) {
   const source = raw && typeof raw === 'object' ? raw : {};
   // Spaces stay as typed; a goal with no text cannot be done.
   const text = asString(source.text).slice(0, WEEK_GOAL_MAX_LENGTH);
-  return { text, done: Boolean(source.done) && Boolean(text.trim()) };
+  const notes = asString(source.notes).slice(0, WEEK_GOAL_NOTES_MAX_LENGTH);
+  return { text, notes, done: Boolean(source.done) && Boolean(text.trim()) };
 }
 
 function weekGoalSlots(list) {
@@ -184,7 +186,7 @@ export function normalizeWeekGoals(raw) {
   for (const week of Object.keys(raw).sort()) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(week)) continue;
     const goals = weekGoalSlots(raw[week]);
-    if (goals.some((goal) => goal.text.trim())) weeks[week] = goals;
+    if (goals.some((goal) => goal.text.trim() || goal.notes.trim())) weeks[week] = goals;
   }
   return weeks;
 }
