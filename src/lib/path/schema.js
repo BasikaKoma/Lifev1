@@ -178,6 +178,15 @@ export function isDeepWork(item) {
   return item?.workDepth === 'Deep Work';
 }
 
+/**
+ * The tag a block's card carries for its type: 'Deep' or 'Shallow'. A shallow part of life
+ * gets none: a meal or a workout is not "shallow work".
+ */
+export function blockDepthLabel(item) {
+  if (isDeepWork(item)) return 'Deep';
+  return LIFE_BLOCK_AREAS.includes(item?.blockType) ? null : 'Shallow';
+}
+
 /** A word or two for a card, a list or a notification: the area, or with none whether the work is deep or shallow. */
 export function blockKindLabel(item) {
   return blockArea(item) || item?.workDepth || null;

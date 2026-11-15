@@ -2116,6 +2116,37 @@
   color: var(--path-muted);
 }
 
+/* Deep or shallow work, on the card: a small tag ahead of the time, so a narrow card cuts
+   the area short and not the tag. */
+.path-block__depth {
+  display: inline-block;
+  margin-right: 5px;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  line-height: 1.55;
+  text-transform: uppercase;
+  vertical-align: 1px;
+}
+
+.path-block__depth--deep {
+  background: rgba(245, 193, 108, 0.2);
+  color: #f5c16c;
+}
+
+.path-block__depth--shallow {
+  background: rgba(148, 163, 184, 0.16);
+  color: #94a3b8;
+}
+
+/* A done block is filled with its own colour: the tag follows the ink like the rest of the card. */
+.path-block--done.path-block--goal .path-block__depth {
+  background: color-mix(in srgb, currentColor 16%, transparent);
+  color: inherit;
+}
+
 .path-block--timing-deep {
   box-shadow: inset 3px 0 0 #f5c16c;
 }

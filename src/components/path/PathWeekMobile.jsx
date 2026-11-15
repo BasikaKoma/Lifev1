@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { blockAccentColor, blockKindLabel, isDeepWork, shiftWeek, startOfWeekMonday } from '../../lib/path/schema';
+import {
+  blockAccentColor,
+  blockArea,
+  blockDepthLabel,
+  blockKindLabel,
+  isDeepWork,
+  shiftWeek,
+  startOfWeekMonday,
+} from '../../lib/path/schema';
 import {
   blockActionProgress,
   blockSpanMinutes,
@@ -368,7 +376,8 @@ export function PathWeekMobile({
           const stamp = formatBlockStatusStamp(block);
           const sub = [
             formatBlockWindow(block.startTime, blockSpanMinutes(block)),
-            blockKindLabel(block),
+            blockDepthLabel(block),
+            blockArea(block),
             block.workedMinutes ? formatDuration(block.workedMinutes) : null,
             progress ? `${progress.done}/${progress.total}` : null,
           ].filter(Boolean).join(' · ');

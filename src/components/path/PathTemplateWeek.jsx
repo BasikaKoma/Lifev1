@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { WEEKDAYS, blockAccentColor, blockKindLabel, blockServesLabel, goalColorStyle } from '../../lib/path/schema';
+import { WEEKDAYS, blockAccentColor, blockArea, blockDepthLabel, blockServesLabel, goalColorStyle } from '../../lib/path/schema';
 import {
   formatBlockWindow,
   formatDuration,
@@ -46,7 +46,8 @@ function TemplateCard({ template, goal, variant, placement = null, dragging = fa
   const timeline = variant === 'timeline';
   useGrowthReport(cardRef, timeline && placement ? placement.height : null, onGrow);
   const short = timeline && placement && placement.height < 40;
-  const meta = [formatBlockWindow(template.startTime, template.duration), blockKindLabel(template)].filter(Boolean).join(' · ');
+  const meta = [formatBlockWindow(template.startTime, template.duration), blockArea(template)].filter(Boolean).join(' · ');
+  const depth = blockDepthLabel(template);
   const color = blockAccentColor(template, goal?.color);
   const serves = blockServesLabel(template, goal);
 
@@ -100,7 +101,12 @@ function TemplateCard({ template, goal, variant, placement = null, dragging = fa
     >
       <div className="path-block__summary">
         <div className="path-block__title">{template.title}</div>
-        {meta ? <div className="path-block__time">{meta}</div> : null}
+        {meta || depth ? (
+          <div className="path-block__time">
+            {depth ? <span className={`path-block__depth path-block__depth--${depth.toLowerCase()}`}>{depth}</span> : null}
+            {meta}
+          </div>
+        ) : null}
       </div>
       {serves || template.minimumAction ? (
         <div className="path-block__more">
@@ -329,7 +335,7 @@ function TemplateWeekList({ days, goalsById, onOpen, onNew }) {
       <div className="path-mweek__list">
         {day.list.length ? day.list.map((template) => {
           const goal = goalsById.get(template.goalId);
-          const sub = [formatBlockWindow(template.startTime, template.duration), blockKindLabel(template), blockServesLabel(template, goal)]
+          const sub = [formatBlockWindow(template.startTime, template.duration), blockDepthLabel(template), blockArea(template), blockServesLabel(template, goal)]
             .filter(Boolean).join(' · ');
           return (
             <div

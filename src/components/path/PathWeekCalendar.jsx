@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   WEEKDAYS,
   blockAccentColor,
-  blockKindLabel,
+  blockArea,
+  blockDepthLabel,
   goalColorStyle,
   isDeepWork,
   isReminder,
@@ -92,8 +93,9 @@ function BlockCard({
   const meta = [
     timing ? liveClock : null,
     formatBlockWindow(block.startTime, blockSpanMinutes(block, liveMinutes)),
-    blockKindLabel(block),
+    blockArea(block),
   ].filter(Boolean).join(' · ');
+  const depth = blockDepthLabel(block);
   const reorderTarget = !timeline && onDropOnBlock;
   const tint = color || (block.status === 'Done' ? NO_GOAL_DONE_COLOR : null);
   const tasks = sortBlockActions(block.actions).filter((action) => String(action.text || '').trim());
@@ -165,7 +167,12 @@ function BlockCard({
     >
       <div className="path-block__summary">
         <div className="path-block__title">{block.title}</div>
-        {meta ? <div className="path-block__time">{meta}</div> : null}
+        {meta || depth ? (
+          <div className="path-block__time">
+            {depth ? <span className={`path-block__depth path-block__depth--${depth.toLowerCase()}`}>{depth}</span> : null}
+            {meta}
+          </div>
+        ) : null}
       </div>
       {/* What was written to do in the block; a card on the hour grid shows as many as its height fits. */}
       {tasks.length ? (
