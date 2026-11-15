@@ -345,10 +345,27 @@ function TimeRangeField({ startTime, duration, onChange }) {
 function TypeAndAreaFields({ item, onChange }) {
   return (
     <>
-      <PathField label="Type">
-        <select className="input" value={item.workDepth || WORK_DEPTHS[0]} onChange={(event) => onChange({ workDepth: event.target.value })}>
-          {WORK_DEPTHS.map((depth) => <option key={depth} value={depth}>{depth}</option>)}
-        </select>
+      <PathField label="Type" as="div">
+        <div className="path-choice" role="radiogroup" aria-label="Type">
+          {WORK_DEPTHS.map((depth) => {
+            const picked = (item.workDepth || WORK_DEPTHS[0]) === depth;
+            return (
+              <button
+                key={depth}
+                type="button"
+                role="radio"
+                aria-checked={picked}
+                className={`path-choice__option${picked ? ' path-choice__option--picked' : ''}`}
+                onClick={() => onChange({ workDepth: depth })}
+              >
+                <span className="path-choice__tick" aria-hidden="true">
+                  <svg viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7" /></svg>
+                </span>
+                {depth}
+              </button>
+            );
+          })}
+        </div>
       </PathField>
       <PathField label="Area">
         <select

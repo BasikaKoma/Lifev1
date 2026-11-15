@@ -636,6 +636,72 @@
   border-color: var(--color-accent-hover, #1e40af);
 }
 
+/* One of two (a block's Type): each option has a box, ticked on the one that is picked. */
+.path-choice {
+  display: flex;
+  gap: 8px;
+}
+
+.path-choice__option {
+  flex: 1 1 0;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-subtle);
+  color: var(--path-muted);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.path-choice__option:hover {
+  color: var(--color-text);
+  border-color: var(--color-border-light, #222222);
+}
+
+.path-choice__option:focus-visible {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-light);
+}
+
+.path-choice__tick {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid rgba(255, 255, 255, 0.32);
+  border-radius: 5px;
+  color: transparent;
+}
+
+.path-choice__tick svg {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.path-choice__option--picked {
+  color: var(--color-text);
+}
+
+.path-choice__option--picked .path-choice__tick {
+  border-color: var(--color-success, #34d399);
+  background: var(--color-success, #34d399);
+  color: #0b0d0e;
+}
+
 /* Title input with the titles of earlier blocks underneath. */
 .path-combo {
   position: relative;
