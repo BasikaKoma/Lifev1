@@ -1,4 +1,4 @@
-const { BrowserWindow, app, ipcMain, screen } = require('electron');
+const { BrowserWindow, app, globalShortcut, ipcMain, screen } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
@@ -6,6 +6,10 @@ const WIDTH = 272;
 const HEIGHT = 100;
 const MARGIN = 16;
 const COMMANDS = new Set(['pause', 'resume', 'stop', 'open']);
+// Pauses, resumes or starts the timer from any app; a tablet or mouse button can send these keys.
+const TOGGLE_SHORTCUT = 'Control+Alt+Shift+T';
+// A held key repeats: only a press after this much quiet counts.
+const SHORTCUT_QUIET_MS = 1100;
 
 function positionFile() {
   return path.join(app.getPath('userData'), 'timer-float.json');
@@ -114,6 +118,13 @@ function setupTimerFloat({ onRunningChange } = {}) {
     floatWindow.loadFile(path.join(__dirname, 'timerFloat.html'));
   };
 
+  const showMain = () => {
+    if (!alive(mainWindow)) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    if (!mainWindow.isVisible()) mainWindow.show();
+    mainWindow.focus();
+  };
+
   const shouldShow = () => {
     if (!state || !alive(mainWindow)) return false;
     return !mainWindow.isVisible() || mainWindow.isMinimized() || !mainWindow.isFocused();
@@ -148,13 +159,26 @@ function setupTimerFloat({ onRunningChange } = {}) {
   ipcMain.on('timer-float:command', (event, action) => {
     if (!alive(floatWindow) || event.sender !== floatWindow.webContents) return;
     if (!COMMANDS.has(action) || !alive(mainWindow)) return;
-    if (action === 'open') {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      if (!mainWindow.isVisible()) mainWindow.show();
-      mainWindow.focus();
-    }
+    if (action === 'open') showMain();
     mainWindow.webContents.send('timer-float:action', action);
   });
+
+  ipcMain.removeAllListeners('timer-float:show-app');
+  ipcMain.on('timer-float:show-app', (event) => {
+    if (alive(mainWindow) && event.sender === mainWindow.webContents) showMain();
+  });
+
+  let lastShortcutAt = 0;
+  globalShortcut.unregister(TOGGLE_SHORTCUT);
+  const registered = globalShortcut.register(TOGGLE_SHORTCUT, () => {
+    const now = Date.now();
+    const repeat = now - lastShortcutAt < SHORTCUT_QUIET_MS;
+    lastShortcutAt = now;
+    if (repeat || !alive(mainWindow)) return;
+    mainWindow.webContents.send('timer-float:action', 'toggle');
+  });
+  if (!registered) console.warn(`Timer shortcut ${TOGGLE_SHORTCUT} is taken by another app.`);
+  app.once('will-quit', () => globalShortcut.unregister(TOGGLE_SHORTCUT));
 
   const destroy = () => {
     if (alive(floatWindow)) floatWindow.destroy();

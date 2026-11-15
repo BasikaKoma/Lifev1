@@ -8,6 +8,7 @@ import {
   isDeepWorkTimer,
   markWorkTimerChimed,
 } from '../lib/workTimer';
+import { toggleWorkTimer } from '../lib/workTimerToggle';
 import './WorkTimer.css';
 
 const OFFSET_KEY = 'lifev1-work-timer-offset';
@@ -125,6 +126,8 @@ export function WorkTimer({ onOpenBlock }) {
     if (action === 'pause') pause();
     else if (action === 'resume') resume();
     else if (action === 'stop') stop();
+    // The desktop shortcut. With nothing to start, lifev1 comes forward to pick a block.
+    else if (action === 'toggle' && !toggleWorkTimer()) window.electronTimerFloat?.showApp?.();
     else if (action === 'open' && sessionRef.current) openBlockRef.current?.(sessionRef.current.blockId);
   }), [pause, resume, stop]);
 

@@ -73,6 +73,9 @@ contextBridge.exposeInMainWorld('electronTimerFloat', {
     ipcRenderer.on('timer-float:action', handler);
     return () => ipcRenderer.removeListener('timer-float:action', handler);
   },
+  showApp() {
+    ipcRenderer.send('timer-float:show-app');
+  },
 });
 
 contextBridge.exposeInMainWorld('electronCameras', {
