@@ -1,6 +1,6 @@
 import { localTodayIsoDate } from '../utils/selfDateUtils';
 import { nextBlockOrder } from './path/logic';
-import { createEmptyBlock, nowIso } from './path/schema';
+import { blockArea, createEmptyBlock, isDeepWork, nowIso } from './path/schema';
 import { queuePathSave, readPathBundleLocal } from './path/store';
 
 const STORAGE_KEY = 'lifev1-work-timer';
@@ -296,6 +296,7 @@ function openNextBlock(blockId, at) {
     projectTitle: source.projectTitle,
     title: source.title,
     blockType: source.blockType,
+    workDepth: source.workDepth,
     taskId: source.taskId,
     taskTitle: source.taskTitle,
     taskSource: source.taskSource,
@@ -316,7 +317,8 @@ export function startBlockTimer(block) {
   commit({
     id: `timer-${at}`,
     label: block.title || 'Time block',
-    blockType: block.blockType || 'Deep Work',
+    // A timer knows one thing about its block: 'Deep Work' (see isDeepWorkTimer), else a name to show.
+    blockType: isDeepWork(block) ? 'Deep Work' : (blockArea(block) || 'Shallow Work'),
     blockId: block.id,
     targetMinutes: Number(block.duration) > 0 ? Number(block.duration) : null,
     startedAt: at,

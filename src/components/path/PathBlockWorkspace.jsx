@@ -1,5 +1,15 @@
 import { forwardRef, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { blockAccentColor, blockServesLabel, createEmptyBlockResource, createEmptyNoteSketch, goalColorStyle, sortBlockActions } from '../../lib/path/schema';
+import {
+  blockAccentColor,
+  blockArea,
+  blockKindLabel,
+  blockServesLabel,
+  createEmptyBlockResource,
+  createEmptyNoteSketch,
+  goalColorStyle,
+  isDeepWork,
+  sortBlockActions,
+} from '../../lib/path/schema';
 import { lifeAreaById } from '../../lib/path/wheel';
 import { blockActionProgress, blockLinkedProject, blockStatusAt, defaultBlockDoneAt, formatBlockClock, formatBlockStatusStamp, formatBlockWindow, formatDuration, fromDatetimeLocalValue, reorderBlockActions, tasksForBlockProject, toDatetimeLocalValue } from '../../lib/path/logic';
 import { appendBlockActions, blockCarryOver, blockResultDraft, captureLineCount, carriedActionTargets, carryOverItems, parseCaptureLine, soleUrl, splitCaptureText, taskTextKey } from '../../lib/path/blockCapture';
@@ -676,7 +686,7 @@ export function PathBlockWorkspace({
 
   const subtitle = [
     blockServesLabel(block, goal),
-    block.blockType,
+    blockKindLabel(block),
     formatPageDate(block.date),
     formatBlockWindow(block.startTime, block.duration),
   ].filter(Boolean).join(' · ');
@@ -1095,7 +1105,8 @@ export function PathBlockWorkspace({
             <dl className="path-workspace__facts">
               <Fact label="Στόχος" value={goal?.title} />
               <Fact label="Τομέας" value={lifeAreaById(block.lifeAreaId)?.label} />
-              <Fact label="Τύπος" value={block.blockType} />
+              <Fact label="Τύπος" value={block.workDepth} />
+              <Fact label="Area" value={blockArea(block)} />
               <Fact label="Ημέρα" value={formatPageDate(block.date)} />
               <Fact label="Ώρα" value={formatBlockWindow(block.startTime, block.duration)} />
               <Fact label="Διάρκεια" value={formatDuration(block.duration)} />
@@ -1105,12 +1116,12 @@ export function PathBlockWorkspace({
             {block.status !== 'Done' && block.status !== 'Skipped' ? (
               <button
                 type="button"
-                className={`path-workspace__start${block.blockType === 'Deep Work' ? ' path-workspace__start--deep' : ''}${timing ? ' path-workspace__start--live' : ''}`}
+                className={`path-workspace__start${isDeepWork(block) ? ' path-workspace__start--deep' : ''}${timing ? ' path-workspace__start--live' : ''}`}
                 onClick={() => {
                   if (!timing) timer.startBlock(block);
                 }}
               >
-                {timing ? formatClock(timer.elapsedMs) : (block.blockType === 'Deep Work' ? 'Deep Work' : 'Έναρξη')}
+                {timing ? formatClock(timer.elapsedMs) : (isDeepWork(block) ? 'Deep Work' : 'Έναρξη')}
               </button>
             ) : null}
             <div className="path-workspace__status">

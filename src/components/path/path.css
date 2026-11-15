@@ -14,28 +14,6 @@
   box-sizing: border-box;
 }
 
-.path-view__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.path-view__title {
-  margin: 0;
-  font-size: 2rem;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-}
-
-.path-view__lede {
-  margin: 6px 0 0;
-  color: var(--path-muted);
-  font-size: 0.95rem;
-  max-width: 42rem;
-  line-height: 1.45;
-}
-
 .path-view__actions {
   display: flex;
   align-items: center;
@@ -89,6 +67,27 @@
   flex: 1 1 auto;
   min-width: 0;
   border-bottom: none;
+}
+
+/* The plan's PDF, beside the settings gear. */
+.path-tabs__file {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  border: 1px solid var(--path-border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--path-muted);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.path-tabs__file:hover,
+.path-tabs__file:focus-visible {
+  color: var(--color-text);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .path-tabs__settings {
@@ -741,6 +740,19 @@
   font-size: 1.05rem;
 }
 
+/* Prev / This week / Next: the app's green as outline and text, nothing filled in. */
+.path-week-nav .btn {
+  border: 1px solid var(--color-success, #34d399);
+  background: transparent;
+  color: var(--color-success, #34d399);
+}
+
+.path-week-nav .btn:hover,
+.path-week-nav .btn:focus-visible {
+  background: transparent;
+  filter: brightness(1.2);
+}
+
 /* The week's three goals, between the week nav and its blocks. */
 .path-wgoals {
   --path-wgoal-accent: #3b82f6;
@@ -987,6 +999,179 @@
   color: var(--path-muted);
 }
 
+/* Where the hours go, between the goals and the week (or the template week) itself:
+   a card per category, each opening to what it is made of. */
+.path-hours {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.path-settings .path-hours {
+  margin-top: 0;
+}
+
+.path-hours__head {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.path-hours__head h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.path-hours__total {
+  padding: 2px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  color: var(--path-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.path-hours__chev {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: var(--path-muted);
+  transition: transform 0.15s ease;
+}
+
+[aria-expanded='true'] > .path-hours__chev {
+  transform: rotate(180deg);
+}
+
+.path-hours__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  align-items: start;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.path-hours__item {
+  --path-hours-color: rgba(148, 163, 184, 0.7);
+  overflow: hidden;
+  border: 1px solid var(--path-border);
+  border-radius: 12px;
+  background: var(--path-card);
+}
+
+.path-hours__item--open {
+  border-color: var(--color-border-light, #222222);
+}
+
+.path-hours__row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto 14px;
+  align-items: center;
+  gap: 6px 8px;
+  padding: 9px 10px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.84rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.path-hours__row:hover,
+.path-hours__row:focus-visible {
+  background: rgba(255, 255, 255, 0.04);
+  outline: none;
+}
+
+.path-hours__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--path-hours-color);
+}
+
+.path-hours__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 650;
+}
+
+/* Done in full strength, planned beside it in grey. */
+.path-hours__nums {
+  color: var(--path-muted);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.path-hours__nums b {
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.path-hours__bar {
+  grid-column: 1 / -1;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.path-hours__bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--path-hours-color);
+}
+
+.path-hours__parts {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+  padding: 8px 10px 10px 26px;
+  border-top: 1px solid var(--path-border);
+  list-style: none;
+  font-size: 0.78rem;
+}
+
+.path-hours__parts li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.path-hours__part-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .path-cal-scroll {
   position: relative;
 }
@@ -1225,6 +1410,296 @@
   padding: 0;
 }
 
+/* Reminders: one line with a tick each, on top of a day's blocks. */
+.path-rems {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.path-rem {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 7px;
+  margin: 0 -4px;
+  padding: 3px 4px;
+  border-radius: 7px;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.path-rem:hover,
+.path-rem:focus-within {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.path-rem[draggable='true'] {
+  cursor: grab;
+}
+
+.path-rem__box {
+  width: 15px;
+  height: 15px;
+  margin-top: 1px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1.5px solid rgba(255, 255, 255, 0.32);
+  border-radius: 5px;
+  background: transparent;
+  color: transparent;
+  cursor: pointer;
+}
+
+.path-rem__box svg {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.path-rem__box:hover {
+  border-color: #34d399;
+}
+
+.path-rem--done .path-rem__box {
+  border-color: #34d399;
+  background: #34d399;
+  color: #0b0d0e;
+}
+
+.path-rem__text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: text;
+}
+
+.path-rem__title {
+  max-width: 100%;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  overflow-wrap: break-word;
+}
+
+.path-rem--done .path-rem__title,
+.path-rem--skipped .path-rem__title {
+  color: var(--path-muted);
+  font-weight: 500;
+  text-decoration: line-through;
+}
+
+.path-rem__time {
+  margin-right: 5px;
+  color: var(--path-accent);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+/* Left open on an earlier day and brought along to today; on its own line so it is never cut off. */
+.path-rem__from {
+  color: #fbbf24;
+  font-size: 0.68rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.path-rem__del {
+  padding: 0 2px;
+  border: none;
+  background: transparent;
+  color: var(--path-muted);
+  font-size: 0.7rem;
+  line-height: 1.5;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.path-rem:hover .path-rem__del,
+.path-rem:focus-within .path-rem__del {
+  opacity: 1;
+}
+
+.path-rem__del:hover {
+  color: #f87171;
+}
+
+.path-rem__input {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 2px 6px;
+  border: 1px solid var(--path-border);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+  font: inherit;
+  font-size: 0.78rem;
+  outline: none;
+}
+
+.path-rem__input:focus {
+  border-color: var(--path-accent);
+}
+
+.path-rem__input::placeholder {
+  color: var(--path-muted);
+}
+
+/* "+ Block" and "+ Υπενθύμιση" side by side; the open field takes the row. */
+.path-cal__adds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.path-rem-add:not(.path-rem-add--open) {
+  color: var(--path-muted);
+}
+
+.path-rem-add:not(.path-rem-add--open):hover {
+  color: var(--path-accent);
+}
+
+.path-rem-add--open {
+  flex: 1 1 100%;
+  display: flex;
+  gap: 6px;
+}
+
+.path-rem--dragging {
+  opacity: 0.35;
+}
+
+/* A reminder with a clock, at its hour on the grid: a dashed chip, so it does not read as a block. */
+.path-rem--grid {
+  position: absolute;
+  z-index: 10;
+  box-sizing: border-box;
+  align-items: center;
+  margin: 0;
+  padding: 4px 6px;
+  border: 1px dashed rgba(255, 255, 255, 0.24);
+  border-radius: 8px;
+  background: linear-gradient(rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.04)), var(--path-card);
+  transition: transform 0.14s ease;
+}
+
+.path-rem--grid:hover,
+.path-rem--grid:focus-within {
+  z-index: 30;
+  min-width: 180px;
+  background: linear-gradient(rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.08)), var(--path-card);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.5);
+}
+
+.path-rem--grid .path-rem__box {
+  margin-top: 0;
+}
+
+.path-rem--grid .path-rem__text {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 6px;
+}
+
+.path-rem--grid .path-rem__title {
+  -webkit-line-clamp: 1;
+}
+
+.path-rem--grid:hover .path-rem__title,
+.path-rem--grid:focus-within .path-rem__title {
+  -webkit-line-clamp: 4;
+}
+
+/* Closed, the chip's place on the grid gives the hour and the room goes to the text;
+   the exact clock and the delete show once it opens (hover or focus). */
+.path-rem--grid .path-rem__time,
+.path-rem--grid .path-rem__del {
+  display: none;
+}
+
+.path-rem--grid:hover .path-rem__time,
+.path-rem--grid:focus-within .path-rem__time {
+  display: inline;
+}
+
+.path-rem--grid:hover .path-rem__del,
+.path-rem--grid:focus-within .path-rem__del {
+  display: block;
+}
+
+/* An hour was clicked: block or reminder there. */
+.path-cal__pick {
+  position: absolute;
+  left: 3px;
+  z-index: 35;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: calc(100% - 6px);
+  width: max-content;
+  max-width: 300px;
+  padding: 4px 6px;
+  border: 1px solid var(--path-accent);
+  border-radius: 8px;
+  background: var(--color-surface, #0e1012);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.55);
+  font-size: 0.76rem;
+}
+
+.path-cal__pick--right {
+  left: auto;
+  right: 3px;
+}
+
+.path-cal__pick-time {
+  color: var(--path-accent);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.path-cal__pick button {
+  padding: 3px 10px;
+  border: 1px solid var(--path-border);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: inherit;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.path-cal__pick button:hover,
+.path-cal__pick button:focus-visible {
+  border-color: var(--path-accent);
+  color: var(--path-accent);
+  outline: none;
+}
+
+.path-cal__pick .path-rem__input {
+  min-width: 160px;
+}
+
 .path-block {
   position: relative;
   width: 100%;
@@ -1457,6 +1932,66 @@
   height: 8px;
   border-radius: 999px;
   flex-shrink: 0;
+}
+
+/* The block's own to-dos, in the card. On the hour grid the card's height cuts the list;
+   opening the card (hover or focus) shows all of it. */
+.path-block__tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+
+.path-block__tasks li {
+  position: relative;
+  padding-left: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.9;
+}
+
+.path-block__tasks li::before {
+  content: '';
+  position: absolute;
+  left: 1px;
+  top: 0.38em;
+  width: 6px;
+  height: 6px;
+  box-sizing: border-box;
+  border: 1.2px solid currentColor;
+  border-radius: 2px;
+  opacity: 0.75;
+}
+
+.path-block__tasks li.is-done {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+.path-block__tasks li.is-done::before {
+  background: currentColor;
+}
+
+.path-block:hover .path-block__tasks li,
+.path-block:focus-within .path-block__tasks li {
+  white-space: normal;
+}
+
+/* Above the hour grid a card has no set height, so it keeps to its first four until opened. */
+.path-block--list:not(:hover):not(:focus-within) .path-block__tasks li:nth-child(n + 5) {
+  display: none;
+}
+
+/* A half-hour card has room for its title only. */
+.path-block--short:not(:hover):not(:focus-within) .path-block__tasks,
+.path-block--dragging .path-block__tasks {
+  display: none;
 }
 
 .path-block__outcome {
@@ -3061,7 +3596,6 @@
     padding: 20px 16px 110px;
   }
 
-  .path-view__header,
   .path-detail {
     grid-template-columns: 1fr;
     display: flex;

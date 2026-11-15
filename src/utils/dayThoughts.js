@@ -3,7 +3,7 @@ import { toDateString } from './lifeline';
 import { computeCapacity, deriveCircadianContext, deriveCurrentState } from './capacityEngine';
 import { extractOuraSummary } from './ouraInfo';
 import { blocksForDate } from '../lib/path/logic';
-import { createEmptyBlock } from '../lib/path/schema';
+import { blockKindLabel, createEmptyBlock } from '../lib/path/schema';
 
 export const THOUGHT_PROMOTE_TYPES = ['task', 'idea', 'path-next'];
 export const EVENING_CLOSE_HOUR = 21;
@@ -67,7 +67,7 @@ export function appendThought(thoughts, text, context = {}, at = new Date()) {
     ouraReadiness: context.ouraReadiness,
     pathBlockId: block?.id,
     pathBlockTitle: block?.title,
-    pathBlockType: block?.blockType,
+    pathBlockType: blockKindLabel(block),
     pathBlockStartTime: block?.startTime,
   });
   return [...normalizeThoughts(thoughts), next];

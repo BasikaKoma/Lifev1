@@ -579,10 +579,6 @@ html.is-mobile .quick-note-orb__chip {
   gap: 16px;
 }
 
-.app--mobile .path-view__title {
-  font-size: 1.6rem;
-}
-
 /* Tabs scroll sideways in one row instead of wrapping "Review" onto a second line. */
 .app--mobile .path-tabs {
   flex-wrap: nowrap;
@@ -760,6 +756,94 @@ html.is-mobile .quick-note-orb__chip {
 
 .path-mweek .path-wgoals__notes textarea {
   font-size: 16px;
+}
+
+/* Hours per category on a phone: under the goals, one card a row so the names are not cut. */
+.path-mweek .path-hours {
+  margin-top: 0;
+}
+
+.path-mweek .path-hours__head {
+  min-height: 36px;
+}
+
+.path-mweek .path-hours__chev {
+  width: 14px;
+  height: 14px;
+}
+
+.path-mweek .path-hours__list {
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+
+.path-mweek .path-hours__row {
+  padding: 11px 10px;
+}
+
+/* The day's reminders on a phone, above its blocks: bigger ticks, delete always in reach. */
+.path-mrem {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.path-mrem .path-rem {
+  grid-template-columns: 26px minmax(0, 1fr) 36px;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 4px 4px 4px 12px;
+  font-size: 15px;
+}
+
+.path-mrem .path-rem__box {
+  width: 26px;
+  height: 26px;
+  margin-top: 0;
+  border-radius: 8px;
+}
+
+.path-mrem .path-rem__box svg {
+  width: 15px;
+  height: 15px;
+}
+
+.path-mrem .path-rem__text {
+  padding: 6px 0;
+}
+
+.path-mrem .path-rem__from {
+  font-size: 12px;
+}
+
+.path-mrem .path-rem__del {
+  min-height: 36px;
+  font-size: 14px;
+  opacity: 0.7;
+}
+
+/* 16px keeps iOS from zooming the page when the field is tapped. */
+.path-mrem .path-rem__input {
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 16px;
+}
+
+.path-mrem .path-rem-add__go {
+  flex: 0 0 44px;
+  min-height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--path-accent, #7dd3fc);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.path-mrem .path-rem-add__go:disabled {
+  opacity: 0.35;
 }
 
 .path-mweek__strip {

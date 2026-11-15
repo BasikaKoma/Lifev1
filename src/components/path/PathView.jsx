@@ -82,20 +82,6 @@ export function PathView({
   return (
     <section className={`path-view${blockOpen ? ' path-view--block' : ''}`}>
       {blockOpen ? null : (
-      <>
-      <header className="path-view__header">
-        <div>
-          <h1 className="path-view__title">Path</h1>
-          <p className="path-view__lede">
-            {path.plan.title || '90-day goals → weekly plan → time blocks → execution → measurements.'}
-            {path.plan.startDate && path.plan.endDate ? ` ${path.plan.startDate} – ${path.plan.endDate}` : ''}
-          </p>
-        </div>
-        <div className="path-view__actions">
-          {!importing ? <PathPlanFileButton sourceFile={path.plan.sourceFile} label="Open PDF" /> : null}
-        </div>
-      </header>
-
       <div className="path-tabs-row">
         <nav className="path-tabs" aria-label="Path">
           {PATH_TABS.map((item) => (
@@ -114,9 +100,11 @@ export function PathView({
             </button>
           ))}
         </nav>
+        {!importing ? (
+          <PathPlanFileButton sourceFile={path.plan.sourceFile} label="Open PDF" className="path-tabs__file" />
+        ) : null}
         <PathSettingsButton active={settingsOpen} onClick={() => setSettingsOpen((open) => !open)} />
       </div>
-      </>
       )}
 
       {path.error ? <p className="path-error">{path.error}</p> : null}

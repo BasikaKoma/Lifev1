@@ -3,6 +3,8 @@
  * Pure: the same inputs on any device give the same keys, so devices can prune each other's rows.
  */
 import { formatBlockWindow, pendingTemplateDays } from '../path/logic';
+import { blockKindLabel, isReminder } from '../path/schema';
+import { remindersForDate, isOpenReminder } from '../path/dayReminders';
 import { normalizeRoutineLog, normalizeRoutineTemplates } from '../../utils/lifelineRoutines';
 import { isRhythmDue, normalizeProjectRhythm, presentRhythmItem } from '../../utils/projectRhythm';
 
@@ -45,7 +47,7 @@ function windowDates(now) {
 /** Dated blocks plus weekly template days that Path has not turned into blocks yet. */
 function openBlocksForDate(pathBundle, isoDate) {
   const blocks = (pathBundle?.blocks || []).filter(
-    (block) => block?.date === isoDate && OPEN_BLOCK_STATUSES.has(block.status || 'Planned')
+    (block) => block?.date === isoDate && !isReminder(block) && OPEN_BLOCK_STATUSES.has(block.status || 'Planned')
   );
   const fromTemplates = pendingTemplateDays(pathBundle, [isoDate])
     .map(({ template }) => ({ ...template, id: null, templateId: template.id, date: isoDate, status: 'Planned' }));
@@ -74,8 +76,36 @@ function blockReminders(pathBundle, dates, settings) {
       const fireAt = new Date(startsAt.getTime() - lead * 60000);
       const when = lead ? `Ξεκινά σε ${lead}′` : 'Ξεκινά τώρα';
       const span = formatBlockWindow(block.startTime, block.duration);
-      const body = [when, span, block.blockType].filter(Boolean).join(' · ');
+      const body = [when, span, blockKindLabel(block)].filter(Boolean).join(' · ');
       out.push(reminder('block', blockKey(block), fireAt, blockTitle(block), body, '/path/week'));
+    }
+  }
+  return out;
+}
+
+/**
+ * Path reminders still open on a day. Seen from that day, so one left open today is
+ * also expected tomorrow; it drops out here as soon as it is ticked.
+ */
+function openDayReminders(pathBundle, isoDate) {
+  return remindersForDate(pathBundle?.blocks, isoDate, isoDate).filter(isOpenReminder);
+}
+
+function dayReminderLine(items) {
+  if (!items.length) return null;
+  if (items.length === 1) return `Υπενθύμιση: ${blockTitle(items[0])}`;
+  const shown = items.slice(0, 2).map(blockTitle).join(', ');
+  return `${items.length} υπενθυμίσεις: ${shown}${items.length > 2 ? '…' : ''}`;
+}
+
+/** A Path reminder that was given a clock rings at that time, on every day it is still open. */
+function dayReminderAlerts(pathBundle, dates) {
+  const out = [];
+  for (const isoDate of dates) {
+    for (const item of openDayReminders(pathBundle, isoDate)) {
+      const fireAt = atLocalTime(isoDate, item.startTime);
+      if (!fireAt) continue;
+      out.push(reminder('block', blockKey(item), fireAt, blockTitle(item), `Υπενθύμιση · ${item.startTime}`, '/path/week'));
     }
   }
   return out;
@@ -87,13 +117,18 @@ function dayPlanReminders(pathBundle, dates, settings) {
     const fireAt = atLocalTime(isoDate, settings.dayPlanTime);
     if (!fireAt) continue;
     const blocks = openBlocksForDate(pathBundle, isoDate);
-    if (!blocks.length) continue;
-    const first = blocks.find((block) => block.startTime) || blocks[0];
-    const count = blocks.length === 1 ? '1 block' : `${blocks.length} blocks`;
-    const firstLine = first.startTime ? `πρώτο στις ${first.startTime}: ${blockTitle(first)}` : blockTitle(first);
-    out.push(
-      reminder('dayplan', `dayplan:${isoDate}`, fireAt, 'Η μέρα σου', `${count} σήμερα · ${firstLine}`, '/self')
-    );
+    const toRemember = openDayReminders(pathBundle, isoDate);
+    if (!blocks.length && !toRemember.length) continue;
+    const parts = [];
+    if (blocks.length) {
+      const first = blocks.find((block) => block.startTime) || blocks[0];
+      const count = blocks.length === 1 ? '1 block' : `${blocks.length} blocks`;
+      const firstLine = first.startTime ? `πρώτο στις ${first.startTime}: ${blockTitle(first)}` : blockTitle(first);
+      parts.push(`${count} σήμερα`, firstLine);
+    }
+    const reminderLine = dayReminderLine(toRemember);
+    if (reminderLine) parts.push(reminderLine);
+    out.push(reminder('dayplan', `dayplan:${isoDate}`, fireAt, 'Η μέρα σου', parts.join(' · '), '/self'));
   }
   return out;
 }
@@ -150,6 +185,7 @@ export function buildReminders({ pathBundle, routineTemplates, lifelineDays, rhy
   const dates = windowDates(now);
   const all = [
     ...(settings.blocks ? blockReminders(pathBundle, dates, settings) : []),
+    ...(settings.blocks ? dayReminderAlerts(pathBundle, dates) : []),
     ...(settings.dayPlan ? dayPlanReminders(pathBundle, dates, settings) : []),
     ...(settings.routines ? routineReminders(routineTemplates, lifelineDays, dates) : []),
     ...(settings.rhythm ? rhythmReminders(rhythmProjects, dates) : []),

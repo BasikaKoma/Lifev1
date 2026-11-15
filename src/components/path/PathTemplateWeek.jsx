@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { WEEKDAYS, blockAccentColor, blockServesLabel, goalColorStyle } from '../../lib/path/schema';
+import { WEEKDAYS, blockAccentColor, blockKindLabel, blockServesLabel, goalColorStyle } from '../../lib/path/schema';
 import {
   formatBlockWindow,
   formatDuration,
@@ -46,7 +46,7 @@ function TemplateCard({ template, goal, variant, placement = null, dragging = fa
   const timeline = variant === 'timeline';
   useGrowthReport(cardRef, timeline && placement ? placement.height : null, onGrow);
   const short = timeline && placement && placement.height < 40;
-  const meta = [formatBlockWindow(template.startTime, template.duration), template.blockType].filter(Boolean).join(' · ');
+  const meta = [formatBlockWindow(template.startTime, template.duration), blockKindLabel(template)].filter(Boolean).join(' · ');
   const color = blockAccentColor(template, goal?.color);
   const serves = blockServesLabel(template, goal);
 
@@ -329,7 +329,7 @@ function TemplateWeekList({ days, goalsById, onOpen, onNew }) {
       <div className="path-mweek__list">
         {day.list.length ? day.list.map((template) => {
           const goal = goalsById.get(template.goalId);
-          const sub = [formatBlockWindow(template.startTime, template.duration), template.blockType, blockServesLabel(template, goal)]
+          const sub = [formatBlockWindow(template.startTime, template.duration), blockKindLabel(template), blockServesLabel(template, goal)]
             .filter(Boolean).join(' · ');
           return (
             <div

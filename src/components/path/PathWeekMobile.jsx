@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { blockAccentColor, shiftWeek, startOfWeekMonday } from '../../lib/path/schema';
+import { blockAccentColor, blockKindLabel, isDeepWork, shiftWeek, startOfWeekMonday } from '../../lib/path/schema';
 import {
   blockActionProgress,
   blockSpanMinutes,
@@ -11,8 +11,11 @@ import {
   formatDuration,
   toDatetimeLocalValue,
 } from '../../lib/path/logic';
+import { remindersForDate } from '../../lib/path/dayReminders';
 import { formatClock } from '../../lib/workTimer';
 import { readableInk, solidColor } from '../../utils/colorInk';
+import { PathHoursPanel } from './PathHours';
+import { PathDayReminders, PathReminderAdd } from './PathReminders';
 import { PathWeekGoals } from './PathWeekGoals';
 
 const DAY_SHORT = ['Δευ', 'Τρί', 'Τετ', 'Πέμ', 'Παρ', 'Σάβ', 'Κυρ'];
@@ -104,7 +107,7 @@ function BlockActionSheet({
   const canStart = !timing && block.status !== 'Done' && block.status !== 'Skipped';
   const meta = [
     formatBlockWindow(block.startTime, blockSpanMinutes(block)),
-    block.blockType,
+    blockKindLabel(block),
     dayIndex >= 0 ? `${DAY_LONG[dayIndex]} ${Number(block.date.slice(8))}` : null,
   ].filter(Boolean).join(' · ');
 
@@ -132,7 +135,7 @@ function BlockActionSheet({
         ) : canStart ? (
           <button type="button" className="path-msheet__primary" onClick={thenClose(() => onStart(block))}>
             <Icon name="play" />
-            {block.blockType === 'Deep Work' ? 'Ξεκίνα deep work' : 'Ξεκίνα'}
+            {isDeepWork(block) ? 'Ξεκίνα deep work' : 'Ξεκίνα'}
           </button>
         ) : null}
 
@@ -222,6 +225,7 @@ export function PathWeekMobile({
   today,
   weekStart,
   timer,
+  hours = null,
   onWeekStart,
   onStatus,
   onDoneAt,
@@ -251,6 +255,10 @@ export function PathWeekMobile({
   const doneCount = weekBlocks.filter((block) => block.status === 'Done').length;
   const trackedMinutes = weekBlocks.reduce((sum, block) => sum + (Number(block.workedMinutes) || 0), 0);
   const dayBlocks = blocksByDate[selectedDate] || [];
+  const dayReminders = useMemo(
+    () => remindersForDate(path.blocks, selectedDate, today),
+    [path.blocks, selectedDate, today]
+  );
   const selectedIndex = dates.indexOf(selectedDate);
   const sheetBlock = sheetBlockId ? path.blocks.find((block) => block.id === sheetBlockId) || null : null;
   const isCurrentWeek = weekStart === startOfWeekMonday();
@@ -304,6 +312,9 @@ export function PathWeekMobile({
 
       <PathWeekGoals key={weekStart} path={path} weekStart={weekStart} />
 
+      {/* Closed until asked for: on a phone the day's blocks come first. */}
+      {hours ? <PathHoursPanel data={hours} defaultOpen={false} /> : null}
+
       <div className="path-mweek__strip" role="tablist" aria-label="Μέρες εβδομάδας">
         {dates.map((date, index) => {
           const blocks = blocksByDate[date];
@@ -344,6 +355,12 @@ export function PathWeekMobile({
         )}
       </div>
 
+      <section className="path-mrem" aria-label="Υπενθυμίσεις">
+        <PathDayReminders path={path} reminders={dayReminders} today={today} onDelete={onDeleteBlock} />
+        {/* Not on days gone by: an open reminder there would show on today at once. */}
+        {selectedDate >= today ? <PathReminderAdd key={selectedDate} path={path} date={selectedDate} alwaysOpen /> : null}
+      </section>
+
       <div className="path-mweek__list" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
         {dayBlocks.length ? dayBlocks.map((block) => {
           const timing = timer.session?.blockId === block.id;
@@ -351,7 +368,7 @@ export function PathWeekMobile({
           const stamp = formatBlockStatusStamp(block);
           const sub = [
             formatBlockWindow(block.startTime, blockSpanMinutes(block)),
-            block.blockType,
+            blockKindLabel(block),
             block.workedMinutes ? formatDuration(block.workedMinutes) : null,
             progress ? `${progress.done}/${progress.total}` : null,
           ].filter(Boolean).join(' · ');

@@ -205,7 +205,7 @@ export function NotificationSettings({ user, ouraConnected = false }) {
           disabled={optionsDisabled}
           onChange={(e) => update({ blocks: e.target.checked })}
         />
-        <span>Path blocks με ώρα έναρξης</span>
+        <span>Path blocks με ώρα έναρξης και υπενθυμίσεις με ώρα</span>
       </label>
       {settings.blocks && (
         <select

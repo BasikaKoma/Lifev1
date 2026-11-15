@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { localTodayIsoDate } from '../../utils/selfDateUtils';
 import {
   createEmptyBlock,
+  isReminder,
   shiftWeek,
   startOfWeekMonday,
   weekDates,
@@ -16,6 +17,8 @@ import { useWorkTimer } from '../../hooks/useWorkTimer';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { BlockFields, PathModal, saveBlockDraft } from './PathFields';
 import { PathBlockWorkspace } from './PathBlockWorkspace';
+import { weekHours } from '../../lib/path/hours';
+import { PathHoursPanel } from './PathHours';
 import { PathWeekCalendar } from './PathWeekCalendar';
 import { PathWeekGoals } from './PathWeekGoals';
 import { PathWeekMobile } from './PathWeekMobile';
@@ -38,6 +41,10 @@ export function PathWeek({
   const timer = useWorkTimer();
   const today = localTodayIsoDate();
   const dates = useMemo(() => weekDates(weekStart), [weekStart]);
+  const hours = useMemo(
+    () => weekHours({ blocks: path.blocks, templates: path.templates, goals: path.goals }, weekStart),
+    [path.blocks, path.templates, path.goals, weekStart],
+  );
 
   useEffect(() => {
     path.ensureWeek(weekStart);
@@ -150,6 +157,7 @@ export function PathWeek({
           today={today}
           weekStart={weekStart}
           timer={timer}
+          hours={hours}
           onWeekStart={onWeekStart}
           onStatus={requestStatus}
           onDoneAt={(item, value) => {
@@ -173,6 +181,8 @@ export function PathWeek({
       </div>
 
       <PathWeekGoals key={weekStart} path={path} weekStart={weekStart} />
+
+      <PathHoursPanel data={hours} />
 
       <div style={{ marginTop: 16 }}>
         <PathWeekCalendar
@@ -253,7 +263,7 @@ export function PathWeek({
 
       <ConfirmDialog
         open={Boolean(pendingDelete)}
-        title="Διαγραφή block"
+        title={isReminder(pendingDelete) ? 'Διαγραφή υπενθύμισης' : 'Διαγραφή block'}
         message={[
           pendingDelete?.title ? `Να διαγραφεί το «${pendingDelete.title}»;` : 'Να διαγραφεί αυτό το block;',
           pendingDelete?.templateId && path.templates.some((template) => template.id === pendingDelete.templateId)

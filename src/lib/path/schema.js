@@ -11,20 +11,41 @@ export const PATH_TABS = [
 
 export const GOAL_ROLES = ['Primary', 'Growth', 'Maintenance'];
 export const GOAL_STATUSES = ['Active', 'Paused', 'Completed', 'Archived'];
-export const BLOCK_TYPES = [
-  'Deep Work',
-  'Operations',
+/** The block form's "Type": how demanding the work is. */
+export const WORK_DEPTHS = ['Deep Work', 'Shallow Work'];
+
+/**
+ * A block's area: the part of a business or of life it is about. The form calls it "Area";
+ * it is stored as `blockType`, its name from when one list also said whether the work was
+ * deep, so that apps from before the split still read it and keep it when they save.
+ * 'Deep Work' was that list's default and now stands for "no area".
+ */
+export const NO_AREA = 'Deep Work';
+export const BUSINESS_BLOCK_AREAS = [
+  'Product development',
+  'Support',
+  'Technical issues',
+  'Marketing',
   'Sales / Demo',
+  'Operations',
   'Growth',
-  'Learning',
-  'Meditation',
+];
+export const LIFE_BLOCK_AREAS = [
   'Workout',
-  'Recovery',
   'Meal',
+  'Meditation',
+  'Recovery',
+  'Learning',
   'Planning',
   'Personal',
 ];
+export const BLOCK_TYPES = [NO_AREA, ...BUSINESS_BLOCK_AREAS, ...LIFE_BLOCK_AREAS];
 export const BLOCK_STATUSES = ['Planned', 'Done', 'Moved', 'Skipped'];
+/**
+ * A 'reminder' is one line to remember on a day: no length, never time on the plan.
+ * It is stored with the blocks so it syncs, moves between days and gets a status like one.
+ */
+export const BLOCK_KINDS = ['block', 'reminder'];
 export const METRIC_TYPES = ['Outcome', 'Action'];
 export const METRIC_DIRECTIONS = ['Increase', 'Decrease', 'Maintain'];
 export const METRIC_FREQUENCIES = ['Daily', 'Weekly', 'Monthly'];
@@ -139,6 +160,27 @@ function asNullableNumber(value) {
   if (value == null || value === '') return null;
   const num = typeof value === 'number' ? value : Number(String(value).replace(',', '.'));
   return Number.isFinite(num) ? num : null;
+}
+
+/** Deep or shallow. Blocks from before this was stored: the old 'Deep Work' type was deep, every other shallow. */
+function workDepthOf(overrides) {
+  const wasDeep = (overrides.blockType || overrides.block_type || NO_AREA) === NO_AREA;
+  return pick(WORK_DEPTHS, overrides.workDepth || overrides.work_depth, wasDeep ? 'Deep Work' : 'Shallow Work');
+}
+
+/** The area picked for a block or template; null when it has none. */
+export function blockArea(item) {
+  const area = item?.blockType;
+  return area && area !== NO_AREA ? area : null;
+}
+
+export function isDeepWork(item) {
+  return item?.workDepth === 'Deep Work';
+}
+
+/** A word or two for a card, a list or a notification: the area, or with none whether the work is deep or shallow. */
+export function blockKindLabel(item) {
+  return blockArea(item) || item?.workDepth || null;
 }
 
 /** Life-wheel area of a block or template that serves no goal; with a goal, the goal says what it serves. */
@@ -306,6 +348,7 @@ export function createEmptyBlock(overrides = {}) {
   const now = nowIso();
   return {
     id: overrides.id || createPathId('block'),
+    kind: pick(BLOCK_KINDS, overrides.kind, 'block'),
     goalId: asNullableString(overrides.goalId || overrides.goal_id),
     lifeAreaId: lifeAreaWithoutGoal(overrides),
     projectId: asNullableString(overrides.projectId || overrides.project_id),
@@ -319,7 +362,8 @@ export function createEmptyBlock(overrides = {}) {
     workedMinutes: asNullableNumber(
       overrides.workedMinutes != null ? overrides.workedMinutes : overrides.worked_minutes,
     ),
-    blockType: pick(BLOCK_TYPES, overrides.blockType || overrides.block_type, 'Deep Work'),
+    blockType: pick(BLOCK_TYPES, overrides.blockType || overrides.block_type, NO_AREA),
+    workDepth: workDepthOf(overrides),
     normalDuration: asNullableNumber(overrides.normalDuration || overrides.normal_duration),
     minimumDuration: asNullableNumber(overrides.minimumDuration || overrides.minimum_duration),
     minimumAction: asFreeText(overrides.minimumAction || overrides.minimum_action),
@@ -425,6 +469,10 @@ export function normalizeBlock(raw = {}) {
   return createEmptyBlock(raw);
 }
 
+export function isReminder(block) {
+  return block?.kind === 'reminder';
+}
+
 export function createEmptyTemplate(overrides = {}) {
   const now = nowIso();
   return {
@@ -435,7 +483,8 @@ export function createEmptyTemplate(overrides = {}) {
     weekday: Number.isInteger(overrides.weekday) ? overrides.weekday : 1,
     startTime: asNullableString(overrides.startTime || overrides.start_time),
     duration: asNullableNumber(overrides.duration),
-    blockType: pick(BLOCK_TYPES, overrides.blockType || overrides.block_type, 'Deep Work'),
+    blockType: pick(BLOCK_TYPES, overrides.blockType || overrides.block_type, NO_AREA),
+    workDepth: workDepthOf(overrides),
     normalDuration: asNullableNumber(overrides.normalDuration || overrides.normal_duration),
     minimumDuration: asNullableNumber(overrides.minimumDuration || overrides.minimum_duration),
     minimumAction: asFreeText(overrides.minimumAction || overrides.minimum_action),

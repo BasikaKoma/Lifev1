@@ -10,7 +10,7 @@ import {
 } from '../../../lib/assistant/openItems';
 import { getAssistantRun, pullAssistantNow } from '../../../lib/assistant/pull';
 import { defaultBlockDoneAt, formatBlockWindow } from '../../../lib/path/logic';
-import { parseLocalDate } from '../../../lib/path/schema';
+import { isReminder, parseLocalDate } from '../../../lib/path/schema';
 import { setPathBlockStatus } from '../../../lib/path/store';
 import { localTodayIsoDate } from '../../../utils/selfDateUtils';
 import { getDayEntry } from '../../../utils/lifelineDays';
@@ -30,7 +30,7 @@ function dayLabel(isoDate) {
 function rowMeta(row, today) {
   const parts = [];
   if (row.kind === 'block') {
-    parts.push(openSourceLabel('day'));
+    parts.push(isReminder(row.block) ? 'Υπενθύμιση' : openSourceLabel('day'));
     const slot = formatBlockWindow(row.block.startTime, row.block.duration);
     if (slot) parts.push(slot);
   } else {
@@ -126,7 +126,8 @@ export function SelfOpenItems({ lifelineDays = {}, onUpdateLifelineDay, pathBund
   // Plan blocks change in Path itself, so Path, Self and Lifeline see the same status.
   const markBlock = (block, status) => {
     setError('');
-    const at = status === 'Done' ? defaultBlockDoneAt(block) : undefined;
+    // A reminder is done when it is ticked; a block keeps its own day (see defaultBlockDoneAt).
+    const at = status === 'Done' && !isReminder(block) ? defaultBlockDoneAt(block) : undefined;
     if (!setPathBlockStatus(block.id, status, at)) {
       setError('Το block δεν βρέθηκε στο Path.');
     }

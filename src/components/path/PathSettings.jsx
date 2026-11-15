@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { createEmptyTemplate } from '../../lib/path/schema';
 import { formatDuration, plannedDayMinutes, withBlockDuration } from '../../lib/path/logic';
+import { templateHours } from '../../lib/path/hours';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { PathModal, TemplateFields } from './PathFields';
+import { PathHoursPanel } from './PathHours';
 import { PathTemplateWeek } from './PathTemplateWeek';
 
 export function PathSettingsButton({ active, onClick }) {
@@ -31,6 +33,10 @@ export function PathSettings({ path }) {
   const goals = path.goals.filter((goal) => goal.status !== 'Archived');
   const isExisting = Boolean(editor && path.templates.some((template) => template.id === editor.id));
   const weekMinutes = plannedDayMinutes(path.templates.filter((template) => template.enabled));
+  const hours = useMemo(
+    () => templateHours({ templates: path.templates, blocks: path.blocks, goals: path.goals }),
+    [path.templates, path.blocks, path.goals],
+  );
 
   const openNew = (weekday = 1, startTime = null) => {
     // No end yet: a template saved without one gets the default length, like a block.
@@ -73,6 +79,8 @@ export function PathSettings({ path }) {
           <button type="button" className="btn btn--primary" onClick={() => openNew()}>Νέο template</button>
         </div>
       </header>
+
+      <PathHoursPanel data={hours} planOnly />
 
       <PathTemplateWeek
         templates={path.templates}

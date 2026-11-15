@@ -1,11 +1,16 @@
 import { useMemo, useState } from 'react';
 import {
   BLOCK_STATUSES,
-  BLOCK_TYPES,
+  BUSINESS_BLOCK_AREAS,
   GOAL_COLORS,
   GOAL_ROLES,
   GOAL_STATUSES,
+  LIFE_BLOCK_AREAS,
+  NO_AREA,
   WEEKDAYS,
+  WORK_DEPTHS,
+  blockArea,
+  blockKindLabel,
   blockServesLabel,
   normalizeGoalColor,
   weekdayFromDate,
@@ -244,7 +249,7 @@ function BlockTitleField({ block, blocks, goals, onChange, onPick, onSubmit }) {
           <ul className="path-combo__list" id="path-block-titles" role="listbox">
             {options.map((option, index) => {
               const goal = goals.find((item) => item.id === option.goalId);
-              const meta = [blockServesLabel(option, goal), option.blockType, formatDuration(option.duration)].filter(Boolean).join(' · ');
+              const meta = [blockServesLabel(option, goal), blockKindLabel(option), formatDuration(option.duration)].filter(Boolean).join(' · ');
               return (
                 <li key={option.title} role="option" aria-selected={index === active}>
                   <button
@@ -332,6 +337,44 @@ function TimeRangeField({ startTime, duration, onChange }) {
   );
 }
 
+/**
+ * "Type" and "Area" of a block or template. Type says how demanding the work is. Area says
+ * which part of a business or of life it is; the week's "Κατανομή ωρών" counts hours by it.
+ * Picking a part of life (a meal, a workout) sets the type to shallow: it is not deep work.
+ */
+function TypeAndAreaFields({ item, onChange }) {
+  return (
+    <>
+      <PathField label="Type">
+        <select className="input" value={item.workDepth || WORK_DEPTHS[0]} onChange={(event) => onChange({ workDepth: event.target.value })}>
+          {WORK_DEPTHS.map((depth) => <option key={depth} value={depth}>{depth}</option>)}
+        </select>
+      </PathField>
+      <PathField label="Area">
+        <select
+          className="input"
+          value={blockArea(item) || ''}
+          onChange={(event) => {
+            const area = event.target.value;
+            onChange({
+              blockType: area || NO_AREA,
+              ...(LIFE_BLOCK_AREAS.includes(area) ? { workDepth: 'Shallow Work' } : {}),
+            });
+          }}
+        >
+          <option value="">No area</option>
+          <optgroup label="Business">
+            {BUSINESS_BLOCK_AREAS.map((area) => <option key={area} value={area}>{area}</option>)}
+          </optgroup>
+          <optgroup label="Life">
+            {LIFE_BLOCK_AREAS.map((area) => <option key={area} value={area}>{area}</option>)}
+          </optgroup>
+        </select>
+      </PathField>
+    </>
+  );
+}
+
 /** Saves a block from the form. "Repeat every week" also adds the weekly template it then belongs to. */
 export function saveBlockDraft(path, draft) {
   const { repeatWeekly, ...block } = withBlockDuration(draft);
@@ -341,8 +384,8 @@ export function saveBlockDraft(path, draft) {
 }
 
 /**
- * The block form. A new block (`isNew`) asks only for what places it on the week; status and
- * minimum action show when editing. `allowRepeat` offers to repeat it weekly (saved through
+ * The block form. A new block (`isNew`) asks only for what places it on the week; status
+ * shows when editing. `allowRepeat` offers to repeat it weekly (saved through
  * `saveBlockDraft`). `onSubmit` saves on Enter in the title.
  */
 export function BlockFields({
@@ -379,13 +422,15 @@ export function BlockFields({
     };
   };
 
-  // A remembered title fills what is still open: the goal or life area if neither is chosen, the length if no end is set.
+  // A remembered title brings its type and area, and fills what is still open: the goal or
+  // life area if neither is chosen, the length if no end is set.
   const pickTitle = (option) => {
     const servesOpen = !block.goalId && !block.lifeAreaId;
     const goal = servesOpen ? goals.find((item) => item.id === option.goalId) : null;
     onChange({
       title: option.title,
       ...(option.blockType ? { blockType: option.blockType } : {}),
+      ...(option.workDepth ? { workDepth: option.workDepth } : {}),
       ...(goal ? goalPatch(goal) : {}),
       ...(servesOpen && !goal && option.lifeAreaId ? { lifeAreaId: option.lifeAreaId } : {}),
       ...(!(Number(block.duration) > 0) && option.duration > 0 ? { duration: option.duration } : {}),
@@ -393,14 +438,12 @@ export function BlockFields({
   };
 
   const showStatus = !isNew;
-  // Decided once, when the form opens: clearing the text must not take the field away mid-edit.
-  const [showMinimumAction] = useState(() => !isNew && Boolean(block.minimumAction));
   const weekdayLabel = WEEKDAYS.find((day) => day.id === weekdayFromDate(block.date))?.label;
 
   return (
     <div className="path-form">
       <BlockTitleField block={block} blocks={blocks} goals={goals} onChange={onChange} onPick={pickTitle} onSubmit={onSubmit} />
-      <PathField label="Goal or life area">
+      <PathField label="Goal or life area" wide>
         <PathServesSelect
           goalId={block.goalId}
           lifeAreaId={block.lifeAreaId}
@@ -411,20 +454,11 @@ export function BlockFields({
           })}
         />
       </PathField>
-      <PathField label="Type">
-        <select className="input" value={block.blockType || 'Deep Work'} onChange={(event) => onChange({ blockType: event.target.value })}>
-          {BLOCK_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
-        </select>
-      </PathField>
+      <TypeAndAreaFields item={block} onChange={onChange} />
       <PathField label="Date">
         <input className="input" type="date" value={block.date || ''} onChange={(event) => onChange({ date: event.target.value || null })} />
       </PathField>
       <TimeRangeField startTime={block.startTime} duration={block.duration} onChange={onChange} />
-      {showMinimumAction ? (
-        <PathField label="Minimum action" wide>
-          <input className="input" value={block.minimumAction || ''} onChange={(event) => onChange({ minimumAction: event.target.value || null })} />
-        </PathField>
-      ) : null}
       {showStatus ? (
         <PathField label="Status">
           <select className="input" value={block.status || 'Planned'} onChange={(event) => onChange({ status: event.target.value })}>
@@ -503,15 +537,8 @@ export function TemplateFields({ template, onChange, goals = [], onSubmit }) {
           {WEEKDAYS.map((day) => <option key={day.id} value={day.id}>{day.label}</option>)}
         </select>
       </PathField>
-      <PathField label="Type">
-        <select className="input" value={template.blockType || 'Deep Work'} onChange={(event) => onChange({ blockType: event.target.value })}>
-          {BLOCK_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
-        </select>
-      </PathField>
+      <TypeAndAreaFields item={template} onChange={onChange} />
       <TimeRangeField startTime={template.startTime} duration={template.duration} onChange={onChange} />
-      <PathField label="Minimum action" wide>
-        <input className="input" value={template.minimumAction || ''} onChange={(event) => onChange({ minimumAction: event.target.value || null })} />
-      </PathField>
     </div>
   );
 }

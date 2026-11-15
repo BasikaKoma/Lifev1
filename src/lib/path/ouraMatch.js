@@ -1,4 +1,4 @@
-import { applyBlockStatus, applyBlockStatusMoment, createEmptyBlock } from './schema';
+import { applyBlockStatus, applyBlockStatusMoment, createEmptyBlock, isReminder } from './schema';
 
 const YOGA_RE = /yoga|γιογκα/;
 const MEDITATION_RE = /διαλογ|meditat|mindful/;
@@ -215,6 +215,7 @@ export function applyOuraActivitiesToBundle(bundle, rows) {
 
     const candidates = blocks.filter((block) => (
       block.date === activity.day
+      && !isReminder(block)
       && !block.ouraActivityId
       && (block.status === 'Planned' || block.status === 'Done')
       && pathBlockActivityKind(block) === activity.kind

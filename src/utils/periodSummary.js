@@ -2,7 +2,7 @@ import { addDays, parseDate, toDateString } from './lifeline';
 import { buildSleepClock } from '../brain/snapshot/sleepClock';
 import { blockLoggedMinutes as loggedMinutes } from '../lib/path/areaTime';
 import { computeTrackStatus } from '../lib/path/logic';
-import { roleRank } from '../lib/path/schema';
+import { isDeepWork, isReminder, roleRank } from '../lib/path/schema';
 import { collectCompletedItemsForDate, getDayEntry } from './lifelineDays';
 import { getSelfHubDayEntry } from './selfHubDays';
 import { summarizeCalls } from './callsDb';
@@ -954,8 +954,8 @@ function goalChart(time, metrics) {
 }
 
 function summarizeFocus(days, prevDays, blocks, prevBlocks, axis, today, pathBundle, dayCount, elapsedCount) {
-  const deep = (blocks || []).filter((block) => block.blockType === 'Deep Work');
-  const prevDeep = (prevBlocks || []).filter((block) => block.blockType === 'Deep Work');
+  const deep = (blocks || []).filter(isDeepWork);
+  const prevDeep = (prevBlocks || []).filter(isDeepWork);
   const doneMinutes = (list) => list.filter((block) => block.status === 'Done').reduce((sum, block) => sum + loggedMinutes(block), 0);
   const doneHours = doneMinutes(deep) / 60;
   const plannedHours = durationHours(deep);
@@ -1233,9 +1233,10 @@ function indexWeight(readings = [], { average = false } = {}) {
   return map;
 }
 
+/** Time blocks only: a reminder is not planned work, so it is neither executed nor missed. */
 function blocksInDates(blocks, dates) {
   const set = new Set(dates);
-  return (blocks || []).filter((block) => set.has(block.date));
+  return (blocks || []).filter((block) => set.has(block.date) && !isReminder(block));
 }
 
 function completedInDates(projectActivity, dates) {

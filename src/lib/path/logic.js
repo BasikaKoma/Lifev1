@@ -7,6 +7,7 @@ import {
   createEmptyBlockAction,
   createEmptyTemplate,
   isLegacyTemplate,
+  isReminder,
   nowIso,
   parseLocalDate,
   roleRank,
@@ -150,9 +151,10 @@ export function weekBlockStats(blocks = [], goalId, weekStart) {
   };
 }
 
+/** The day's time blocks in order. Reminders are not among them (see dayReminders.js). */
 export function blocksForDate(blocks = [], date) {
   return (blocks || [])
-    .filter((block) => block.date === date)
+    .filter((block) => block.date === date && !isReminder(block))
     .sort(compareBlocks);
 }
 
@@ -357,6 +359,7 @@ export function materializeWeekBlocks(bundle, weekStart) {
       startTime: template.startTime,
       duration: template.duration,
       blockType: template.blockType,
+      workDepth: template.workDepth,
       normalDuration: template.normalDuration,
       minimumDuration: template.minimumDuration,
       minimumAction: template.minimumAction,
@@ -450,6 +453,7 @@ export function templateFromBlock(block, today = localTodayIsoDate()) {
     startTime: block.startTime,
     duration: block.duration,
     blockType: block.blockType,
+    workDepth: block.workDepth,
     minimumAction: block.minimumAction,
     skippedWeeks,
   });
@@ -478,7 +482,7 @@ export function recentBlockTitles(blocks = [], { excludeId = null, query = '', l
   const seen = new Set();
   const titles = [];
   for (const block of newestFirst) {
-    if (block.id === excludeId) continue;
+    if (block.id === excludeId || isReminder(block)) continue;
     const title = String(block.title || '').trim();
     const key = foldSearchText(title);
     if (!key || title === 'Time block' || seen.has(key)) continue;
@@ -491,6 +495,7 @@ export function recentBlockTitles(blocks = [], { excludeId = null, query = '', l
       projectId: block.projectId,
       projectTitle: block.projectTitle,
       blockType: block.blockType,
+      workDepth: block.workDepth,
       duration: toNum(block.duration),
     });
     if (titles.length >= limit) break;

@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { WEEKDAYS, blockAccentColor, goalColorStyle } from '../../lib/path/schema';
+import {
+  WEEKDAYS,
+  blockAccentColor,
+  blockKindLabel,
+  goalColorStyle,
+  isDeepWork,
+  isReminder,
+  sortBlockActions,
+} from '../../lib/path/schema';
 import {
   blockActionProgress,
   blockSpanMinutes,
@@ -14,8 +22,10 @@ import {
   timelineHourBounds,
   toDatetimeLocalValue,
 } from '../../lib/path/logic';
+import { createReminder, remindersForDate } from '../../lib/path/dayReminders';
 import { formatClock } from '../../lib/workTimer';
 import { PathDropGhost, grabOffsetWithin, hideDragImage } from './PathDropGhost';
+import { PathDayReminders, PathReminderAdd, PathReminderItem, ReminderInput } from './PathReminders';
 import { useGrowthReport, useTimelinePush } from './useTimelinePush';
 
 const HOUR_PX = 56;
@@ -82,10 +92,11 @@ function BlockCard({
   const meta = [
     timing ? liveClock : null,
     formatBlockWindow(block.startTime, blockSpanMinutes(block, liveMinutes)),
-    block.blockType,
+    blockKindLabel(block),
   ].filter(Boolean).join(' · ');
   const reorderTarget = !timeline && onDropOnBlock;
   const tint = color || (block.status === 'Done' ? NO_GOAL_DONE_COLOR : null);
+  const tasks = sortBlockActions(block.actions).filter((action) => String(action.text || '').trim());
 
   return (
     <article
@@ -99,7 +110,7 @@ function BlockCard({
         isOver ? 'path-block--over' : '',
         dragging ? 'path-block--dragging' : '',
         timing ? 'path-block--timing' : '',
-        timing && block.blockType === 'Deep Work' ? 'path-block--timing-deep' : '',
+        timing && isDeepWork(block) ? 'path-block--timing-deep' : '',
       ].filter(Boolean).join(' ')}
       style={{
         ...goalColorStyle(tint),
@@ -156,6 +167,14 @@ function BlockCard({
         <div className="path-block__title">{block.title}</div>
         {meta ? <div className="path-block__time">{meta}</div> : null}
       </div>
+      {/* What was written to do in the block; a card on the hour grid shows as many as its height fits. */}
+      {tasks.length ? (
+        <ul className="path-block__tasks" aria-label="Να γίνουν">
+          {tasks.map((task) => (
+            <li key={task.id} className={task.completed ? 'is-done' : undefined}>{task.text}</li>
+          ))}
+        </ul>
+      ) : null}
       <div className="path-block__more">
         {block.desiredOutcome ? (
           <p className="path-block__outcome">{block.desiredOutcome}</p>
@@ -172,14 +191,14 @@ function BlockCard({
           {block.status !== 'Done' && block.status !== 'Skipped' ? (
             <button
               type="button"
-              className={`path-block__start${block.blockType === 'Deep Work' ? ' path-block__start--deep' : ''}${timing ? ' path-block__start--live' : ''}`}
+              className={`path-block__start${isDeepWork(block) ? ' path-block__start--deep' : ''}${timing ? ' path-block__start--live' : ''}`}
               onMouseDown={(event) => event.stopPropagation()}
               onClick={(event) => {
                 event.stopPropagation();
                 if (!timing) onStart?.(block);
               }}
             >
-              {timing ? liveClock : (block.blockType === 'Deep Work' ? 'Deep Work' : 'Start')}
+              {timing ? liveClock : (isDeepWork(block) ? 'Deep Work' : 'Start')}
             </button>
           ) : null}
           {block.status !== 'Done' ? <button type="button" onClick={() => onStatus(block, 'Done')}>Done</button> : null}
@@ -261,7 +280,58 @@ function BlockCard({
   );
 }
 
-/** Desktop week: one column per day on a shared hour grid, untimed blocks above it. */
+/**
+ * Shown on the hour that was clicked: a block or a reminder there. Picking the reminder
+ * turns it into the field to type it in; Escape or a click elsewhere puts it away.
+ */
+function SlotChooser({ top, time, alignRight, onBlock, onAddReminder, onClose }) {
+  const [typing, setTyping] = useState(false);
+  const panelRef = useRef(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+
+  useEffect(() => {
+    // While typing, the field itself saves on leaving and closes.
+    if (typing) return undefined;
+    const onDown = (event) => {
+      if (!panelRef.current?.contains(event.target)) closeRef.current();
+    };
+    const onKey = (event) => {
+      if (event.key === 'Escape') closeRef.current();
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [typing]);
+
+  return (
+    <div
+      ref={panelRef}
+      className={`path-cal__pick${alignRight ? ' path-cal__pick--right' : ''}`}
+      style={{ top }}
+      role="group"
+      aria-label={`Νέο στις ${time}`}
+    >
+      <span className="path-cal__pick-time">{time}</span>
+      {typing ? (
+        <ReminderInput placeholder="Τι να θυμηθείς;" onSave={onAddReminder} onClose={onClose} />
+      ) : (
+        <>
+          <button type="button" autoFocus onClick={onBlock}>Block</button>
+          <button type="button" onClick={() => setTyping(true)}>Υπενθύμιση</button>
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Desktop week: one column per day on a shared hour grid. Blocks and reminders with a clock
+ * sit at their hour; those without one are listed above it.
+ */
 export function PathWeekCalendar({
   path,
   dates,
@@ -279,6 +349,8 @@ export function PathWeekCalendar({
   const [overUntimed, setOverUntimed] = useState(null);
   const [overBlockId, setOverBlockId] = useState(null);
   const [draggingId, setDraggingId] = useState(null);
+  // The hour that was clicked, while it asks what to put there.
+  const [slotPick, setSlotPick] = useState(null);
   const nowMinutes = useNowMinutes();
   const push = useTimelinePush();
   const liveBlockId = timer.session?.blockId || null;
@@ -291,7 +363,9 @@ export function PathWeekCalendar({
 
   const days = useMemo(() => dates.map((date) => {
     const blocks = blocksForDate(path.blocks, date);
-    const timeline = layoutDayTimeline(blocks, {
+    const reminders = remindersForDate(path.blocks, date, today);
+    // A reminder with a clock sits at its hour beside the blocks; without one it stays on top.
+    const timeline = layoutDayTimeline([...blocks, ...reminders], {
       minMinutes: MIN_VISUAL_MINUTES,
       live: liveBlockId ? { blockId: liveBlockId, minutes: liveMinutes } : null,
     });
@@ -300,9 +374,10 @@ export function PathWeekCalendar({
       date,
       timeline,
       untimed: blocks.filter((block) => !timedIds.has(block.id)),
+      reminders: reminders.filter((block) => !timedIds.has(block.id)),
       planned: plannedDayMinutes(blocks),
     };
-  }), [dates, path.blocks, liveBlockId, liveMinutes]);
+  }), [dates, today, path.blocks, liveBlockId, liveMinutes]);
 
   const bounds = useMemo(
     () => timelineHourBounds(days.flatMap((day) => day.timeline)),
@@ -322,6 +397,37 @@ export function PathWeekCalendar({
     setOverUntimed(null);
     setOverBlockId(null);
     setDraggingId(null);
+  };
+
+  /** A reminder dropped on a day: onto an hour it rings then, into the top row it has no clock. */
+  const moveReminder = (item, date, startTime) => {
+    path.upsertBlock({ ...item, date, startTime, weekday: undefined });
+  };
+
+  const dropUntimed = (id, date, beforeId = null) => {
+    const item = path.blocks.find((block) => block.id === id);
+    if (!item) return;
+    if (isReminder(item)) moveReminder(item, date, null);
+    else path.moveBlock(id, { date, startTime: null, beforeId });
+  };
+
+  const dropTimed = (id, date, startTime) => {
+    const item = path.blocks.find((block) => block.id === id);
+    if (!item) return;
+    if (isReminder(item)) moveReminder(item, date, startTime);
+    else path.moveBlock(id, { date, startTime });
+  };
+
+  const reminderDragProps = {
+    draggable: true,
+    onDelete: onDeleteBlock,
+    onDragStartReminder: (item) => {
+      dragRef.current = { id: item.id, offsetY: 0, minutes: MIN_VISUAL_MINUTES, span: null, title: item.title };
+      window.requestAnimationFrame(() => {
+        if (dragRef.current?.id === item.id) setDraggingId(item.id);
+      });
+    },
+    onDragEndReminder: clearDrag,
   };
 
   const dropMinutes = (event) => {
@@ -401,10 +507,17 @@ export function PathWeekCalendar({
             onDrop={(event) => {
               event.preventDefault();
               const id = event.dataTransfer.getData('text/plain') || dragRef.current?.id;
-              if (id) path.moveBlock(id, { date: day.date, startTime: null, beforeId: null });
+              if (id) dropUntimed(id, day.date);
               clearDrag();
             }}
           >
+            <PathDayReminders
+              path={path}
+              reminders={day.reminders}
+              today={today}
+              draggingId={draggingId}
+              {...reminderDragProps}
+            />
             {day.untimed.map((block, blockIndex) => (
               <BlockCard
                 key={block.id}
@@ -420,14 +533,18 @@ export function PathWeekCalendar({
                   setPreview(null);
                 }}
                 onDropOnBlock={(id, target) => {
-                  path.moveBlock(id, { date: target.date, startTime: null, beforeId: target.id });
+                  dropUntimed(id, target.date, target.id);
                   clearDrag();
                 }}
               />
             ))}
-            <button type="button" className="path-day__add" onClick={() => onNewBlock(day.date)}>
-              + Block
-            </button>
+            <div className="path-cal__adds">
+              <button type="button" className="path-day__add" onClick={() => onNewBlock(day.date)}>
+                + Block
+              </button>
+              {/* Not on days gone by: an open reminder there would show on today at once. */}
+              {day.date >= today ? <PathReminderAdd path={path} date={day.date} /> : null}
+            </div>
           </section>
         ))}
 
@@ -468,7 +585,7 @@ export function PathWeekCalendar({
             onDrop={(event) => {
               event.preventDefault();
               const id = event.dataTransfer.getData('text/plain') || dragRef.current?.id;
-              if (id) path.moveBlock(id, { date: day.date, startTime: minutesToClock(dropMinutes(event)) });
+              if (id) dropTimed(id, day.date, minutesToClock(dropMinutes(event)));
               clearDrag();
             }}
           >
@@ -479,31 +596,75 @@ export function PathWeekCalendar({
                 data-time={minutesToClock(minute)}
                 style={{ top: (minute - gridStart) * PX_PER_MIN, height: SLOT_MINUTES * PX_PER_MIN }}
                 aria-hidden="true"
-                onClick={() => onNewBlock(day.date, minutesToClock(minute))}
+                onClick={() => {
+                  // A day gone by only takes blocks: an open reminder there would show on today at once.
+                  if (day.date < today) onNewBlock(day.date, minutesToClock(minute));
+                  else setSlotPick({ date: day.date, minute });
+                }}
               />
             ))}
 
             {day.timeline.map((item) => {
               const lanePct = 100 / item.lanes;
               const anchorRight = (item.lanes > 1 && item.lane === item.lanes - 1) || dayIndex === WEEKDAYS.length - 1;
+              const placement = {
+                top: (item.start - gridStart) * PX_PER_MIN,
+                height: Math.max(2, (item.visualEnd - item.start) * PX_PER_MIN - 2),
+                left: `calc(${item.lane * lanePct}% + 3px)`,
+                right: `calc(${(item.lanes - 1 - item.lane) * lanePct}% + 3px)`,
+                width: `calc(${lanePct}% - 6px)`,
+                anchorRight,
+                shift: push.shiftFor(day.date, item),
+              };
+              if (isReminder(item.block)) {
+                return (
+                  <PathReminderItem
+                    key={item.block.id}
+                    as="div"
+                    className="path-rem--grid"
+                    style={{
+                      top: placement.top,
+                      minHeight: placement.height,
+                      width: placement.width,
+                      ...(anchorRight ? { right: placement.right } : { left: placement.left }),
+                      ...(placement.shift ? { transform: `translateY(${placement.shift}px)` } : null),
+                    }}
+                    path={path}
+                    block={item.block}
+                    today={today}
+                    dragging={draggingId === item.block.id}
+                    {...reminderDragProps}
+                  />
+                );
+              }
               return (
                 <BlockCard
                   key={item.block.id}
                   {...cardProps(item.block)}
                   variant="timeline"
-                  placement={{
-                    top: (item.start - gridStart) * PX_PER_MIN,
-                    height: Math.max(2, (item.visualEnd - item.start) * PX_PER_MIN - 2),
-                    left: `calc(${item.lane * lanePct}% + 3px)`,
-                    right: `calc(${(item.lanes - 1 - item.lane) * lanePct}% + 3px)`,
-                    width: `calc(${lanePct}% - 6px)`,
-                    anchorRight,
-                    shift: push.shiftFor(day.date, item),
-                  }}
+                  placement={placement}
                   onGrow={(extra) => push.report(item.block.id, day.date, item.visualEnd, extra)}
                 />
               );
             })}
+
+            {slotPick?.date === day.date ? (
+              <SlotChooser
+                key={slotPick.minute}
+                top={(slotPick.minute - gridStart) * PX_PER_MIN}
+                time={minutesToClock(slotPick.minute)}
+                alignRight={dayIndex >= WEEKDAYS.length - 2}
+                onBlock={() => {
+                  setSlotPick(null);
+                  onNewBlock(day.date, minutesToClock(slotPick.minute));
+                }}
+                onAddReminder={(text) => {
+                  const reminder = createReminder(day.date, text, minutesToClock(slotPick.minute));
+                  if (reminder) path.upsertBlock(reminder);
+                }}
+                onClose={() => setSlotPick(null)}
+              />
+            ) : null}
 
             {preview?.date === day.date ? (
               <PathDropGhost
