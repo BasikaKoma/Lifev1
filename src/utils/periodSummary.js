@@ -1,5 +1,6 @@
 import { addDays, parseDate, toDateString } from './lifeline';
 import { buildSleepClock } from '../brain/snapshot/sleepClock';
+import { blockLoggedMinutes as loggedMinutes } from '../lib/path/areaTime';
 import { computeTrackStatus } from '../lib/path/logic';
 import { roleRank } from '../lib/path/schema';
 import { collectCompletedItemsForDate, getDayEntry } from './lifelineDays';
@@ -901,12 +902,6 @@ export function allocationMinutes(text) {
 }
 
 /** Time logged on a block: the timer when it ran, else the planned length once it is Done. */
-function loggedMinutes(block) {
-  const worked = NUMBER(block?.workedMinutes);
-  if (worked != null && worked > 0) return worked;
-  return block?.status === 'Done' ? (NUMBER(block.duration) || 0) : 0;
-}
-
 const TRACK_TEXT = { 'On track': 'εντός', 'At risk': 'πίσω' };
 
 /** Time per active Path goal against its Weekly allocation, paced to the days already gone. */

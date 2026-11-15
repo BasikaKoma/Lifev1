@@ -63,6 +63,18 @@ export const WORK_WHEEL_AREAS = [
   { id: 'nobelle', label: 'Nobelle', short: 'Nobelle', hint: 'Προχωρά, σε στηρίζει, ή ζητάει παραπάνω χρόνο;', color: '#fb7185' },
 ];
 
+const LIFE_AREA_IDS = new Set(LIFE_WHEEL_AREAS.map((area) => area.id));
+
+/** A life-wheel area id, or null when the value is not one. */
+export function normalizeLifeAreaId(value) {
+  const id = value == null ? '' : String(value).trim();
+  return LIFE_AREA_IDS.has(id) ? id : null;
+}
+
+export function lifeAreaById(id) {
+  return LIFE_WHEEL_AREAS.find((area) => area.id === id) || null;
+}
+
 export function clampWheelScore(value) {
   if (value == null || value === '') return null;
   const num = typeof value === 'number' ? value : Number(value);

@@ -2,6 +2,7 @@ import { localTodayIsoDate } from '../../utils/selfDateUtils';
 import {
   TEMPLATE_MEMORY_SINCE,
   WEEKDAYS,
+  blockAccentColor,
   createEmptyBlock,
   createEmptyBlockAction,
   createEmptyTemplate,
@@ -348,6 +349,7 @@ export function materializeWeekBlocks(bundle, weekStart) {
   for (const { template, date } of pending) {
     blocks.push(createEmptyBlock({
       goalId: template.goalId,
+      lifeAreaId: template.lifeAreaId,
       title: template.title,
       date,
       weekday: weekdayFromDate(date),
@@ -442,6 +444,7 @@ export function templateFromBlock(block, today = localTodayIsoDate()) {
   }
   return createEmptyTemplate({
     goalId: block.goalId,
+    lifeAreaId: block.lifeAreaId,
     title: String(block.title || '').trim(),
     weekday,
     startTime: block.startTime,
@@ -463,8 +466,8 @@ export function foldSearchText(value) {
 }
 
 /**
- * Titles of earlier blocks, newest first and each one once, with the goal, type
- * and duration it was last used with. `query` narrows the list.
+ * Titles of earlier blocks, newest first and each one once, with the goal or life
+ * area, type and duration it was last used with. `query` narrows the list.
  */
 export function recentBlockTitles(blocks = [], { excludeId = null, query = '', limit = 6 } = {}) {
   const needle = foldSearchText(query);
@@ -484,6 +487,7 @@ export function recentBlockTitles(blocks = [], { excludeId = null, query = '', l
     titles.push({
       title,
       goalId: block.goalId,
+      lifeAreaId: block.lifeAreaId,
       projectId: block.projectId,
       projectTitle: block.projectTitle,
       blockType: block.blockType,
@@ -718,7 +722,7 @@ export function buildWeeklyPlanPreview(bundle, weekStart = startOfWeekMonday()) 
         startTime: block.startTime,
         duration: block.duration,
         status: block.status,
-        color: colorByGoal.get(block.goalId) || null,
+        color: blockAccentColor(block, colorByGoal.get(block.goalId)),
       })),
     };
   });

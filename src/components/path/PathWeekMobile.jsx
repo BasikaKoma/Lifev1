@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { normalizeGoalColor, shiftWeek, startOfWeekMonday } from '../../lib/path/schema';
+import { blockAccentColor, shiftWeek, startOfWeekMonday } from '../../lib/path/schema';
 import {
   blockActionProgress,
   blockSpanMinutes,
@@ -19,7 +19,7 @@ const DAY_LONG = ['Δευτέρα', 'Τρίτη', 'Τετάρτη', 'Πέμπτ�
 const STATUSES = ['Done', 'Moved', 'Skipped', 'Planned'];
 const SWIPE_MIN_PX = 60;
 
-// Fallback stripe colours when a block has no goal colour.
+// Fallback stripe colours when a block has no goal or life-area colour.
 const TYPE_COLORS = {
   'Deep Work': '#f5c16c',
   Workout: '#fb923c',
@@ -49,7 +49,7 @@ function formatRangeEl(dates) {
 
 function blockStripe(block, goals) {
   const goal = goals.find((item) => item.id === block.goalId);
-  return normalizeGoalColor(goal?.color) || TYPE_COLORS[block.blockType] || 'rgba(148, 163, 184, 0.6)';
+  return blockAccentColor(block, goal?.color) || TYPE_COLORS[block.blockType] || 'rgba(148, 163, 184, 0.6)';
 }
 
 function Icon({ name }) {

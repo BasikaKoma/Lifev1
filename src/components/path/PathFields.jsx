@@ -6,6 +6,7 @@ import {
   GOAL_ROLES,
   GOAL_STATUSES,
   WEEKDAYS,
+  blockServesLabel,
   normalizeGoalColor,
   weekdayFromDate,
 } from '../../lib/path/schema';
@@ -23,6 +24,8 @@ import {
   withBlockDuration,
 } from '../../lib/path/logic';
 import { platform } from '../../platform';
+import { LIFE_WHEEL_AREAS } from '../../lib/path/wheel';
+import { PathServesSelect } from './PathServesSelect';
 
 /** `as="div"` for a field with more than one control, where a wrapping label would steal clicks. */
 export function PathField({ label, hint, needs, wide, as: Tag = 'label', children }) {
@@ -81,6 +84,12 @@ export function GoalFields({ goal, onChange, projects = [], showStatus = true, s
           onChange={(event) => onChange({ lifeArea: event.target.value || null, projectTitle: goal.projectId ? goal.projectTitle : (event.target.value || null) })}
           placeholder="e.g. Health, Sales"
         />
+      </PathField>
+      <PathField label="Wheel area">
+        <select className="input" value={goal.lifeAreaId || ''} onChange={(event) => onChange({ lifeAreaId: event.target.value || null })}>
+          <option value="">Not set</option>
+          {LIFE_WHEEL_AREAS.map((area) => <option key={area.id} value={area.id}>{area.label}</option>)}
+        </select>
       </PathField>
       <PathField label="Role" needs={needs('role')}>
         <select className="input" value={goal.role || ''} onChange={(event) => onChange({ role: event.target.value || null })}>
@@ -235,7 +244,7 @@ function BlockTitleField({ block, blocks, goals, onChange, onPick, onSubmit }) {
           <ul className="path-combo__list" id="path-block-titles" role="listbox">
             {options.map((option, index) => {
               const goal = goals.find((item) => item.id === option.goalId);
-              const meta = [goal?.title, option.blockType, formatDuration(option.duration)].filter(Boolean).join(' · ');
+              const meta = [blockServesLabel(option, goal), option.blockType, formatDuration(option.duration)].filter(Boolean).join(' · ');
               return (
                 <li key={option.title} role="option" aria-selected={index === active}>
                   <button
@@ -370,13 +379,15 @@ export function BlockFields({
     };
   };
 
-  // A remembered title fills what is still open: the goal if none is chosen, the length if no end is set.
+  // A remembered title fills what is still open: the goal or life area if neither is chosen, the length if no end is set.
   const pickTitle = (option) => {
-    const goal = block.goalId ? null : goals.find((item) => item.id === option.goalId);
+    const servesOpen = !block.goalId && !block.lifeAreaId;
+    const goal = servesOpen ? goals.find((item) => item.id === option.goalId) : null;
     onChange({
       title: option.title,
       ...(option.blockType ? { blockType: option.blockType } : {}),
       ...(goal ? goalPatch(goal) : {}),
+      ...(servesOpen && !goal && option.lifeAreaId ? { lifeAreaId: option.lifeAreaId } : {}),
       ...(!(Number(block.duration) > 0) && option.duration > 0 ? { duration: option.duration } : {}),
     });
   };
@@ -389,15 +400,16 @@ export function BlockFields({
   return (
     <div className="path-form">
       <BlockTitleField block={block} blocks={blocks} goals={goals} onChange={onChange} onPick={pickTitle} onSubmit={onSubmit} />
-      <PathField label="Goal">
-        <select
-          className="input"
-          value={block.goalId || ''}
-          onChange={(event) => onChange(goalPatch(goals.find((item) => item.id === event.target.value)))}
-        >
-          <option value="">No goal</option>
-          {goals.map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}
-        </select>
+      <PathField label="Goal or life area">
+        <PathServesSelect
+          goalId={block.goalId}
+          lifeAreaId={block.lifeAreaId}
+          goals={goals}
+          onChange={({ goalId, lifeAreaId }) => onChange({
+            ...goalPatch(goals.find((item) => item.id === goalId)),
+            lifeAreaId,
+          })}
+        />
       </PathField>
       <PathField label="Type">
         <select className="input" value={block.blockType || 'Deep Work'} onChange={(event) => onChange({ blockType: event.target.value })}>
@@ -483,11 +495,8 @@ export function TemplateFields({ template, onChange, goals = [], onSubmit }) {
           onKeyDown={submitOnEnter(onSubmit)}
         />
       </PathField>
-      <PathField label="Goal">
-        <select className="input" value={template.goalId || ''} onChange={(event) => onChange({ goalId: event.target.value || null })}>
-          <option value="">No goal</option>
-          {goals.map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}
-        </select>
+      <PathField label="Goal or life area">
+        <PathServesSelect goalId={template.goalId} lifeAreaId={template.lifeAreaId} goals={goals} onChange={onChange} />
       </PathField>
       <PathField label="Weekday">
         <select className="input" value={template.weekday || 1} onChange={(event) => onChange({ weekday: Number(event.target.value) })}>

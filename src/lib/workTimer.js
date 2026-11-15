@@ -147,11 +147,33 @@ function normalizeLogEntry(raw) {
   };
 }
 
+function saveLog(entries) {
+  localStorage.setItem(LOG_KEY, JSON.stringify(entries.slice(-LOG_LIMIT)));
+}
+
+/** Saves a session's runs in the day log; one corrected down to no time leaves it. */
 function writeLogEntry(entry) {
+  if (!entry?.id) return;
   const nextEntry = normalizeLogEntry(entry);
-  if (!nextEntry) return;
-  const next = [...readLog().filter((item) => item.id !== nextEntry.id), nextEntry].slice(-LOG_LIMIT);
-  localStorage.setItem(LOG_KEY, JSON.stringify(next));
+  const others = readLog().filter((item) => item.id !== String(entry.id));
+  saveLog(nextEntry ? [...others, nextEntry] : others);
+}
+
+/** Takes `ms` off the end of finished runs: the latest time goes first. */
+function trimRunsTail(runs, ms) {
+  const next = normalizeRuns(runs).filter((run) => run.end && run.end > run.start);
+  let left = ms;
+  while (left > 0 && next.length) {
+    const last = next[next.length - 1];
+    const length = last.end - last.start;
+    if (length > left) {
+      next[next.length - 1] = { ...last, end: last.end - left };
+      break;
+    }
+    next.pop();
+    left -= length;
+  }
+  return next;
 }
 
 function liveRuns(value, now) {
@@ -215,6 +237,36 @@ function recordBlockWork(blockId, minutes, window = null) {
   });
 }
 
+/**
+ * The fields to change so a block shows `minutes` tracked; null when nothing changes.
+ * A length the timer wrote (equal to the tracked time) follows the correction.
+ */
+export function workedMinutesPatch(block, minutes) {
+  const before = Number(block?.workedMinutes) || 0;
+  const after = Math.max(0, Math.round(Number(minutes) || 0));
+  if (!block || after === before) return null;
+  const timerLength = before > 0 && after > 0 && Number(block.duration) === before;
+  return { workedMinutes: after || null, ...(timerLength ? { duration: after } : null) };
+}
+
+/** Adds `deltaMinutes` (negative takes off) to a block's tracked time; returns the minutes that changed. */
+function shiftBlockWork(blockId, deltaMinutes) {
+  if (!blockId || !deltaMinutes) return 0;
+  const bundle = readPathBundleLocal();
+  const block = bundle?.blocks?.find((item) => item.id === blockId);
+  const before = Number(block?.workedMinutes) || 0;
+  const patch = workedMinutesPatch(block, before + deltaMinutes);
+  if (!patch) return 0;
+  queuePathSave({
+    ...bundle,
+    blocks: bundle.blocks.map((item) => (
+      item.id === blockId ? createEmptyBlock({ ...item, ...patch, updatedAt: nowIso() }) : item
+    )),
+    updatedAt: nowIso(),
+  });
+  return (patch.workedMinutes || 0) - before;
+}
+
 /** Marks the block started in Path, so every device drops its "starts in N′" reminder. */
 function markBlockStarted(blockId, at) {
   const bundle = readPathBundleLocal();
@@ -239,6 +291,7 @@ function openNextBlock(blockId, at) {
   const date = localTodayIsoDate();
   const next = createEmptyBlock({
     goalId: source.goalId,
+    lifeAreaId: source.lifeAreaId,
     projectId: source.projectId,
     projectTitle: source.projectTitle,
     title: source.title,
@@ -334,6 +387,103 @@ export function stopWorkTimer() {
   commit(null);
   if (!current.blockId) return;
   recordBlockWork(current.blockId, minutesFromElapsed(elapsed - (current.recordedMs || 0)));
+}
+
+/**
+ * The session after a correction of `deltaMs`; `recordedDeltaMs` of it was already
+ * written to a block. Time taken off leaves the end of the runs, so the day line
+ * shows the gap; time added sits before the latest run.
+ */
+function correctedSession(current, at, deltaMs, recordedDeltaMs = 0) {
+  const elapsed = Math.max(0, sessionElapsedMs(current, at) + deltaMs);
+  const targetMs = targetMsOf(current);
+  const next = {
+    ...current,
+    accumulatedMs: elapsed,
+    recordedMs: Math.max(0, Math.min(elapsed, (Number(current.recordedMs) || 0) + recordedDeltaMs)),
+    // Silent: a correction does not ring the bells it passes.
+    halfHoursChimed: Math.floor(elapsed / HALF_HOUR_MS),
+    targetChimed: Boolean(targetMs) && elapsed >= targetMs,
+  };
+  if (deltaMs > 0) {
+    const runs = normalizeRuns(current.runs);
+    const last = runs.length - 1;
+    return {
+      ...next,
+      // The running stretch still counts from `startedAt`; the addition is banked.
+      accumulatedMs: elapsed - (current.running && current.startedAt ? Math.max(0, at - current.startedAt) : 0),
+      runs: last >= 0
+        ? runs.map((run, index) => (index === last ? { ...run, start: run.start - deltaMs } : run))
+        : [{ start: (current.running && current.startedAt ? current.startedAt : at) - deltaMs, end: current.running ? null : at }],
+      blockStartedAt: current.blockStartedAt ? current.blockStartedAt - deltaMs : current.blockStartedAt,
+    };
+  }
+  const runs = trimRunsTail(closeOpenRun(current, at), -deltaMs);
+  return {
+    ...next,
+    startedAt: current.running ? at : null,
+    runs: current.running ? [...runs, { start: at, end: null }] : runs,
+  };
+}
+
+/**
+ * Corrects the time on the block being timed, in minutes. Negative takes the latest
+ * time off (a timer left running); positive adds time before the latest run (a timer
+ * started late). Time a pause already wrote to the block is corrected there too.
+ */
+export function adjustWorkTimer(deltaMinutes) {
+  const current = session;
+  const minutes = Math.round(Number(deltaMinutes) || 0);
+  if (!current || !minutes) return;
+  const at = Date.now();
+  let deltaMs = minutes * 60000;
+  let recordedDeltaMs = 0;
+  if (minutes > 0) {
+    // A paused timer has written its time already, so the addition goes to the block now.
+    if (!current.running) recordedDeltaMs = shiftBlockWork(current.blockId, minutes) * 60000;
+  } else {
+    const elapsed = sessionElapsedMs(current, at);
+    const recorded = Math.min(elapsed, Number(current.recordedMs) || 0);
+    // First the stretch not written anywhere yet, then what this session wrote to the block.
+    const fromLive = Math.min(-deltaMs, elapsed - recorded);
+    const restMinutes = Math.round(Math.min(-deltaMs - fromLive, recorded) / 60000);
+    const fromBlock = restMinutes ? -shiftBlockWork(current.blockId, -restMinutes) * 60000 : 0;
+    deltaMs = -(fromLive + fromBlock);
+    recordedDeltaMs = -fromBlock;
+  }
+  if (!deltaMs) return;
+  const next = correctedSession(current, at, deltaMs, recordedDeltaMs);
+  commit(next);
+  if (!next.running) writeLogEntry(next);
+}
+
+/**
+ * After `minutes` came off a block's tracked time by hand: the same time leaves the
+ * timer still paused on that block, or else the block's latest entries in the day log.
+ */
+export function trimBlockTimerRecords(blockId, minutes) {
+  let left = Math.round(Number(minutes) || 0) * 60000;
+  if (!blockId || left <= 0) return;
+  if (session?.blockId === blockId) {
+    // A running timer has not written this stretch yet; the correction was to earlier time.
+    if (session.running) return;
+    const take = Math.min(left, Number(session.recordedMs) || 0);
+    if (!take) return;
+    const next = correctedSession(session, Date.now(), -take, -take);
+    commit(next);
+    writeLogEntry(next);
+    return;
+  }
+  const log = readLog();
+  for (let index = log.length - 1; index >= 0 && left > 0; index -= 1) {
+    const entry = log[index];
+    if (entry.blockId !== blockId) continue;
+    const total = entry.runs.reduce((sum, run) => sum + (run.end - run.start), 0);
+    const take = Math.min(left, total);
+    log[index] = { ...entry, runs: trimRunsTail(entry.runs, take) };
+    left -= take;
+  }
+  saveLog(log.filter((entry) => entry.runs.length));
 }
 
 export function markWorkTimerChimed({ target = false, halfHours = 0 } = {}) {

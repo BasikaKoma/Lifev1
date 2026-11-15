@@ -7,6 +7,7 @@ import { filterRegularProjects } from '../../utils/lifeline';
 import { pathTabFromPathname } from '../../utils/appNavigation';
 import { CallsView } from '../CallsView';
 import { PathThoughtsReview } from './PathThoughtsReview';
+import { PathAreaTimeReview } from './PathAreaTimeReview';
 import { PathGoals } from './PathGoals';
 import { PathWheel } from './PathWheel';
 import { PathWeek } from './PathWeek';
@@ -165,6 +166,7 @@ export function PathView({
 
       {view === 'review' ? (
         <div className="path-review">
+          <PathAreaTimeReview path={path} weekStart={weekStart} />
           <PathThoughtsReview lifelineDays={lifelineDays} weekStart={weekStart} />
           <CallsView />
         </div>

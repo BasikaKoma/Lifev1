@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { WEEKDAYS, goalColorStyle } from '../../lib/path/schema';
+import { WEEKDAYS, blockAccentColor, goalColorStyle } from '../../lib/path/schema';
 import {
   blockActionProgress,
   blockSpanMinutes,
@@ -15,6 +15,7 @@ import {
   toDatetimeLocalValue,
 } from '../../lib/path/logic';
 import { formatClock } from '../../lib/workTimer';
+import { PathDropGhost, grabOffsetWithin, hideDragImage } from './PathDropGhost';
 import { useGrowthReport, useTimelinePush } from './useTimelinePush';
 
 const HOUR_PX = 56;
@@ -29,7 +30,7 @@ const STATUS_CLASS = {
   Skipped: 'path-pill--skipped',
 };
 
-// A finished block fills with its goal colour; one without a goal fills slate.
+// A finished block fills with its goal or life-area colour; one with neither fills slate.
 const NO_GOAL_DONE_COLOR = '#cbd5e1';
 
 function readNowMinutes() {
@@ -52,6 +53,7 @@ function BlockCard({
   variant = 'list',
   placement = null,
   isOver,
+  dragging = false,
   canMoveUp,
   canMoveDown,
   timing = false,
@@ -95,6 +97,7 @@ function BlockCard({
         tint ? 'path-block--goal' : '',
         short ? 'path-block--short' : '',
         isOver ? 'path-block--over' : '',
+        dragging ? 'path-block--dragging' : '',
         timing ? 'path-block--timing' : '',
         timing && block.blockType === 'Deep Work' ? 'path-block--timing-deep' : '',
       ].filter(Boolean).join(' ')}
@@ -126,6 +129,7 @@ function BlockCard({
         dragMoved.current = true;
         event.dataTransfer.setData('text/plain', block.id);
         event.dataTransfer.effectAllowed = 'move';
+        hideDragImage(event);
         const rect = event.currentTarget.getBoundingClientRect();
         onDragStartBlock?.(block, timeline ? event.clientY - rect.top : 0);
       }}
@@ -274,6 +278,7 @@ export function PathWeekCalendar({
   const [preview, setPreview] = useState(null);
   const [overUntimed, setOverUntimed] = useState(null);
   const [overBlockId, setOverBlockId] = useState(null);
+  const [draggingId, setDraggingId] = useState(null);
   const nowMinutes = useNowMinutes();
   const push = useTimelinePush();
   const liveBlockId = timer.session?.blockId || null;
@@ -316,6 +321,7 @@ export function PathWeekCalendar({
     setPreview(null);
     setOverUntimed(null);
     setOverBlockId(null);
+    setDraggingId(null);
   };
 
   const dropMinutes = (event) => {
@@ -334,10 +340,11 @@ export function PathWeekCalendar({
 
   const cardProps = (block) => ({
     block,
-    color: colorByGoal.get(block.goalId),
+    color: blockAccentColor(block, colorByGoal.get(block.goalId)),
     timing: timer.session?.blockId === block.id,
     liveClock: timer.session?.blockId === block.id ? formatClock(timer.elapsedMs) : null,
     liveMinutes: liveBlockId === block.id ? liveMinutes : 0,
+    dragging: draggingId === block.id,
     onOpen: onOpenBlock,
     onStart: timer.startBlock,
     onEdit: onEditBlock,
@@ -345,8 +352,19 @@ export function PathWeekCalendar({
     onStatus,
     onDoneAt,
     onDragStartBlock: (item, offsetY) => {
-      const minutes = blockSpanMinutes(item, liveBlockId === item.id ? liveMinutes : 0) || MIN_VISUAL_MINUTES;
-      dragRef.current = { id: item.id, offsetY, minutes };
+      const span = blockSpanMinutes(item, liveBlockId === item.id ? liveMinutes : 0);
+      const minutes = span || MIN_VISUAL_MINUTES;
+      dragRef.current = {
+        id: item.id,
+        offsetY: grabOffsetWithin(offsetY, Math.max(MIN_VISUAL_MINUTES, minutes) * PX_PER_MIN),
+        minutes,
+        span,
+        title: item.title,
+      };
+      // After the drag has started: changing the card inside dragstart can cancel the drag.
+      window.requestAnimationFrame(() => {
+        if (dragRef.current?.id === item.id) setDraggingId(item.id);
+      });
     },
     onDragEndBlock: clearDrag,
   });
@@ -434,11 +452,11 @@ export function PathWeekCalendar({
               event.preventDefault();
               event.dataTransfer.dropEffect = 'move';
               const start = dropMinutes(event);
-              const minutes = dragRef.current.minutes;
+              const { minutes, span, title } = dragRef.current;
               setPreview((prev) => (
                 prev && prev.date === day.date && prev.start === start
                   ? prev
-                  : { date: day.date, start, minutes }
+                  : { date: day.date, start, minutes, span, title }
               ));
               setOverUntimed(null);
               setOverBlockId(null);
@@ -488,15 +506,13 @@ export function PathWeekCalendar({
             })}
 
             {preview?.date === day.date ? (
-              <div
-                className="path-cal__ghost"
-                style={{
-                  top: (preview.start - gridStart) * PX_PER_MIN,
-                  height: Math.max(MIN_VISUAL_MINUTES, preview.minutes) * PX_PER_MIN - 2,
-                }}
-              >
-                {formatBlockWindow(minutesToClock(preview.start), preview.minutes)}
-              </div>
+              <PathDropGhost
+                top={(preview.start - gridStart) * PX_PER_MIN}
+                height={Math.max(MIN_VISUAL_MINUTES, preview.minutes) * PX_PER_MIN - 2}
+                start={preview.start}
+                span={preview.span}
+                title={preview.title}
+              />
             ) : null}
 
             {day.date === today && nowMinutes >= gridStart && nowMinutes <= gridEnd ? (

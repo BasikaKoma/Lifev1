@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { WEEKDAYS, goalColorStyle, normalizeGoalColor } from '../../lib/path/schema';
+import { WEEKDAYS, blockAccentColor, blockServesLabel, goalColorStyle } from '../../lib/path/schema';
 import {
   formatBlockWindow,
   formatDuration,
@@ -9,6 +9,7 @@ import {
   timelineHourBounds,
 } from '../../lib/path/logic';
 import { platform } from '../../platform';
+import { PathDropGhost, grabOffsetWithin, hideDragImage } from './PathDropGhost';
 import { useGrowthReport, useTimelinePush } from './useTimelinePush';
 
 const HOUR_PX = 56;
@@ -39,13 +40,15 @@ function useTemplateDays(templates) {
   }), [templates]);
 }
 
-function TemplateCard({ template, goal, variant, placement = null, onOpen, onDragStart, onDragEnd, onGrow }) {
+function TemplateCard({ template, goal, variant, placement = null, dragging = false, onOpen, onDragStart, onDragEnd, onGrow }) {
   const dragMoved = useRef(false);
   const cardRef = useRef(null);
   const timeline = variant === 'timeline';
   useGrowthReport(cardRef, timeline && placement ? placement.height : null, onGrow);
   const short = timeline && placement && placement.height < 40;
   const meta = [formatBlockWindow(template.startTime, template.duration), template.blockType].filter(Boolean).join(' · ');
+  const color = blockAccentColor(template, goal?.color);
+  const serves = blockServesLabel(template, goal);
 
   return (
     <article
@@ -54,12 +57,13 @@ function TemplateCard({ template, goal, variant, placement = null, onOpen, onDra
         'path-block',
         `path-block--${variant}`,
         'path-block--planned',
-        goal?.color ? 'path-block--goal' : '',
+        color ? 'path-block--goal' : '',
         short ? 'path-block--short' : '',
+        dragging ? 'path-block--dragging' : '',
         template.enabled ? '' : 'path-block--skipped',
       ].filter(Boolean).join(' ')}
       style={{
-        ...goalColorStyle(goal?.color),
+        ...goalColorStyle(color),
         ...(placement ? {
           top: placement.top,
           '--path-block-h': `${placement.height}px`,
@@ -83,6 +87,7 @@ function TemplateCard({ template, goal, variant, placement = null, onOpen, onDra
         dragMoved.current = true;
         event.dataTransfer.setData('text/plain', template.id);
         event.dataTransfer.effectAllowed = 'move';
+        hideDragImage(event);
         const rect = event.currentTarget.getBoundingClientRect();
         onDragStart(template, timeline ? event.clientY - rect.top : 0);
       }}
@@ -97,10 +102,10 @@ function TemplateCard({ template, goal, variant, placement = null, onOpen, onDra
         <div className="path-block__title">{template.title}</div>
         {meta ? <div className="path-block__time">{meta}</div> : null}
       </div>
-      {goal?.title || template.minimumAction ? (
+      {serves || template.minimumAction ? (
         <div className="path-block__more">
           {template.minimumAction ? <p className="path-block__outcome">{template.minimumAction}</p> : null}
-          {goal?.title ? <div className="path-pills"><span className="path-pill">{goal.title}</span></div> : null}
+          {serves ? <div className="path-pills"><span className="path-pill">{serves}</span></div> : null}
         </div>
       ) : null}
     </article>
@@ -112,6 +117,7 @@ function TemplateWeekGrid({ days, goalsById, onOpen, onNew, onMove }) {
   const dragRef = useRef(null);
   const [preview, setPreview] = useState(null);
   const [overUntimed, setOverUntimed] = useState(null);
+  const [draggingId, setDraggingId] = useState(null);
   const push = useTimelinePush();
 
   const bounds = useMemo(() => timelineHourBounds(days.flatMap((day) => day.timeline)), [days]);
@@ -127,6 +133,7 @@ function TemplateWeekGrid({ days, goalsById, onOpen, onNew, onMove }) {
     dragRef.current = null;
     setPreview(null);
     setOverUntimed(null);
+    setDraggingId(null);
   };
 
   const dropMinutes = (event) => {
@@ -139,9 +146,22 @@ function TemplateWeekGrid({ days, goalsById, onOpen, onNew, onMove }) {
   const cardProps = (template) => ({
     template,
     goal: goalsById.get(template.goalId) || null,
+    dragging: draggingId === template.id,
     onOpen,
     onDragStart: (item, offsetY) => {
-      dragRef.current = { id: item.id, offsetY, minutes: Number(item.duration) > 0 ? Number(item.duration) : MIN_VISUAL_MINUTES };
+      const span = Number(item.duration) > 0 ? Number(item.duration) : null;
+      const minutes = span || MIN_VISUAL_MINUTES;
+      dragRef.current = {
+        id: item.id,
+        offsetY: grabOffsetWithin(offsetY, Math.max(MIN_VISUAL_MINUTES, minutes) * PX_PER_MIN),
+        minutes,
+        span,
+        title: item.title,
+      };
+      // After the drag has started: changing the card inside dragstart can cancel the drag.
+      window.requestAnimationFrame(() => {
+        if (dragRef.current?.id === item.id) setDraggingId(item.id);
+      });
     },
     onDragEnd: clearDrag,
   });
@@ -206,9 +226,11 @@ function TemplateWeekGrid({ days, goalsById, onOpen, onNew, onMove }) {
               event.preventDefault();
               event.dataTransfer.dropEffect = 'move';
               const start = dropMinutes(event);
-              const { minutes } = dragRef.current;
+              const { minutes, span, title } = dragRef.current;
               setPreview((prev) => (
-                prev && prev.weekday === day.weekday && prev.start === start ? prev : { weekday: day.weekday, start, minutes }
+                prev && prev.weekday === day.weekday && prev.start === start
+                  ? prev
+                  : { weekday: day.weekday, start, minutes, span, title }
               ));
               setOverUntimed(null);
             }}
@@ -257,15 +279,13 @@ function TemplateWeekGrid({ days, goalsById, onOpen, onNew, onMove }) {
             })}
 
             {preview?.weekday === day.weekday ? (
-              <div
-                className="path-cal__ghost"
-                style={{
-                  top: (preview.start - gridStart) * PX_PER_MIN,
-                  height: Math.max(MIN_VISUAL_MINUTES, preview.minutes) * PX_PER_MIN - 2,
-                }}
-              >
-                {formatBlockWindow(minutesToClock(preview.start), preview.minutes)}
-              </div>
+              <PathDropGhost
+                top={(preview.start - gridStart) * PX_PER_MIN}
+                height={Math.max(MIN_VISUAL_MINUTES, preview.minutes) * PX_PER_MIN - 2}
+                start={preview.start}
+                span={preview.span}
+                title={preview.title}
+              />
             ) : null}
           </section>
         ))}
@@ -309,7 +329,7 @@ function TemplateWeekList({ days, goalsById, onOpen, onNew }) {
       <div className="path-mweek__list">
         {day.list.length ? day.list.map((template) => {
           const goal = goalsById.get(template.goalId);
-          const sub = [formatBlockWindow(template.startTime, template.duration), template.blockType, goal?.title]
+          const sub = [formatBlockWindow(template.startTime, template.duration), template.blockType, blockServesLabel(template, goal)]
             .filter(Boolean).join(' · ');
           return (
             <div
@@ -317,7 +337,7 @@ function TemplateWeekList({ days, goalsById, onOpen, onNew }) {
               role="button"
               tabIndex={0}
               className={`path-mrow${template.enabled ? '' : ' path-mrow--skipped'}`}
-              style={{ '--path-mrow-stripe': normalizeGoalColor(goal?.color) || 'rgba(148, 163, 184, 0.6)' }}
+              style={{ '--path-mrow-stripe': blockAccentColor(template, goal?.color) || 'rgba(148, 163, 184, 0.6)' }}
               onClick={() => onOpen(template)}
               onKeyDown={(event) => {
                 if (event.key !== 'Enter' && event.key !== ' ') return;

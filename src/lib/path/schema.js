@@ -1,5 +1,5 @@
 import { readableInk } from '../../utils/colorInk';
-import { normalizeWheel, wheelHasContent } from './wheel';
+import { lifeAreaById, normalizeLifeAreaId, normalizeWheel, wheelHasContent } from './wheel';
 
 export const PATH_TABS = [
   { id: 'week', label: 'Week' },
@@ -20,6 +20,9 @@ export const BLOCK_TYPES = [
   'Meditation',
   'Workout',
   'Recovery',
+  'Meal',
+  'Planning',
+  'Personal',
 ];
 export const BLOCK_STATUSES = ['Planned', 'Done', 'Moved', 'Skipped'];
 export const METRIC_TYPES = ['Outcome', 'Action'];
@@ -89,6 +92,16 @@ export function goalColorStyle(color) {
   };
 }
 
+/** Colour a block or template shows in: its goal's, else its life area's; null with neither. */
+export function blockAccentColor(item, goalColor) {
+  return normalizeGoalColor(goalColor) || lifeAreaById(item?.lifeAreaId)?.color || null;
+}
+
+/** What a block or template serves, in a few words: its goal's title, else its life area. */
+export function blockServesLabel(item, goal) {
+  return goal?.title || lifeAreaById(item?.lifeAreaId)?.short || null;
+}
+
 export function createPathId(prefix = 'path') {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return `${prefix}-${crypto.randomUUID()}`;
@@ -128,6 +141,12 @@ function asNullableNumber(value) {
   return Number.isFinite(num) ? num : null;
 }
 
+/** Life-wheel area of a block or template that serves no goal; with a goal, the goal says what it serves. */
+function lifeAreaWithoutGoal(overrides) {
+  if (asNullableString(overrides.goalId || overrides.goal_id)) return null;
+  return normalizeLifeAreaId(overrides.lifeAreaId || overrides.life_area_id);
+}
+
 export function normalizePlanSourceFile(raw) {
   if (!raw || typeof raw !== 'object') return null;
   const name = asNullableString(raw.name);
@@ -165,6 +184,8 @@ export function createEmptyGoal(overrides = {}) {
     projectId: asNullableString(overrides.projectId || overrides.project_id),
     projectTitle: asNullableString(overrides.projectTitle || overrides.project_title),
     lifeArea: asFreeText(overrides.lifeArea || overrides.life_area),
+    // Life-wheel area the goal's blocks count for; `lifeArea` above is a free label.
+    lifeAreaId: normalizeLifeAreaId(overrides.lifeAreaId || overrides.life_area_id),
     role: overrides.role === null ? null : pick(GOAL_ROLES, overrides.role, 'Growth'),
     baseline: asFreeText(overrides.baseline),
     target: asFreeText(overrides.target),
@@ -247,6 +268,7 @@ export function createEmptyBlock(overrides = {}) {
   return {
     id: overrides.id || createPathId('block'),
     goalId: asNullableString(overrides.goalId || overrides.goal_id),
+    lifeAreaId: lifeAreaWithoutGoal(overrides),
     projectId: asNullableString(overrides.projectId || overrides.project_id),
     projectTitle: asNullableString(overrides.projectTitle || overrides.project_title),
     title: asString(overrides.title) || 'Time block',
@@ -369,6 +391,7 @@ export function createEmptyTemplate(overrides = {}) {
   return {
     id: overrides.id || createPathId('tpl'),
     goalId: asNullableString(overrides.goalId || overrides.goal_id),
+    lifeAreaId: lifeAreaWithoutGoal(overrides),
     title: asString(overrides.title) || 'Weekly block',
     weekday: Number.isInteger(overrides.weekday) ? overrides.weekday : 1,
     startTime: asNullableString(overrides.startTime || overrides.start_time),

@@ -267,6 +267,14 @@ function normalizeBlockType(value) {
     γυμναστικη: 'Workout',
     recovery: 'Recovery',
     ανανηψη: 'Recovery',
+    meal: 'Meal',
+    γευμα: 'Meal',
+    φαγητο: 'Meal',
+    planning: 'Planning',
+    προγραμματισμοσ: 'Planning',
+    personal: 'Personal',
+    προσωπικο: 'Personal',
+    προσωπικα: 'Personal',
   };
   if (aliases[text]) return aliases[text];
   const match = BLOCK_TYPES.find((type) => fold(type) === text);

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import {
+  adjustWorkTimer,
   getWorkTimerSnapshot,
   pauseWorkTimer,
   resumeWorkTimer,
@@ -33,5 +34,6 @@ export function useWorkTimer() {
     pause: pauseWorkTimer,
     resume: resumeWorkTimer,
     stop: stopWorkTimer,
+    adjust: adjustWorkTimer,
   };
 }

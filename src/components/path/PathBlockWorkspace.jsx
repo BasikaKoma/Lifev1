@@ -1,10 +1,11 @@
 import { forwardRef, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { createEmptyBlockResource, createEmptyNoteSketch, goalColorStyle, sortBlockActions } from '../../lib/path/schema';
+import { blockAccentColor, blockServesLabel, createEmptyBlockResource, createEmptyNoteSketch, goalColorStyle, sortBlockActions } from '../../lib/path/schema';
+import { lifeAreaById } from '../../lib/path/wheel';
 import { blockActionProgress, blockLinkedProject, blockStatusAt, defaultBlockDoneAt, formatBlockClock, formatBlockStatusStamp, formatBlockWindow, formatDuration, fromDatetimeLocalValue, reorderBlockActions, tasksForBlockProject, toDatetimeLocalValue } from '../../lib/path/logic';
 import { appendBlockActions, blockCarryOver, blockResultDraft, captureLineCount, carriedActionTargets, carryOverItems, parseCaptureLine, soleUrl, splitCaptureText, taskTextKey } from '../../lib/path/blockCapture';
 import { organizeBlockTasks } from '../../lib/path/organizeTasks';
 import { useWorkTimer } from '../../hooks/useWorkTimer';
-import { formatClock } from '../../lib/workTimer';
+import { formatClock, trimBlockTimerRecords, workedMinutesPatch } from '../../lib/workTimer';
 import { localTodayIsoDate } from '../../utils/selfDateUtils';
 import { PathNoteInkModal } from './PathNoteInkModal';
 
@@ -163,6 +164,59 @@ function Fact({ label, value }) {
     <>
       <dt>{label}</dt>
       <dd>{value}</dd>
+    </>
+  );
+}
+
+/** The time the timer wrote on the block, with a way to correct it (a timer left running, or never started). */
+function TrackedFact({ minutes, onChange }) {
+  const [draft, setDraft] = useState(null);
+  const tracked = Number(minutes) || 0;
+
+  return (
+    <>
+      <dt>Tracked</dt>
+      <dd className="path-workspace__tracked">
+        {draft == null ? (
+          <>
+            <span>{tracked ? formatDuration(tracked) : '—'}</span>
+            <button
+              type="button"
+              aria-label="Διόρθωση χρόνου"
+              title="Διόρθωση χρόνου"
+              onClick={() => setDraft(String(tracked))}
+            >
+              ✎
+            </button>
+          </>
+        ) : (
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              onChange(draft);
+              setDraft(null);
+            }}
+          >
+            <input
+              type="number"
+              min="0"
+              step="1"
+              inputMode="numeric"
+              autoFocus
+              aria-label="Λεπτά δουλειάς"
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onFocus={(event) => event.target.select()}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') setDraft(null);
+              }}
+            />
+            <span>λεπτά</span>
+            <button type="submit">OK</button>
+            <button type="button" aria-label="Άκυρο" onClick={() => setDraft(null)}>✕</button>
+          </form>
+        )}
+      </dd>
     </>
   );
 }
@@ -612,8 +666,16 @@ export function PathBlockWorkspace({
     onStatus(block, status);
   };
 
+  const setTracked = (minutes) => {
+    const patch = workedMinutesPatch(block, minutes);
+    if (!patch) return;
+    applyPatch(patch);
+    // Time taken off also leaves the day line and a timer still paused on this block.
+    trimBlockTimerRecords(block.id, (Number(block.workedMinutes) || 0) - (patch.workedMinutes || 0));
+  };
+
   const subtitle = [
-    goal?.title,
+    blockServesLabel(block, goal),
     block.blockType,
     formatPageDate(block.date),
     formatBlockWindow(block.startTime, block.duration),
@@ -756,7 +818,7 @@ export function PathBlockWorkspace({
         <div className="path-workspace__main">
           {closeCard}
 
-          <section className="path-workspace__card path-tasks" style={goalColorStyle(goal?.color)}>
+          <section className="path-workspace__card path-tasks" style={goalColorStyle(blockAccentColor(block, goal?.color))}>
             <div className="path-workspace__section-head">
               <h3 className="path-tasks__title">{checklistTitle}</h3>
               {!showOutcome ? (
@@ -1032,11 +1094,12 @@ export function PathBlockWorkspace({
             <h3>Χρόνος</h3>
             <dl className="path-workspace__facts">
               <Fact label="Στόχος" value={goal?.title} />
+              <Fact label="Τομέας" value={lifeAreaById(block.lifeAreaId)?.label} />
               <Fact label="Τύπος" value={block.blockType} />
               <Fact label="Ημέρα" value={formatPageDate(block.date)} />
               <Fact label="Ώρα" value={formatBlockWindow(block.startTime, block.duration)} />
               <Fact label="Διάρκεια" value={formatDuration(block.duration)} />
-              <Fact label="Tracked" value={formatDuration(block.workedMinutes)} />
+              <TrackedFact key={block.id} minutes={block.workedMinutes} onChange={setTracked} />
               <Fact label="Κατάσταση" value={block.status} />
             </dl>
             {block.status !== 'Done' && block.status !== 'Skipped' ? (

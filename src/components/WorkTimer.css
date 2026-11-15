@@ -125,6 +125,72 @@
   background: rgba(255, 255, 255, 0.14);
 }
 
+.work-timer__actions .work-timer__edit {
+  padding: 4px 12px;
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
+.work-timer__actions .work-timer__edit:hover,
+.work-timer__actions .work-timer__edit[aria-expanded='true'] {
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+}
+
+/* Correcting the time: minutes to take off the end (a timer left running) or to add. */
+.work-timer--fixing {
+  flex-wrap: wrap;
+}
+
+.work-timer__fix {
+  flex: 0 0 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  cursor: default;
+}
+
+.work-timer__fix label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: auto;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.work-timer__fix input {
+  width: 58px;
+  padding: 5px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--color-text);
+  color-scheme: dark;
+  font: inherit;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.work-timer__fix button {
+  border: none;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  white-space: nowrap;
+}
+
+.work-timer__fix button[type='submit'] {
+  background: rgba(255, 255, 255, 0.16);
+}
+
 .work-timer--deep {
   flex-direction: column;
   align-items: stretch;
@@ -167,6 +233,19 @@
 }
 
 .work-timer--deep .work-timer__actions button {
+  flex: 1;
+}
+
+.work-timer--deep .work-timer__actions .work-timer__edit {
+  flex: 0 0 auto;
+}
+
+/* Narrow card: the minutes on one line, the two buttons side by side under it. */
+.work-timer--deep .work-timer__fix label {
+  flex: 0 0 100%;
+}
+
+.work-timer--deep .work-timer__fix button {
   flex: 1;
 }
 

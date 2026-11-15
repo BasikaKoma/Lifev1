@@ -14,6 +14,8 @@ const OFFSET_KEY = 'lifev1-work-timer-offset';
 const DRAG_THRESHOLD = 6;
 const EDGE = 8;
 const RING_MS = 6000;
+// Clicks here act on the control itself: they neither drag the timer nor open the block.
+const CONTROLS = 'button, input, .work-timer__fix';
 
 function readOffset() {
   try {
@@ -49,7 +51,9 @@ function clampOffset(node, applied, next) {
 }
 
 export function WorkTimer({ onOpenBlock }) {
-  const { session, elapsedMs, pause, resume, stop } = useWorkTimer();
+  const { session, elapsedMs, pause, resume, stop, adjust } = useWorkTimer();
+  const [fixing, setFixing] = useState(false);
+  const [fixMinutes, setFixMinutes] = useState('15');
   const baseTitle = useRef(null);
   const nodeRef = useRef(null);
   const dragRef = useRef(null);
@@ -93,6 +97,10 @@ export function WorkTimer({ onOpenBlock }) {
     markWorkTimerChimed({ target: targetDue, halfHours });
     setRinging(true);
   }, [deep, over, session, elapsedMs]);
+
+  useEffect(() => {
+    setFixing(false);
+  }, [session?.id]);
 
   useEffect(() => {
     if (!ringing) return undefined;
@@ -150,7 +158,7 @@ export function WorkTimer({ onOpenBlock }) {
   const onPointerDown = (event) => {
     movedRef.current = false;
     if (event.button != null && event.button !== 0) return;
-    if (event.target.closest('button')) return;
+    if (event.target.closest(CONTROLS)) return;
     dragRef.current = {
       pointerId: event.pointerId,
       startX: event.clientX,
@@ -198,14 +206,21 @@ export function WorkTimer({ onOpenBlock }) {
       movedRef.current = false;
       return;
     }
-    if (event.target.closest('button')) return;
+    if (event.target.closest(CONTROLS)) return;
     onOpenBlock?.(session.blockId);
+  };
+
+  const applyFix = (sign) => {
+    const minutes = Math.round(Number(fixMinutes));
+    if (!(minutes > 0)) return;
+    adjust(sign * minutes);
+    setFixing(false);
   };
 
   return (
     <section
       ref={nodeRef}
-      className={`work-timer${deep ? ' work-timer--deep' : ''}${over ? ' work-timer--over' : ''}${session.running ? '' : ' work-timer--paused'}${dragging ? ' work-timer--dragging' : ''}${ringing ? ' work-timer--ring' : ''}`}
+      className={`work-timer${deep ? ' work-timer--deep' : ''}${over ? ' work-timer--over' : ''}${session.running ? '' : ' work-timer--paused'}${dragging ? ' work-timer--dragging' : ''}${ringing ? ' work-timer--ring' : ''}${fixing ? ' work-timer--fixing' : ''}`}
       style={{
         '--timer-p': `${progress}%`,
         ...(offset.x || offset.y ? { transform: `translate3d(${offset.x}px, ${offset.y}px, 0)` } : null),
@@ -248,7 +263,47 @@ export function WorkTimer({ onOpenBlock }) {
           <button type="button" className="work-timer__resume" onClick={resume}>Resume</button>
         )}
         <button type="button" className="work-timer__stop" onClick={stop}>Stop</button>
+        <button
+          type="button"
+          className="work-timer__edit"
+          aria-label="Διόρθωση χρόνου"
+          aria-expanded={fixing}
+          title="Διόρθωση χρόνου"
+          onClick={() => setFixing((open) => !open)}
+        >
+          ✎
+        </button>
       </div>
+      {fixing ? (
+        <form
+          className="work-timer__fix"
+          onSubmit={(event) => {
+            event.preventDefault();
+            applyFix(-1);
+          }}
+        >
+          <label>
+            <input
+              type="number"
+              min="1"
+              step="1"
+              inputMode="numeric"
+              autoFocus
+              aria-label="Λεπτά διόρθωσης"
+              value={fixMinutes}
+              onChange={(event) => setFixMinutes(event.target.value)}
+              onFocus={(event) => event.target.select()}
+            />
+            <span>λεπτά</span>
+          </label>
+          <button type="submit" title="Βγάζει τα λεπτά από το τέλος, π.χ. αν το timer έμεινε ανοιχτό">
+            − Αφαίρεση
+          </button>
+          <button type="button" title="Προσθέτει λεπτά, π.χ. αν το timer ξεκίνησε αργά" onClick={() => applyFix(1)}>
+            + Προσθήκη
+          </button>
+        </form>
+      ) : null}
     </section>
   );
 }
