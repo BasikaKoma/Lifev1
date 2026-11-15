@@ -113,7 +113,12 @@ function humanizeKey(value, map, fallback) {
   return String(value).replace(/[_-]+/g, ' ');
 }
 
-function makeEvent(type, { id, hour, label, timeLabel, typeLabel, facts }) {
+/**
+ * `hour` is where the event's label hangs on the day line. For something that lasted (a
+ * workout, a timed block) pass `startHour` and `endHour` too and put `hour` in their middle:
+ * the line then marks the whole stretch, so it does not read as a moment at its start.
+ */
+function makeEvent(type, { id, hour, label, timeLabel, typeLabel, facts, startHour, endHour }) {
   const config = SELF_TIMELINE_EVENT_TYPES[type];
   if (!config || hour == null || !Number.isFinite(hour)) return null;
   const event = {
@@ -126,6 +131,10 @@ function makeEvent(type, { id, hour, label, timeLabel, typeLabel, facts }) {
     tone: config.tone,
     timeLabel: timeLabel ?? hmFromHour(hour),
   };
+  if (Number.isFinite(startHour) && Number.isFinite(endHour) && endHour > startHour) {
+    event.startHour = Math.max(0, startHour);
+    event.endHour = Math.min(24, endHour);
+  }
   if (Array.isArray(facts) && facts.length) event.facts = facts;
   return event;
 }
@@ -492,12 +501,15 @@ function rangedOuraEvents(items, { type, dateStr, idPrefix, labelOf, tone, facts
     if (hour == null) return;
 
     const label = labelOf(item);
+    // Long enough to draw: the label goes over its middle and says from when to when.
+    const lasted = Boolean(clip?.startOnDate) && clip.endHour - clip.startHour >= 0.12;
     const event = makeEvent(type, {
       id: `${idPrefix}-${item.id || startIso || index}`,
-      hour,
+      hour: lasted ? (clip.startHour + clip.endHour) / 2 : hour,
       label,
-      timeLabel: hmFromHour(hour),
+      timeLabel: lasted ? `${hmFromHour(clip.startHour)}–${hmFromHour(clip.endHour)}` : hmFromHour(hour),
       facts: factsOf?.(item) || [],
+      ...(lasted ? { startHour: clip.startHour, endHour: clip.endHour } : {}),
     });
     if (event) events.push(event);
 
@@ -538,12 +550,17 @@ function workTimerEventsAndSegments(entries, dateStr) {
         label: `${entry.label || 'Work'} · ${clock}`,
       });
     });
+    // From the first run's start to the last run's end, pauses included; the label sits in the middle.
+    const startHour = Math.min(...clips.map((clip) => clip.startHour));
+    const endHour = Math.max(...clips.map((clip) => clip.endHour));
     const event = makeEvent('timer', {
       id: `work-${entry.id}`,
-      hour: clips[0].startHour,
+      hour: (startHour + endHour) / 2,
       label: entry.label || 'Work',
       timeLabel: clock,
       typeLabel: entry.blockType || 'Timer',
+      startHour,
+      endHour,
     });
     if (event) {
       event.tone = entry.blockType === 'Deep Work' ? 'gold' : 'emerald';

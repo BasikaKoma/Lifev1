@@ -1444,6 +1444,21 @@ button.self-day-progress__event.self-day-progress__event--lane2 > .self-day-prog
   pointer-events: none;
 }
 
+/* How long an activity lasted: a bracket over the line from its start to its end, with its
+   dot and label in the middle. Takes its colour from the same tone class as the dot. */
+.self-day-progress__event-stretch {
+  position: absolute;
+  bottom: calc(100% + 5px);
+  height: 5px;
+  box-sizing: border-box;
+  border: 1px solid currentColor;
+  border-bottom: none;
+  border-radius: 3px 3px 0 0;
+  opacity: 0.6;
+  pointer-events: none;
+  z-index: 3;
+}
+
 /* Tones shared by chip icon/stem and track dot */
 .self-day-progress__event--emerald,
 .self-day-progress__event-dot--emerald { color: #34d399; }

@@ -7,6 +7,7 @@ const LANE_COUNT = 3;
 const MIN_GAP_PX = 10;
 const FALLBACK_TRACK_PX = 880;
 const CLUSTER_SPAN_HOURS = 0.4;
+const MIN_STRETCH_PX = 10;
 const LABEL_CAP_PX = 128;
 
 function estimateChipWidthPx(event, density) {
@@ -14,7 +15,8 @@ function estimateChipWidthPx(event, density) {
   const icon = 14;
   const gap = 5;
   let width = padding + icon + 2;
-  if (density !== 'icon' && event.timeLabel) width += gap + 44;
+  // 44px fits a clock; a "09:22–10:01" range is as wide as its text.
+  if (density !== 'icon' && event.timeLabel) width += gap + Math.max(44, String(event.timeLabel).length * 7);
   if (density === 'full' && event.label) {
     width += gap + Math.min(String(event.label).length * 7.2, 192);
   }
@@ -424,6 +426,15 @@ export function SelfDayProgress({
     [events, trackWidth]
   );
   const eventsHeightRem = eventsBandHeightRem(timelineItems);
+  // Events that lasted, when their stretch is wide enough on this track to draw as a bracket.
+  const stretches = useMemo(() => {
+    const width = trackWidth > 0 ? trackWidth : FALLBACK_TRACK_PX;
+    return events.filter((event) => (
+      Number.isFinite(event.startHour)
+      && Number.isFinite(event.endHour)
+      && ((event.endHour - event.startHour) / 24) * width >= MIN_STRETCH_PX
+    ));
+  }, [events, trackWidth]);
   useLayoutEffect(() => {
     const root = trackRef.current;
     if (!root) return;
@@ -550,6 +561,17 @@ export function SelfDayProgress({
                   />
                 );
               })}
+              {stretches.map((event) => (
+                <span
+                  key={`stretch-${event.id}`}
+                  className={`self-day-progress__event-stretch self-day-progress__event-dot--${event.tone}`}
+                  style={{
+                    left: `${(event.startHour / 24) * 100}%`,
+                    width: `${((event.endHour - event.startHour) / 24) * 100}%`,
+                  }}
+                  aria-hidden
+                />
+              ))}
               {timelineItems.map((item) => (
                 item.kind === 'cluster' ? (
                   <span
