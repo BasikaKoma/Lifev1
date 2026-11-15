@@ -469,6 +469,120 @@
   color: #fbbf24;
 }
 
+.path-field__note {
+  font-size: 0.72rem;
+  color: var(--path-muted);
+}
+
+/* Start – end in one field. */
+.path-time-range {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--path-muted);
+}
+
+.path-time-range .input {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.path-time-range .input:disabled {
+  opacity: 0.45;
+}
+
+/* One-click lengths under the time field. */
+.path-duration-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.path-duration-chip {
+  padding: 4px 10px;
+  border: 1px solid var(--path-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--path-muted);
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 600;
+  line-height: 1.3;
+  cursor: pointer;
+}
+
+.path-duration-chip:hover {
+  color: var(--color-text);
+  border-color: var(--color-border-light, #222222);
+}
+
+.path-duration-chip--active,
+.path-duration-chip--active:hover {
+  color: var(--color-text);
+  background: var(--color-accent-light, rgba(30, 58, 138, 0.2));
+  border-color: var(--color-accent-hover, #1e40af);
+}
+
+/* Title input with the titles of earlier blocks underneath. */
+.path-combo {
+  position: relative;
+}
+
+.path-combo__list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 5;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  max-height: 264px;
+  overflow-y: auto;
+  background: var(--color-surface, #0a0a0a);
+  border: 1px solid var(--color-border-light, #222222);
+  border-radius: 10px;
+  box-shadow: var(--shadow-md, 0 4px 16px rgba(0, 0, 0, 0.7));
+}
+
+.path-combo__option {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.875rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.path-combo__option--active {
+  background: var(--color-surface-hover, #111111);
+}
+
+.path-combo__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.path-combo__meta {
+  flex-shrink: 0;
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.72rem;
+  color: var(--path-muted);
+}
+
 .path-check {
   display: inline-flex;
   align-items: center;
@@ -2507,6 +2621,17 @@
 
   .path-form {
     grid-template-columns: 1fr;
+  }
+
+  /* Narrow: the remembered title on its own line, its goal and type underneath. */
+  .path-combo__option {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+  }
+
+  .path-combo__meta {
+    max-width: none;
   }
 
   .path-cal-scroll {

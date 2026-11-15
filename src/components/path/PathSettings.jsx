@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { createEmptyTemplate } from '../../lib/path/schema';
-import { formatDuration, plannedDayMinutes } from '../../lib/path/logic';
+import { formatDuration, plannedDayMinutes, withBlockDuration } from '../../lib/path/logic';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { PathModal, TemplateFields } from './PathFields';
 import { PathTemplateWeek } from './PathTemplateWeek';
@@ -33,7 +33,8 @@ export function PathSettings({ path }) {
   const weekMinutes = plannedDayMinutes(path.templates.filter((template) => template.enabled));
 
   const openNew = (weekday = 1, startTime = null) => {
-    setEditor({ ...createEmptyTemplate({ weekday, startTime, duration: 60 }), title: '' });
+    // No end yet: a template saved without one gets the default length, like a block.
+    setEditor({ ...createEmptyTemplate({ weekday, startTime }), title: '' });
   };
 
   const moveTemplate = (templateId, { weekday, startTime }) => {
@@ -44,7 +45,7 @@ export function PathSettings({ path }) {
 
   const save = () => {
     if (!editor?.title?.trim()) return;
-    path.upsertTemplate({ ...editor, title: editor.title.trim() });
+    path.upsertTemplate(withBlockDuration({ ...editor, title: editor.title.trim() }));
     setEditor(null);
   };
 
@@ -91,6 +92,7 @@ export function PathSettings({ path }) {
             <TemplateFields
               template={editor}
               goals={goals}
+              onSubmit={save}
               onChange={(patch) => setEditor((prev) => ({ ...prev, ...patch }))}
             />
             <div className="path-modal__actions">

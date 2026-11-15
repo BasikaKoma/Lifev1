@@ -4,10 +4,12 @@ import {
   WEEKDAYS,
   createEmptyBlock,
   createEmptyBlockAction,
+  createEmptyTemplate,
   isLegacyTemplate,
   nowIso,
   parseLocalDate,
   roleRank,
+  shiftWeek,
   sortBlockActions,
   startOfWeekMonday,
   toIsoDate,
@@ -395,6 +397,101 @@ export function minutesToClock(total) {
   const value = Math.max(0, Math.min(24 * 60 - 1, Math.round(Number(total) || 0)));
   const pad = (part) => String(part).padStart(2, '0');
   return `${pad(Math.floor(value / 60))}:${pad(value % 60)}`;
+}
+
+/** Length of a block saved without an end time. */
+export const DEFAULT_BLOCK_MINUTES = 30;
+
+/** "07:30" for a start and a duration; '' when either is missing. */
+export function blockEndClock(startTime, duration) {
+  const start = clockMinutes(startTime);
+  const minutes = toNum(duration);
+  if (start == null || minutes == null || minutes <= 0) return '';
+  return minutesToClock(start + Math.round(minutes));
+}
+
+/** Minutes from one clock to a later one on the same day; null when the end is not after the start. */
+export function minutesBetweenClocks(startTime, endTime) {
+  const start = clockMinutes(startTime);
+  const end = clockMinutes(endTime);
+  if (start == null || end == null || end <= start) return null;
+  return end - start;
+}
+
+/** Lengths offered as one-click buttons under the time field. */
+export const BLOCK_DURATION_CHOICES = [30, 45, 60, 90, 120];
+
+/** A block or template saved without an end time lasts DEFAULT_BLOCK_MINUTES. */
+export function withBlockDuration(block) {
+  const minutes = toNum(block?.duration);
+  return minutes != null && minutes > 0 ? block : { ...block, duration: DEFAULT_BLOCK_MINUTES };
+}
+
+/**
+ * The weekly template that repeats `block` from its own week on; null without a date.
+ * The block itself must take the template's id, so its week is not filled twice. Weeks
+ * between today and a later block are marked skipped: the series starts with the block.
+ */
+export function templateFromBlock(block, today = localTodayIsoDate()) {
+  const weekday = weekdayFromDate(block?.date);
+  if (!weekday) return null;
+  const firstWeek = startOfWeekMonday(block.date);
+  const skippedWeeks = [];
+  for (let week = startOfWeekMonday(today); week < firstWeek && skippedWeeks.length < 104; week = shiftWeek(week, 1)) {
+    skippedWeeks.push(week);
+  }
+  return createEmptyTemplate({
+    goalId: block.goalId,
+    title: String(block.title || '').trim(),
+    weekday,
+    startTime: block.startTime,
+    duration: block.duration,
+    blockType: block.blockType,
+    minimumAction: block.minimumAction,
+    skippedWeeks,
+  });
+}
+
+/** Lower case without accents, so "γυμναστικη" finds "Γυμναστική". */
+export function foldSearchText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/ς/g, 'σ')
+    .trim();
+}
+
+/**
+ * Titles of earlier blocks, newest first and each one once, with the goal, type
+ * and duration it was last used with. `query` narrows the list.
+ */
+export function recentBlockTitles(blocks = [], { excludeId = null, query = '', limit = 6 } = {}) {
+  const needle = foldSearchText(query);
+  const newestFirst = [...(blocks || [])].sort((a, b) => (
+    String(b?.date || '').localeCompare(String(a?.date || ''))
+    || String(b?.updatedAt || '').localeCompare(String(a?.updatedAt || ''))
+  ));
+  const seen = new Set();
+  const titles = [];
+  for (const block of newestFirst) {
+    if (block.id === excludeId) continue;
+    const title = String(block.title || '').trim();
+    const key = foldSearchText(title);
+    if (!key || title === 'Time block' || seen.has(key)) continue;
+    seen.add(key);
+    if (needle && (!key.includes(needle) || key === needle)) continue;
+    titles.push({
+      title,
+      goalId: block.goalId,
+      projectId: block.projectId,
+      projectTitle: block.projectTitle,
+      blockType: block.blockType,
+      duration: toNum(block.duration),
+    });
+    if (titles.length >= limit) break;
+  }
+  return titles;
 }
 
 /**

@@ -6,10 +6,15 @@ import {
   startOfWeekMonday,
   weekDates,
 } from '../../lib/path/schema';
-import { defaultBlockDoneAt, formatWeekRange, fromDatetimeLocalValue, toDatetimeLocalValue } from '../../lib/path/logic';
+import {
+  defaultBlockDoneAt,
+  formatWeekRange,
+  fromDatetimeLocalValue,
+  toDatetimeLocalValue,
+} from '../../lib/path/logic';
 import { useWorkTimer } from '../../hooks/useWorkTimer';
 import { ConfirmDialog } from '../ConfirmDialog';
-import { BlockFields, PathModal } from './PathFields';
+import { BlockFields, PathModal, saveBlockDraft } from './PathFields';
 import { PathBlockWorkspace } from './PathBlockWorkspace';
 import { PathWeekCalendar } from './PathWeekCalendar';
 import { PathWeekMobile } from './PathWeekMobile';
@@ -58,19 +63,21 @@ export function PathWeek({
   }, [workspaceId, onWorkspaceChange]);
 
   const openNew = (date, startTime = null) => {
-    setEditor(createEmptyBlock({
+    // No title and no end yet: the title is typed or picked, and a block saved without an end gets the default length.
+    setEditor({
+      ...createEmptyBlock({
+        date,
+        startTime,
+        status: 'Planned',
+        blockType: 'Deep Work',
+      }),
       title: '',
-      date,
-      startTime,
-      status: 'Planned',
-      blockType: 'Deep Work',
-      duration: 60,
-    }));
+    });
   };
 
   const saveEditor = () => {
     if (!editor?.title?.trim()) return;
-    const saved = path.upsertBlock(editor);
+    const saved = saveBlockDraft(path, editor);
     if (editor.status === 'Done' && editor.completeLinkedTask && saved.taskId) {
       onCompleteLinkedTask?.({
         taskId: saved.taskId,
@@ -187,13 +194,14 @@ export function PathWeek({
       <PathModal open={Boolean(editor)} title={editor && path.blocks.some((block) => block.id === editor.id) ? 'Edit block' : 'New block'} onClose={() => setEditor(null)}>
         {editor ? (
           <>
-            <p className="path-empty" style={{ marginBottom: 12 }}>
-              A block is a time commitment. Completing it does not complete a linked task unless you choose that.
-            </p>
             <BlockFields
               block={editor}
               goals={path.goals.filter((goal) => goal.status !== 'Archived')}
               tasks={tasks}
+              blocks={path.blocks}
+              isNew={!path.blocks.some((block) => block.id === editor.id)}
+              allowRepeat
+              onSubmit={saveEditor}
               showCompleteTask={editor.status === 'Done'}
               onChange={(patch) => setEditor((prev) => ({ ...prev, ...patch }))}
             />

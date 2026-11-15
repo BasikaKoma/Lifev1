@@ -12,7 +12,7 @@ import {
   weekBlockStats,
   formatBlockStatusStamp,
 } from '../../lib/path/logic';
-import { BlockFields, GoalFields, PathModal } from './PathFields';
+import { BlockFields, GoalFields, PathModal, saveBlockDraft } from './PathFields';
 
 const TRACK_CLASS = {
   'On track': 'path-pill--ontrack',
@@ -89,6 +89,12 @@ export function PathGoals({
     path.upsertGoal(editor);
     setEditor(null);
     if (detail?.id === editor.id) setDetail(editor);
+  };
+
+  const saveBlock = () => {
+    if (!blockDraft) return;
+    saveBlockDraft(path, blockDraft);
+    setBlockDraft(null);
   };
 
   const selected = detail ? path.goals.find((goal) => goal.id === detail.id) || detail : null;
@@ -238,6 +244,10 @@ export function PathGoals({
               block={blockDraft}
               goals={path.goals}
               tasks={tasks}
+              blocks={path.blocks}
+              isNew
+              allowRepeat
+              onSubmit={saveBlock}
               onChange={(patch) => setBlockDraft((prev) => ({ ...prev, ...patch }))}
             />
             <div className="path-modal__actions">
@@ -245,10 +255,7 @@ export function PathGoals({
               <button
                 type="button"
                 className="btn btn--primary"
-                onClick={() => {
-                  path.upsertBlock(blockDraft);
-                  setBlockDraft(null);
-                }}
+                onClick={saveBlock}
               >
                 Save block
               </button>
