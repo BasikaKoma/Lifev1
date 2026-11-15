@@ -9,8 +9,10 @@ import {
   createEmptyTemplate,
   applyBlockStatus,
   applyBlockStatusMoment,
+  normalizeWeekGoals,
   nowIso,
   startOfWeekMonday,
+  weekGoalsFor,
 } from '../lib/path/schema';
 import { loadPathBundle, queuePathSave, subscribePathBundle, subscribePathSave } from '../lib/path/store';
 import { deletePlanSourceFile, syncPlanSourceFile } from '../lib/path/planFile';
@@ -326,6 +328,22 @@ export function usePath() {
     });
   }, [updateBundle]);
 
+  /** Changes one of the week's three goals; `patch` carries `text` and/or `done`. */
+  const setWeekGoal = useCallback((weekStart, index, patch) => {
+    if (!weekStart) return;
+    updateBundle((prev) => {
+      const goals = weekGoalsFor(prev.plan, weekStart);
+      if (!goals[index]) return prev;
+      goals[index] = { ...goals[index], ...patch };
+      return {
+        plan: {
+          ...prev.plan,
+          weekGoals: normalizeWeekGoals({ ...prev.plan?.weekGoals, [weekStart]: goals }),
+        },
+      };
+    });
+  }, [updateBundle]);
+
   useEffect(() => {
     const sourceFile = bundle?.plan?.sourceFile;
     if (!sourceFile?.id || sourceFile.storagePath) return undefined;
@@ -350,6 +368,9 @@ export function usePath() {
             ...prev.plan,
             ...plan,
             sourceFile: plan.sourceFile || prev.plan.sourceFile || null,
+            // An import reads the plan's title and dates; the wheel and the week goals are not its to replace.
+            wheel: prev.plan.wheel,
+            weekGoals: prev.plan.weekGoals,
           }
         : prev.plan;
       return {
@@ -411,6 +432,7 @@ export function usePath() {
     stats,
     updatePlan,
     updateWheel,
+    setWeekGoal,
     upsertGoal,
     archiveGoal,
     upsertBlock,

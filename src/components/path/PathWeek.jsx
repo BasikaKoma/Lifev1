@@ -17,6 +17,7 @@ import { ConfirmDialog } from '../ConfirmDialog';
 import { BlockFields, PathModal, saveBlockDraft } from './PathFields';
 import { PathBlockWorkspace } from './PathBlockWorkspace';
 import { PathWeekCalendar } from './PathWeekCalendar';
+import { PathWeekGoals } from './PathWeekGoals';
 import { PathWeekMobile } from './PathWeekMobile';
 import { platform } from '../../platform';
 
@@ -170,6 +171,8 @@ export function PathWeek({
         </div>
         <h2>{formatWeekRange(weekStart)}</h2>
       </div>
+
+      <PathWeekGoals key={weekStart} path={path} weekStart={weekStart} />
 
       <div style={{ marginTop: 16 }}>
         <PathWeekCalendar

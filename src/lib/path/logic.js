@@ -567,7 +567,7 @@ export function layoutDayTimeline(blocks = [], { minMinutes = 30, defaultMinutes
 }
 
 /** Hour range for the week grid: the defaults, widened to fit every block. */
-export function timelineHourBounds(items = [], { startHour = 6, endHour = 23 } = {}) {
+export function timelineHourBounds(items = [], { startHour = 4, endHour = 23 } = {}) {
   let first = startHour;
   let last = endHour;
   for (const item of items || []) {

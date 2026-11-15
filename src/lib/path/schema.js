@@ -162,6 +162,42 @@ export function normalizePlanSourceFile(raw) {
   };
 }
 
+export const WEEK_GOAL_SLOTS = 3;
+const WEEK_GOAL_MAX_LENGTH = 240;
+
+function createWeekGoal(raw) {
+  const source = raw && typeof raw === 'object' ? raw : {};
+  // Spaces stay as typed; a goal with no text cannot be done.
+  const text = asString(source.text).slice(0, WEEK_GOAL_MAX_LENGTH);
+  return { text, done: Boolean(source.done) && Boolean(text.trim()) };
+}
+
+function weekGoalSlots(list) {
+  const source = Array.isArray(list) ? list : [];
+  return Array.from({ length: WEEK_GOAL_SLOTS }, (_, index) => createWeekGoal(source[index]));
+}
+
+/** The week's goals by its Monday; a week with nothing written is not kept. */
+export function normalizeWeekGoals(raw) {
+  const weeks = {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return weeks;
+  for (const week of Object.keys(raw).sort()) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(week)) continue;
+    const goals = weekGoalSlots(raw[week]);
+    if (goals.some((goal) => goal.text.trim())) weeks[week] = goals;
+  }
+  return weeks;
+}
+
+/** Always three slots for the week, empty ones included. */
+export function weekGoalsFor(plan, weekStart) {
+  return weekGoalSlots(plan?.weekGoals?.[weekStart]);
+}
+
+export function weekGoalsHaveContent(weekGoals) {
+  return Object.keys(weekGoals || {}).length > 0;
+}
+
 export function createEmptyPlan(overrides = {}) {
   return {
     title: asString(overrides.title),
@@ -169,6 +205,7 @@ export function createEmptyPlan(overrides = {}) {
     endDate: asNullableString(overrides.endDate || overrides.end_date),
     sourceFile: normalizePlanSourceFile(overrides.sourceFile || overrides.source_file),
     wheel: normalizeWheel(overrides.wheel),
+    weekGoals: normalizeWeekGoals(overrides.weekGoals || overrides.week_goals),
   };
 }
 
@@ -474,6 +511,7 @@ export function createEmptyBundle() {
 export function pathBundleHasContent(bundle) {
   if (!bundle) return false;
   if (wheelHasContent(bundle.plan?.wheel)) return true;
+  if (weekGoalsHaveContent(bundle.plan?.weekGoals)) return true;
   if ((bundle.goals || []).length) return true;
   if ((bundle.blocks || []).length) return true;
   if ((bundle.templates || []).length) return true;

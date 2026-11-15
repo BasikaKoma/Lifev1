@@ -741,6 +741,127 @@
   font-size: 1.05rem;
 }
 
+/* The week's three goals, between the week nav and its blocks. */
+.path-wgoals {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.path-wgoals__head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--path-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.path-wgoals__head h3 {
+  margin: 0;
+  font: inherit;
+}
+
+.path-wgoals__head span {
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+  opacity: 0.78;
+}
+
+.path-wgoals__list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.path-wgoals__item {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  background: var(--path-card);
+  border: 1px solid var(--path-border);
+  border-radius: 12px;
+}
+
+.path-wgoals__item:focus-within {
+  border-color: var(--color-border-light, #222222);
+  background: var(--color-surface-hover, #111111);
+}
+
+.path-wgoals__box {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1.5px solid rgba(255, 255, 255, 0.28);
+  border-radius: 6px;
+  background: transparent;
+  color: transparent;
+  cursor: pointer;
+}
+
+.path-wgoals__box svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.path-wgoals__box:hover:not(:disabled) {
+  border-color: #34d399;
+}
+
+/* An empty slot shows its number where the tick will be. */
+.path-wgoals__box:disabled {
+  border-color: transparent;
+  color: var(--path-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: default;
+}
+
+.path-wgoals__item--done .path-wgoals__box {
+  border-color: #34d399;
+  background: #34d399;
+  color: #0b0d0e;
+}
+
+.path-wgoals__text {
+  min-width: 0;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 600;
+  padding: 2px 0;
+  outline: none;
+  text-overflow: ellipsis;
+}
+
+.path-wgoals__text::placeholder {
+  color: var(--path-muted);
+  font-weight: 500;
+}
+
+.path-wgoals__item--done .path-wgoals__text {
+  color: var(--path-muted);
+  text-decoration: line-through;
+}
+
 .path-cal-scroll {
   position: relative;
 }
@@ -2835,6 +2956,11 @@
 
   .path-combo__meta {
     max-width: none;
+  }
+
+  .path-wgoals__list {
+    grid-template-columns: 1fr;
+    gap: 6px;
   }
 
   .path-cal-scroll {

@@ -707,6 +707,37 @@ html.is-mobile .quick-note-orb__chip {
   color: var(--path-muted, #8b9399);
 }
 
+/* Week goals on a phone: one under the other, sized for a thumb. */
+.path-mweek .path-wgoals {
+  margin-top: 0;
+}
+
+.path-mweek .path-wgoals__list {
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+
+.path-mweek .path-wgoals__item {
+  grid-template-columns: 28px minmax(0, 1fr);
+  padding: 3px 12px;
+}
+
+.path-mweek .path-wgoals__box {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+}
+
+.path-mweek .path-wgoals__box svg {
+  width: 15px;
+  height: 15px;
+}
+
+.path-mweek .path-wgoals__text {
+  font-size: 16px;
+  padding: 6px 0;
+}
+
 .path-mweek__strip {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));

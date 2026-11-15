@@ -13,6 +13,7 @@ import {
 } from '../../lib/path/logic';
 import { formatClock } from '../../lib/workTimer';
 import { readableInk, solidColor } from '../../utils/colorInk';
+import { PathWeekGoals } from './PathWeekGoals';
 
 const DAY_SHORT = ['Δευ', 'Τρί', 'Τετ', 'Πέμ', 'Παρ', 'Σάβ', 'Κυρ'];
 const DAY_LONG = ['Δευτέρα', 'Τρίτη', 'Τετάρτη', 'Πέμπτη', 'Παρασκευή', 'Σάββατο', 'Κυριακή'];
@@ -300,6 +301,8 @@ export function PathWeekMobile({
           <Icon name="right" />
         </button>
       </header>
+
+      <PathWeekGoals key={weekStart} path={path} weekStart={weekStart} />
 
       <div className="path-mweek__strip" role="tablist" aria-label="Μέρες εβδομάδας">
         {dates.map((date, index) => {
