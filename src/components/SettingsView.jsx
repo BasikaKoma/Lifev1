@@ -10,6 +10,7 @@ import { platform } from '../platform';
 import { ShareProjectPanel } from './ShareProjectPanel';
 import { VaultSettings } from './VaultSettings';
 import { AssistantConnections } from './AssistantConnections';
+import { CarSettings } from './CarSettings';
 import { NotificationSettings } from './NotificationSettings';
 
 export function SettingsView({
@@ -327,6 +328,8 @@ export function SettingsView({
                   {scaleConnected ? 'Διαχείριση Scale' : 'Connect Scale'}
                 </button>
               </div>
+
+              <CarSettings />
 
               <div className="settings-block">
                 <h3 className="settings-block__title">Κάμερες Dahua (DMSS)</h3>

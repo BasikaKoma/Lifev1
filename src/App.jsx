@@ -25,6 +25,7 @@ import { ConfigErrorView } from './components/ConfigErrorView';
 import { APP_NAME } from './constants/branding';
 import { useOura, useOuraOAuthReturn } from './hooks/useOura';
 import { useOuraPathSync } from './hooks/useOuraPathSync';
+import { useCarTrips } from './hooks/useCarTrips';
 import { useMeta, useMetaOAuthReturn } from './hooks/useMeta';
 import { useProfile } from './hooks/useProfile';
 import { useHealthSelfHubSync } from './hooks/useHealthSelfHubSync';
@@ -269,6 +270,8 @@ function MainApp({ user, onSignOut }) {
     connected: Boolean(ouraStatus?.connected),
     lastSyncedAt: ouraStatus?.last_synced_at,
   });
+
+  useCarTrips({ enabled: Boolean(user) });
 
   const {
     selfData: healthSelfData,

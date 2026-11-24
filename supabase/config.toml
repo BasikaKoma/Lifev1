@@ -24,3 +24,6 @@ verify_jwt = false
 
 [functions.oura-webhook-subscriptions]
 verify_jwt = false
+
+[functions.car-log]
+verify_jwt = false

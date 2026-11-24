@@ -902,6 +902,39 @@ html:has(.app--projects) body {
   gap: 10px;
 }
 
+/* Settings → the two links the iPhone calls from the car */
+.car-settings__link {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.car-settings__link .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.car-settings__link .btn {
+  flex: 0 0 auto;
+}
+
+.car-settings__steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0 12px;
+  padding-left: 20px;
+  font-size: 0.8125rem;
+  color: var(--color-text);
+}
+
+.car-settings__note {
+  margin: 0 0 14px;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
 .settings-block .notification-settings__select {
   display: block;
   width: 180px;
