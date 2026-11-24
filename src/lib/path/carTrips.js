@@ -5,9 +5,19 @@ export const CAR_BLOCK_TITLE = 'Οδήγηση';
 /** Longer than this is a disconnect that never arrived, not a drive. */
 const MAX_TRIP_MINUTES = 12 * 60;
 
+const CAR_BLOCK_PREFIX = 'block-car-';
+
 /** A trip always becomes the same block, so reading it twice (two devices) adds it once. */
 export function carBlockId(tripId) {
-  return `block-car-${tripId}`;
+  return `${CAR_BLOCK_PREFIX}${tripId}`;
+}
+
+/**
+ * A block the car logged. Its start and its end were both measured, so it spans the hours
+ * driven; any other block's `startedAt` is only when a timer first ran on it.
+ */
+export function isCarBlockId(blockId) {
+  return String(blockId || '').startsWith(CAR_BLOCK_PREFIX);
 }
 
 /**

@@ -2,6 +2,7 @@ import { parseOuraPayload } from './heartRateMetric';
 import { parseDate } from './lifeline';
 import { localTodayIsoDate } from './selfDateUtils';
 import { formatClock, workTimerEntries } from '../lib/workTimer';
+import { isCarBlockId } from '../lib/path/carTrips';
 
 /**
  * Builds small "event cards" placed along the Self hub day timeline.
@@ -40,6 +41,7 @@ export const SELF_TIMELINE_EVENT_TYPES = {
   session: { icon: 'aura', tone: 'violet', typeLabel: 'Session', priority: 4 },
   tag: { icon: 'tag', tone: 'sky', typeLabel: 'Tag', priority: 8 },
   path: { icon: 'checkCircle', tone: 'emerald', typeLabel: 'Path', priority: 3 },
+  drive: { icon: 'car', tone: 'sky', typeLabel: 'Οδήγηση', priority: 3 },
   timer: { icon: 'checkCircle', tone: 'emerald', typeLabel: 'Timer', priority: 2 },
 };
 
@@ -364,14 +366,61 @@ function hourFromTimestamp(iso, dateStr) {
   return hourFromIso(iso);
 }
 
-function completedEvents(completed, dateStr) {
-  if (!Array.isArray(completed)) return [];
+/** Local "HH:MM" of an ISO time, cut to the minute the way the Path shows it. */
+function clockOf(iso) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+}
+
+/**
+ * A drive the car logged spans the line from when it started to when it ended, with its
+ * label in the middle; on the track it is a band, like a workout.
+ */
+function driveEventAndSegment(item, blockId, dateStr) {
+  const clip = intervalOnDate(item.startedAt, item.completedAt, dateStr);
+  if (!clip) return null;
+  const start = clockOf(item.startedAt);
+  const end = clockOf(item.completedAt);
+  const facts = [];
+  addFact(facts, 'Διάρκεια', durationBetween(item.startedAt, item.completedAt));
+  const event = makeEvent('drive', {
+    id: `drive-${blockId}`,
+    hour: (clip.startHour + clip.endHour) / 2,
+    label: item.title,
+    timeLabel: start && end ? `${start}–${end}` : null,
+    startHour: clip.startHour,
+    endHour: clip.endHour,
+    facts,
+  });
+  if (!event) return null;
+  // A few minutes are still drawn, as the work timer's runs are.
+  const segmentEnd = Math.min(24, Math.max(clip.endHour, clip.startHour + 0.025));
+  const duration = facts[0] ? ` · ${facts[0].value}${facts[0].unit}` : '';
+  return {
+    event,
+    segment: { start: clip.startHour, end: segmentEnd, tone: 'drive', label: `${item.title}${duration}` },
+  };
+}
+
+function completedEventsAndSegments(completed, dateStr) {
   const events = [];
+  const segments = [];
+  if (!Array.isArray(completed)) return { events, segments };
   for (const item of completed) {
+    const blockId = String(item?.id).split(':').pop();
+    if (item?.kind === 'path' && item.startedAt && isCarBlockId(blockId)) {
+      const drive = driveEventAndSegment(item, blockId, dateStr);
+      if (drive) {
+        events.push(drive.event);
+        segments.push(drive.segment);
+        continue;
+      }
+    }
     const hour = hourFromTimestamp(item?.completedAt || item?.timestamp, dateStr);
     if (hour == null) continue;
     const type = SELF_TIMELINE_EVENT_TYPES[item.kind] ? item.kind : 'done';
-    const eventId = `${type}-${String(item.id).split(':').pop()}`;
+    const eventId = `${type}-${blockId}`;
     const event = makeEvent(type, {
       id: eventId,
       hour,
@@ -381,7 +430,7 @@ function completedEvents(completed, dateStr) {
     });
     if (event) events.push(event);
   }
-  return events;
+  return { events, segments };
 }
 
 function pulseEvents(heartRate, ouraSamples, sleepWindows = []) {
@@ -666,11 +715,12 @@ export function buildSelfHubTimelineEvents({
 } = {}) {
   const oura = ouraTimelineFromRow(ouraRow, date);
   const work = workTimerEventsAndSegments(workEntries, date);
+  const done = completedEventsAndSegments(projectDay?.completed, date);
   const events = [
     ...oura.events,
     ...routineEvents(routines),
     ...noteEvents(projectDay?.notes),
-    ...completedEvents(projectDay?.completed, date),
+    ...done.events,
     ...pulseEvents(heartRate, oura.samples, oura.windows),
     ...work.events,
   ];
@@ -684,7 +734,7 @@ export function buildSelfHubTimelineEvents({
 
   return {
     events: capEvents(deduped, limit),
-    segments: [...oura.segments, ...work.segments],
+    segments: [...oura.segments, ...done.segments, ...work.segments],
   };
 }
 

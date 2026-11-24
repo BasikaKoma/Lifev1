@@ -691,6 +691,7 @@ export function collectPathResolvedForDate(bundle, dateStr) {
       title: block.title || 'Path block',
       projectTitle: block.projectTitle || null,
       completedAt: at,
+      startedAt: block.startedAt || null,
       timeLabel: formatBlockClock(parsed),
       done: block.status === 'Done',
       status: block.status,

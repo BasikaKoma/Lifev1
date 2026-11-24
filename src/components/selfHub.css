@@ -1314,6 +1314,32 @@ button.self-day-progress__event.self-day-progress__event--lane2 > .self-day-prog
   min-height: 0.4rem;
 }
 
+/* Labels under the line, so neighbours do not stack on top of each other above it: the stem
+   comes first, from the line down to the chip. */
+.self-day-progress__events--below {
+  top: calc(var(--day-events-height, 5.15rem) + 3px + 0.3rem);
+  height: var(--day-events-below-height, 0rem);
+}
+
+.self-day-progress__event.self-day-progress__event--below {
+  flex-direction: column-reverse;
+  justify-content: flex-end;
+}
+
+.self-day-progress__event--cluster.self-day-progress__event--below {
+  top: 0;
+  bottom: auto;
+}
+
+.self-day-progress__event--below .self-day-progress__event-stem {
+  flex: none;
+  height: 0.45rem;
+  min-height: 0;
+  margin-top: 0;
+  margin-bottom: 0.1rem;
+  background: linear-gradient(0deg, currentColor, transparent);
+}
+
 .self-day-progress__cluster-shift {
   display: flex;
   justify-content: center;
@@ -1459,6 +1485,14 @@ button.self-day-progress__event.self-day-progress__event--lane2 > .self-day-prog
   z-index: 3;
 }
 
+.self-day-progress__event-stretch--below {
+  bottom: auto;
+  top: calc(100% + 5px);
+  border-top: none;
+  border-bottom: 1px solid currentColor;
+  border-radius: 0 0 3px 3px;
+}
+
 /* Tones shared by chip icon/stem and track dot */
 .self-day-progress__event--emerald,
 .self-day-progress__event-dot--emerald { color: #34d399; }
@@ -1573,6 +1607,12 @@ button.self-day-progress__event.self-day-progress__event--lane2 > .self-day-prog
   background: #f5c16c;
   opacity: 0.9;
 }
+.self-day-progress__segment--drive {
+  top: -2px;
+  bottom: -2px;
+  background: #38bdf8;
+  opacity: 0.8;
+}
 .self-day-progress__segment--focus { background: var(--hub-accent-bright); }
 .self-day-progress__segment--emerald { background: var(--hub-accent); }
 
@@ -1596,7 +1636,8 @@ button.self-day-progress__event.self-day-progress__event--lane2 > .self-day-prog
 .self-day-progress__markers {
   display: flex;
   justify-content: space-between;
-  margin-top: 0.85rem;
+  /* Clear of the labels hanging under the line, when there are any. */
+  margin-top: calc(0.85rem + var(--day-events-below-height, 0rem));
   font-size: clamp(0.5rem, 1.5vw, 0.5625rem);
   color: rgba(248, 250, 252, 0.32);
   font-variant-numeric: tabular-nums;

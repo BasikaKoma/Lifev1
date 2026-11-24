@@ -123,10 +123,17 @@ function groupPlacedEvents(placed, trackWidthPx) {
   return preferFullLabels(assignColumnBands(placedColumns, trackWidthPx), trackWidthPx);
 }
 
-/** Nearby columns alternate above the line so their labels stay on their own dots. */
+/** Where a column's label sits: just above the line, in a second row above it, or under it. */
+const BAND_ABOVE = 0;
+const BAND_HIGH = 1;
+const BAND_BELOW = 2;
+/** A label that does not fit just above the line goes under it before it climbs a row. */
+const BAND_ORDER = [BAND_ABOVE, BAND_BELOW, BAND_HIGH];
+
+/** Nearby columns alternate above and under the line so their labels stay on their own dots. */
 function assignColumnBands(columns, trackWidthPx) {
   const width = trackWidthPx > 0 ? trackWidthPx : FALLBACK_TRACK_PX;
-  const bandRight = [-Infinity, -Infinity];
+  const bandRight = [-Infinity, -Infinity, -Infinity];
 
   return columns.map((column) => {
     const card = column.kind === 'cluster'
@@ -136,9 +143,9 @@ function assignColumnBands(columns, trackWidthPx) {
     const center = (pos / 100) * width;
     const left = center - card / 2;
     const right = center + card / 2;
-    let band = left >= bandRight[0] + MIN_GAP_PX ? 0 : 1;
-    if (band === 1 && left < bandRight[1] + MIN_GAP_PX) {
-      band = bandRight[0] <= bandRight[1] ? 0 : 1;
+    let band = BAND_ORDER.find((candidate) => left >= bandRight[candidate] + MIN_GAP_PX);
+    if (band == null) {
+      band = BAND_ORDER.reduce((best, candidate) => (bandRight[candidate] < bandRight[best] ? candidate : best));
     }
     bandRight[band] = Math.max(bandRight[band], right);
     return { ...column, band };
@@ -203,6 +210,7 @@ function preferFullLabels(columns, trackWidthPx) {
   return resolved;
 }
 
+/** Room the labels need above the line and under it, in rem. */
 function eventsBandHeightRem(items) {
   const stackRem = (count) => {
     if (count <= 0) return 0;
@@ -210,13 +218,18 @@ function eventsBandHeightRem(items) {
   };
   let low = 0;
   let high = 0;
+  let below = 0;
   items.forEach((item) => {
     const count = item.kind === 'cluster' ? item.events.length : 1;
-    if (item.band === 1) high = Math.max(high, count);
+    if (item.band === BAND_HIGH) high = Math.max(high, count);
+    else if (item.band === BAND_BELOW) below = Math.max(below, count);
     else low = Math.max(low, count);
   });
   const need = stackRem(low) + stackRem(high) + (high ? 0.45 : 0.15);
-  return Math.max(5.15, need);
+  return {
+    above: Math.max(5.15, need),
+    below: below ? stackRem(below) + 0.3 : 0,
+  };
 }
 
 const CHIP_CLEAR_GAP = 8;
@@ -360,7 +373,7 @@ function eventTitle(event) {
 function TimelineCluster({ group, eventNotes, onOpenEvent, nudge = 0 }) {
   return (
     <span
-      className={`self-day-progress__event self-day-progress__event--cluster${group.band === 1 ? ' self-day-progress__event--band1' : ''}`}
+      className={`self-day-progress__event self-day-progress__event--cluster${group.band === BAND_HIGH ? ' self-day-progress__event--band1' : ''}${group.band === BAND_BELOW ? ' self-day-progress__event--below' : ''}`}
       data-layout-id={group.id}
       style={{
         left: `${group.pos}%`,
@@ -426,6 +439,8 @@ export function SelfDayProgress({
     [events, trackWidth]
   );
   const eventsHeightRem = eventsBandHeightRem(timelineItems);
+  const aboveItems = timelineItems.filter((item) => item.band !== BAND_BELOW);
+  const belowItems = timelineItems.filter((item) => item.band === BAND_BELOW);
   // Events that lasted, when their stretch is wide enough on this track to draw as a bracket.
   const stretches = useMemo(() => {
     const width = trackWidth > 0 ? trackWidth : FALLBACK_TRACK_PX;
@@ -435,6 +450,12 @@ export function SelfDayProgress({
       && ((event.endHour - event.startHour) / 24) * width >= MIN_STRETCH_PX
     ));
   }, [events, trackWidth]);
+  // A stretch is bracketed on the side of the line its label hangs on.
+  const belowIds = useMemo(() => new Set(
+    timelineItems
+      .filter((item) => item.band === BAND_BELOW)
+      .flatMap((item) => (item.kind === 'cluster' ? item.events.map((event) => event.id) : [item.event.id])),
+  ), [timelineItems]);
   useLayoutEffect(() => {
     const root = trackRef.current;
     if (!root) return;
@@ -451,6 +472,7 @@ export function SelfDayProgress({
       if (!node.dataset.layoutId || !rects.length) return null;
       return {
         id: node.dataset.layoutId,
+        below: node.classList.contains('self-day-progress__event--below'),
         anchor: eventRect.left + eventRect.width / 2,
         left: Math.min(...rects.map((rect) => rect.left)),
         right: Math.max(...rects.map((rect) => rect.right)),
@@ -463,7 +485,11 @@ export function SelfDayProgress({
       if (previous[index]) node.style.setProperty('--chip-nudge', previous[index]);
       else node.style.removeProperty('--chip-nudge');
     });
-    const next = resolveChipNudges(items);
+    // The two sides of the line are laid out apart: a stem above never crosses a label under it.
+    const next = {
+      ...resolveChipNudges(items.filter((item) => !item.below)),
+      ...resolveChipNudges(items.filter((item) => item.below)),
+    };
     setChipNudges((prev) => {
       const ids = new Set([...Object.keys(prev), ...Object.keys(next)]);
       for (const id of ids) {
@@ -484,10 +510,62 @@ export function SelfDayProgress({
       }
     : { className: 'self-day-progress__track-btn self-day-progress__track-btn--static' };
 
+  const renderItem = (item) => {
+    if (item.kind === 'cluster') {
+      return (
+        <TimelineCluster
+          key={item.id}
+          group={item}
+          nudge={chipNudges[item.id] || 0}
+          eventNotes={eventNotes}
+          onOpenEvent={onSaveEvent ? setOpenEvent : undefined}
+        />
+      );
+    }
+    const laneClass = item.band === BAND_HIGH
+      ? ' self-day-progress__event--lane2 self-day-progress__event--band1'
+      : item.band === BAND_BELOW
+        ? ' self-day-progress__event--below'
+        : ' self-day-progress__event--lane0';
+    return (
+      <button
+        key={item.event.id}
+        type="button"
+        data-layout-id={item.event.id}
+        className={`self-day-progress__event self-day-progress__event--${item.event.tone}${laneClass} self-day-progress__event--density-${item.event.density}${eventHasNote(eventNotes, item.event.id) ? ' self-day-progress__event--noted' : ''}`}
+        style={{
+          left: `${item.event.pos}%`,
+          '--chip-nudge': `${chipNudges[item.event.id] || 0}px`,
+        }}
+        title={eventTitle(item.event)}
+        onClick={(clickEvent) => {
+          clickEvent.stopPropagation();
+          if (onSaveEvent) setOpenEvent(item.event);
+        }}
+      >
+        <span className="self-day-progress__event-chip">
+          <span className="self-day-progress__event-icon">
+            <SelfIcon name={item.event.icon} />
+          </span>
+          {item.event.density !== 'icon' && item.event.timeLabel ? (
+            <span className="self-day-progress__event-time">{item.event.timeLabel}</span>
+          ) : null}
+          {item.event.density === 'full' ? (
+            <span className="self-day-progress__event-label">{item.event.label}</span>
+          ) : null}
+        </span>
+        <span className="self-day-progress__event-stem" aria-hidden />
+      </button>
+    );
+  };
+
   return (
     <section
       className={`self-day-progress${embedded ? ' self-day-progress--embedded' : ''}`}
-      style={{ '--day-events-height': `${eventsHeightRem}rem` }}
+      style={{
+        '--day-events-height': `${eventsHeightRem.above}rem`,
+        '--day-events-below-height': `${eventsHeightRem.below}rem`,
+      }}
       aria-label="Day progress"
     >
       <div className="self-day-progress__row">
@@ -502,48 +580,14 @@ export function SelfDayProgress({
           </button>
         )}
         <div className="self-day-progress__track-wrap" ref={trackRef}>
-            {timelineItems.length > 0 && (
+            {aboveItems.length > 0 && (
               <div className="self-day-progress__events" aria-hidden={false}>
-                {timelineItems.map((item) => (
-                  item.kind === 'cluster' ? (
-                    <TimelineCluster
-                      key={item.id}
-                      group={item}
-                      nudge={chipNudges[item.id] || 0}
-                      eventNotes={eventNotes}
-                      onOpenEvent={onSaveEvent ? setOpenEvent : undefined}
-                    />
-                  ) : (
-                    <button
-                      key={item.event.id}
-                      type="button"
-                      data-layout-id={item.event.id}
-                      className={`self-day-progress__event self-day-progress__event--${item.event.tone} self-day-progress__event--lane${item.band === 1 ? 2 : 0} self-day-progress__event--density-${item.event.density}${item.band === 1 ? ' self-day-progress__event--band1' : ''}${eventHasNote(eventNotes, item.event.id) ? ' self-day-progress__event--noted' : ''}`}
-                      style={{
-                        left: `${item.event.pos}%`,
-                        '--chip-nudge': `${chipNudges[item.event.id] || 0}px`,
-                      }}
-                      title={eventTitle(item.event)}
-                      onClick={(clickEvent) => {
-                        clickEvent.stopPropagation();
-                        if (onSaveEvent) setOpenEvent(item.event);
-                      }}
-                    >
-                      <span className="self-day-progress__event-chip">
-                        <span className="self-day-progress__event-icon">
-                          <SelfIcon name={item.event.icon} />
-                        </span>
-                        {item.event.density !== 'icon' && item.event.timeLabel ? (
-                          <span className="self-day-progress__event-time">{item.event.timeLabel}</span>
-                        ) : null}
-                        {item.event.density === 'full' ? (
-                          <span className="self-day-progress__event-label">{item.event.label}</span>
-                        ) : null}
-                      </span>
-                      <span className="self-day-progress__event-stem" aria-hidden />
-                    </button>
-                  )
-                ))}
+                {aboveItems.map(renderItem)}
+              </div>
+            )}
+            {belowItems.length > 0 && (
+              <div className="self-day-progress__events self-day-progress__events--below" aria-hidden={false}>
+                {belowItems.map(renderItem)}
               </div>
             )}
             <TrackTag {...trackProps}>
@@ -564,7 +608,7 @@ export function SelfDayProgress({
               {stretches.map((event) => (
                 <span
                   key={`stretch-${event.id}`}
-                  className={`self-day-progress__event-stretch self-day-progress__event-dot--${event.tone}`}
+                  className={`self-day-progress__event-stretch self-day-progress__event-dot--${event.tone}${belowIds.has(event.id) ? ' self-day-progress__event-stretch--below' : ''}`}
                   style={{
                     left: `${(event.startHour / 24) * 100}%`,
                     width: `${((event.endHour - event.startHour) / 24) * 100}%`,

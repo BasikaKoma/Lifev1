@@ -125,6 +125,15 @@ export function SelfIcon({ name }) {
         <path d="M16 8.5l2.5 2.5L19 16" />
       </svg>
     ),
+    car: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 16.5v-3.6a2 2 0 0 1 .6-1.4L6.4 7.6A2 2 0 0 1 8.2 6.5h7.6a2 2 0 0 1 1.8 1.1l1.8 3.9a2 2 0 0 1 .6 1.4v3.6" />
+        <path d="M4 16.5h1.9M9.1 16.5h5.8M18.1 16.5H20" />
+        <path d="M5.5 11.5h13" />
+        <circle cx="7.5" cy="16.5" r="1.6" />
+        <circle cx="16.5" cy="16.5" r="1.6" />
+      </svg>
+    ),
     checkCircle: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="9" />
