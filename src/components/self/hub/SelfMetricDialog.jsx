@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import { WaistLogForm } from '../WaistLogForm';
 import {
   appendCircumferenceReading,
+  deleteCircumferenceReading,
+  deleteWeightReading,
   fetchMetricsRange,
   isoDateDaysAgo,
   todayIsoDate,
@@ -98,6 +100,7 @@ function Icon({ name }) {
   const shapes = {
     x: <path d="m6 6 12 12M6 18 18 6" />,
     chevron: <path d="m9 6 6 6-6 6" />,
+    trash: <path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" />,
   };
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -216,10 +219,106 @@ function Extras({ extras }) {
   );
 }
 
+function deleteMetricReading(spec, day, reading) {
+  if (spec.key === 'weight') {
+    return deleteWeightReading({ day, recordedAt: reading.recordedAt, value: reading.value, source: reading.source });
+  }
+  return deleteCircumferenceReading({ kind: spec.key, day });
+}
+
+function readingKey(reading) {
+  return `${reading.source ?? ''}|${reading.recordedAt}|${reading.value}`;
+}
+
+/**
+ * A day's readings, each with its time and a delete that asks once before it removes
+ * the reading (for a weigh-in or a measurement that was not the user's).
+ */
+function ReadingList({ spec, entry }) {
+  const [armed, setArmed] = useState(null);
+  const [busy, setBusy] = useState(null);
+  const [error, setError] = useState('');
+  const noun = spec.key === 'weight' ? 'ζύγιση' : 'μέτρηση';
+  const title = spec.key === 'weight'
+    ? (entry.readings.length === 1 ? 'Ζύγιση' : 'Ζυγίσεις')
+    : 'Μέτρηση';
+
+  const remove = async (reading) => {
+    const key = readingKey(reading);
+    setBusy(key);
+    setError('');
+    try {
+      await deleteMetricReading(spec, entry.day, reading);
+      setArmed(null);
+    } catch (err) {
+      // Our own messages are in Greek; network and database errors are not.
+      const own = /[Ͱ-Ͽ]/.test(err?.message || '');
+      setError(own ? err.message : `Η ${noun} δεν διαγράφηκε. Δοκίμασε ξανά.`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="smd-readings">
+      <p className="smd-readings__title">{title}</p>
+      <ul className="smd-readings__list">
+        {entry.readings.map((reading) => {
+          const key = readingKey(reading);
+          const time = clockTime(reading.recordedAt);
+          const valueText = `${formatMetricValue(spec, reading.value)} ${spec.unit}`;
+          const isArmed = armed === key;
+          const isBusy = busy === key;
+          return (
+            <li key={key} className={`smd-reading${isArmed ? ' smd-reading--armed' : ''}`}>
+              <span className="smd-reading__time">{time ?? '—'}</span>
+              <Value spec={spec} value={reading.value} className="smd-reading__value" />
+              {isArmed ? (
+                <span className="smd-reading__confirm" role="group" aria-label={`Διαγραφή ${noun}ς ${valueText}`}>
+                  <span className="smd-reading__ask">Διαγραφή;</span>
+                  <button
+                    type="button"
+                    className="smd-reading__btn smd-reading__btn--danger"
+                    disabled={isBusy}
+                    onClick={() => remove(reading)}
+                  >
+                    {isBusy ? '…' : 'Ναι'}
+                  </button>
+                  <button
+                    type="button"
+                    className="smd-reading__btn"
+                    disabled={isBusy}
+                    onClick={() => setArmed(null)}
+                  >
+                    Όχι
+                  </button>
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  className="smd-reading__btn smd-reading__btn--delete"
+                  disabled={Boolean(busy)}
+                  onClick={() => { setError(''); setArmed(key); }}
+                  aria-label={`Διαγραφή ${noun}ς ${valueText}${time ? ` στις ${time}` : ''}`}
+                >
+                  <Icon name="trash" />
+                  Διαγραφή
+                </button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {error ? <p className="smd-readings__error" role="alert">{error}</p> : null}
+    </div>
+  );
+}
+
 function HistoryRow({ spec, entry, today, open, onToggle }) {
   const time = spec.source === 'health' ? clockTime(entry.recordedAt) : null;
   const meta = [time, entry.secondary].filter(Boolean).join(' · ');
-  const expandable = entry.extras?.length > 0;
+  const deletable = Boolean(spec.canDelete && entry.readings?.length);
+  const expandable = entry.extras?.length > 0 || deletable;
   const content = (
     <>
       <span className="smd-row__day">
@@ -246,7 +345,8 @@ function HistoryRow({ spec, entry, today, open, onToggle }) {
       ) : (
         <div className="smd-row__main">{content}</div>
       )}
-      {open && expandable ? <Extras extras={entry.extras} /> : null}
+      {open && entry.extras?.length ? <Extras extras={entry.extras} /> : null}
+      {open && deletable ? <ReadingList spec={spec} entry={entry} /> : null}
     </li>
   );
 }

@@ -1,6 +1,7 @@
 import { getSupabaseClient, isSupabaseConfigured } from '../supabase';
 import {
   averageReadingValue,
+  getWeightReadingsForDay,
   normalizeWeightReadings,
   shouldAppendWeightReading,
 } from './weightReadings';
@@ -253,10 +254,114 @@ export function ouraRowToHealthMetrics(row) {
   return metrics;
 }
 
-export function notifyHealthMetricsChanged() {
+/**
+ * Tells open views to reload health data. `detail.deleted` ({ day, metricType, readings })
+ * says a reading was removed and which readings that day still has, so saved day copies
+ * (Lifeline days, Self hub days) can drop it too.
+ */
+export function notifyHealthMetricsChanged(detail = null) {
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('lifev1:health-metrics-changed'));
+    window.dispatchEvent(new CustomEvent('lifev1:health-metrics-changed', detail ? { detail } : undefined));
   }
+}
+
+async function signedInClient() {
+  const supabase = isSupabaseConfigured() ? getSupabaseClient() : null;
+  if (!supabase) throw new Error('Η διαγραφή χρειάζεται σύνδεση στον λογαριασμό.');
+  return supabase;
+}
+
+/** Deletes one health_metrics row; fails when nothing was deleted (wrong id or no access). */
+async function deleteMetricRow(supabase, metric) {
+  const { data, error } = await supabase
+    .from('health_metrics')
+    .delete()
+    .eq('id', metric.id)
+    .select('id');
+  if (error) throw error;
+  if (!data?.length) throw new Error('Η μέτρηση δεν βρέθηκε.');
+}
+
+function readingTime(row, metric) {
+  return row?.recordedAt ?? metric.recordedAt ?? `${metric.day}T12:00:00`;
+}
+
+/**
+ * Removes one weigh-in from its day, for a weighing that was not the user's (someone else
+ * stepped on the scale). The day's weight is recomputed from the weigh-ins left; the day's
+ * row goes when none are left. `recordedAt` and `value` are the reading as the history shows it.
+ */
+export async function deleteWeightReading({ day, recordedAt, value = null, source = null }) {
+  if (!day || !recordedAt) return null;
+  const supabase = await signedInClient();
+  const rows = await fetchMetricsForDay(day);
+  const sameValue = (row) => value == null || Number(row?.value) === Number(value);
+
+  let target = null;
+  let index = -1;
+  for (const metric of rows) {
+    if (metric.metricType !== 'weight' || (source && metric.source !== source)) continue;
+    const raw = Array.isArray(metric.payload?.readings) ? metric.payload.readings : [];
+    index = raw.length
+      ? raw.findIndex((row) => row?.value != null && readingTime(row, metric) === recordedAt && sameValue(row))
+      : (readingTime(null, metric) === recordedAt && sameValue(metric) ? 0 : -1);
+    if (index >= 0) {
+      target = metric;
+      break;
+    }
+  }
+  if (!target) throw new Error('Η ζύγιση δεν βρέθηκε. Ανανέωσε και δοκίμασε ξανά.');
+
+  const raw = Array.isArray(target.payload?.readings) ? target.payload.readings : [];
+  const kept = raw.filter((row, i) => i !== index && row?.value != null);
+  let nextRows;
+
+  if (!kept.length) {
+    await deleteMetricRow(supabase, target);
+    nextRows = rows.filter((metric) => metric !== target);
+  } else {
+    const latest = kept.reduce((best, row) =>
+      new Date(readingTime(row, target)).getTime() >= new Date(readingTime(best, target)).getTime() ? row : best);
+    const latestAt = readingTime(latest, target);
+    const payload = {
+      ...target.payload,
+      readings: kept,
+      latestRecordedAt: latestAt,
+      impedance: latest.impedance ?? null,
+      deviceId: latest.deviceId ?? target.payload?.deviceId ?? null,
+      deviceName: latest.deviceName ?? target.payload?.deviceName ?? null,
+    };
+    const nextValue = averageReadingValue(kept);
+    const { data, error } = await supabase
+      .from('health_metrics')
+      .update({ value: nextValue, payload, recorded_at: latestAt })
+      .eq('id', target.id)
+      .select('id');
+    if (error) throw error;
+    if (!data?.length) throw new Error('Η ζύγιση δεν βρέθηκε.');
+    nextRows = rows.map((metric) => (metric === target
+      ? { ...metric, value: nextValue, payload, recordedAt: latestAt }
+      : metric));
+  }
+
+  const readings = getWeightReadingsForDay(nextRows, day);
+  notifyHealthMetricsChanged({ deleted: { day, metricType: 'weight', readings } });
+  return { day, readings };
+}
+
+/** Removes a day's waist / thigh / arm measurement, so it can be logged again or left empty. */
+export async function deleteCircumferenceReading({ kind, day }) {
+  const spec = circumferenceSpec(kind);
+  if (!spec || !day) return null;
+  const supabase = await signedInClient();
+  const rows = await fetchMetricsForDay(day);
+  const targets = rows.filter((metric) => metric.metricType === spec.id);
+  if (!targets.length) throw new Error('Η μέτρηση δεν βρέθηκε. Ανανέωσε και δοκίμασε ξανά.');
+  for (const metric of targets) {
+    await deleteMetricRow(supabase, metric);
+  }
+  notifyHealthMetricsChanged({ deleted: { day, metricType: spec.id, readings: [] } });
+  return { day, readings: [] };
 }
 
 export async function appendWeightReading({

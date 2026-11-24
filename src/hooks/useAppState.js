@@ -69,7 +69,8 @@ import { patchDayEntry, normalizeLifelineDays, mergeLifelineDaysMaps, routineTem
 import { appendThought, applyThoughtToPathNextStep, removeThought, snapshotThoughtContext, updateThought } from '../utils/dayThoughts';
 import { normalizeNorthStars, northStarsEqual } from '../utils/lifelineNorthStars';
 import { mapLifelineReconcileToState } from '../utils/lifelineMerge';
-import { normalizeSelfHubDays } from '../utils/selfHubDays';
+import { normalizeSelfHubDays, patchSelfHubDayEntry } from '../utils/selfHubDays';
+import { applyHealthDeletionToDayMetrics } from '../lib/health/healthToLifeline';
 import { captureSelfHubLiveDay as mergeSelfHubCapture } from '../utils/selfHubSync';
 import { useAppHistory } from './useAppHistory';
 import { useUndoRedo } from './useUndoRedo';
@@ -797,6 +798,57 @@ export function useAppState(userId) {
     setLifelineArchiveDays(merged.lifelineDays);
     markLifelineBundlePending();
   }, [applyLifelineBundleLocally, markLifelineBundlePending]);
+
+  // A deleted weigh-in or cm reading also leaves the day's saved copies: the Lifeline day's
+  // metrics and the Self hub day's health snapshot.
+  const applyHealthDeletion = useCallback((deleted) => {
+    const key = toDateString(deleted?.day);
+    if (!key || !deleted.metricType) return;
+    const current = stateRef.current;
+    const lifelineSource = mergeLifelineDaysMaps(
+      lifelineDaysRef.current,
+      current?.isLifeline ? current.lifelineDays : {}
+    );
+
+    const dayMetrics = getDayEntry(lifelineSource, key)?.metrics ?? null;
+    const nextMetrics = applyHealthDeletionToDayMetrics(dayMetrics, deleted);
+    const hubEntry = selfHubDaysRef.current?.[key] ?? null;
+    const nextHealth = hubEntry?.health ? applyHealthDeletionToDayMetrics(hubEntry.health, deleted) : null;
+    const lifelineChanged = nextMetrics !== dayMetrics;
+    const hubChanged = Boolean(hubEntry?.health) && nextHealth !== hubEntry.health;
+    if (!lifelineChanged && !hubChanged) return;
+
+    const nextLifelineDays = lifelineChanged
+      ? patchDayEntry(lifelineSource, key, { metrics: nextMetrics })
+      : lifelineSource;
+    const nextSelfHubDays = hubChanged
+      ? patchSelfHubDayEntry(selfHubDaysRef.current, key, { health: nextHealth })
+      : selfHubDaysRef.current;
+
+    lifelineDaysRef.current = nextLifelineDays;
+    if (hubChanged) {
+      selfHubDaysRef.current = nextSelfHubDays;
+      setSelfHubDays(nextSelfHubDays);
+    }
+
+    if (current?.isLifeline) {
+      applyLifelineBundleLocally({
+        lifelineDays: nextLifelineDays,
+        ...(hubChanged ? { selfHubDays: nextSelfHubDays } : {}),
+      });
+    } else {
+      setLifelineArchiveDays(nextLifelineDays);
+    }
+    markLifelineBundlePending();
+  }, [applyLifelineBundleLocally, markLifelineBundlePending]);
+
+  useEffect(() => {
+    const onHealthMetricsChanged = (event) => {
+      if (event?.detail?.deleted) applyHealthDeletion(event.detail.deleted);
+    };
+    window.addEventListener('lifev1:health-metrics-changed', onHealthMetricsChanged);
+    return () => window.removeEventListener('lifev1:health-metrics-changed', onHealthMetricsChanged);
+  }, [applyHealthDeletion]);
 
   const lastRegularProjectId = useMemo(() => {
     if (!state?.isLifeline) return state?.projectId || lastRegularProjectIdRef.current;

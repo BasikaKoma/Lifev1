@@ -20,6 +20,10 @@ function BodyMeasureLabel({ kind, side, value, labelRef, handlers, onOpenDetail 
   // Bridges the gap until the saved reading comes back through the health refresh.
   const [saved, setSaved] = useState(null);
   const [adding, setAdding] = useState(false);
+  // Once the refresh brings the reading, drop the bridge, so a later delete shows through.
+  useEffect(() => {
+    if (value != null) setSaved(null);
+  }, [value]);
   const shown = formatCm(value ?? (saved?.day === todayIsoDate() ? saved.cm : null));
   if (!spec) return null;
 

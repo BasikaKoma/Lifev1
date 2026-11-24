@@ -1,6 +1,11 @@
-import { selfDataToDayLabMetrics, ouraRowToLifelineMetrics } from '../../utils/lifelineSelfMetrics';
+import {
+  normalizeDayMetrics,
+  ouraRowToLifelineMetrics,
+  selfDataToDayLabMetrics,
+} from '../../utils/lifelineSelfMetrics';
 import { healthMetricsToSelfData } from './healthToSelf';
 import { mapOuraRowToSelfData } from '../../utils/ouraMetrics';
+import { NO_DATA } from '../../data/emptySelfData';
 import {
   averageReadingValue,
   buildWeightCardFromReadings,
@@ -207,6 +212,39 @@ export function buildLifelineMetricsPatchesFromHealth(healthMetrics, ouraRows = 
   }
 
   return patches;
+}
+
+/**
+ * A saved day's metrics (a Lifeline day or a Self hub day) after a reading was deleted:
+ * the weight card is rebuilt from the weigh-ins left, or the card goes when none are left.
+ * `metricType` is also the card's key ('weight', 'waist', 'thigh', 'arm'). Returns the same
+ * object when it had no such card, and null when nothing is left to show for the day.
+ */
+export function applyHealthDeletionToDayMetrics(metrics, { metricType, readings = [] } = {}) {
+  if (!metrics || typeof metrics !== 'object' || !metricType || metrics[metricType] == null) {
+    return metrics;
+  }
+
+  const next = { ...metrics, [metricType]: null };
+  if (metricType === 'weight' && readings.length) {
+    const previous = metrics.weight;
+    const kg = averageReadingValue(readings);
+    // The card's delta is its kg against the previous day; move it by as much as kg moved.
+    const delta = previous?.delta != null && previous?.kg != null && kg != null
+      ? Math.round((previous.delta + kg - previous.kg) * 10) / 10
+      : null;
+    next.weight = buildWeightCardFromReadings(readings, { delta });
+  }
+
+  // A day saved from the scale or a tape alone also carries empty "No data" cards; with its
+  // last reading gone there is nothing left to show.
+  const isEmptyCard = (card) => !card || card.status === NO_DATA;
+  const nothingLeft = !normalizeDayMetrics(next) || (
+    next.dayScore == null
+    && !['weight', ...CIRCUMFERENCE_KINDS].some((key) => next[key] != null)
+    && [...(next.leftMetrics || []), ...(next.rightMetrics || [])].every(isEmptyCard)
+  );
+  return nothingLeft ? null : next;
 }
 
 export function mergeWeightIntoDayMetrics(existingMetrics, weightKg, delta = null, readingMeta = {}) {

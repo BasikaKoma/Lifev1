@@ -116,14 +116,21 @@ function circumferenceSpec(kind) {
     digits: 1,
     better: 'lower',
     canLog: true,
+    canDelete: true,
     days: ({ healthMetrics = [] }) => expandCircumferenceReadings(kind, healthMetrics).map((reading) => ({
       day: reading.day,
       value: reading.value,
       recordedAt: reading.recordedAt,
       secondary: null,
       extras: [],
+      readings: [readingRef(reading)],
     })),
   };
+}
+
+/** One reading as the history lists it, enough to find it again for a delete. */
+function readingRef(reading) {
+  return { value: reading.value, recordedAt: reading.recordedAt, source: reading.source ?? null };
 }
 
 /** Display order of the switcher chips in the detail dialog. */
@@ -310,6 +317,8 @@ export const METRIC_HISTORY_SPECS = {
     unit: 'kg',
     digits: 1,
     better: 'lower',
+    // Someone else can step on the scale too; each weigh-in can be deleted on its own.
+    canDelete: true,
     days: ({ healthMetrics = [] }) => {
       const byDay = new Map();
       for (const reading of expandWeightReadings(healthMetrics)) {
@@ -339,6 +348,7 @@ export const METRIC_HISTORY_SPECS = {
                 extra('Πρώτη ζύγιση', `${readings[0].value.toFixed(1)} kg · ${clockTime(readings[0].recordedAt) ?? ''}`.trim()),
               ]
               : [],
+            readings: readings.map(readingRef),
           };
         });
     },
